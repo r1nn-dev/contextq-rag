@@ -1,0 +1,39 @@
+# ContextQ-RAG — lefthook.yml
+# Git hooks for local development.
+# Install: lefthook install  (or: make hooks)
+# Hooks with glob patterns are skipped automatically when no matching files are staged.
+
+pre-commit:
+  parallel: true
+  commands:
+    ruff-check:
+      glob: "ai-server/**/*.py"
+      run: uv run --directory ai-server ruff check {staged_files}
+    ruff-format:
+      glob: "ai-server/**/*.py"
+      run: uv run --directory ai-server ruff format --check {staged_files}
+
+commit-msg:
+  commands:
+    conventional-commits:
+      run: |
+        msg=$(cat {1})
+        # Conventional Commits: <type>(<scope>): <subject>
+        # Valid types and scopes are defined in CONTRIBUTING.md §1.3
+        echo "$msg" | grep -qE \
+          '^(feat|fix|docs|style|refactor|test|chore|ci|perf)\([a-z0-9][a-z0-9-]*\): .{1,72}' \
+          || {
+            echo "✗ commit-msg: does not follow Conventional Commits format"
+            echo "  expected : <type>(<scope>): <subject>"
+            echo "  received : $msg"
+            echo "  see CONTRIBUTING.md §1.3 for valid types and scopes"
+            exit 1
+          }
+
+pre-push:
+  commands:
+    pytest-unit:
+      run: |
+        # Skip if ai-server/ does not exist yet
+        [ -d ai-server ] || exit 0
+        cd ai-server && uv run pytest -q -m "not llm and not eval"
