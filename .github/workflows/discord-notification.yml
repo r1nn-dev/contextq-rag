@@ -1,0 +1,182 @@
+name: Discord Notification
+
+on:
+  pull_request:
+    branches: [develop, main]
+    types: [opened, ready_for_review, reopened, closed]
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    env:
+      DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+      DISCORD_REVIEWER_MAP: ${{ vars.DISCORD_REVIEWER_MAP }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - name: PR 또는 CI 결과 알림
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import urllib.error
+          import urllib.request
+
+          webhook = os.environ.get("DISCORD_WEBHOOK", "")
+          if not webhook:
+              print("DISCORD_WEBHOOK 미설정 — 알림 건너뜀")
+              raise SystemExit(0)
+
+          with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as f:
+              event = json.load(f)
+
+          # DISCORD_REVIEWER_MAP: "githubLogin:discordUserId,..." 형식
+          reviewer_map = {}
+          for entry in os.environ.get("DISCORD_REVIEWER_MAP", "").split(","):
+              login, sep, user_id = entry.strip().partition(":")
+              if sep and login and re.fullmatch(r"\d{15,25}", user_id):
+                  reviewer_map[login.casefold()] = user_id
+
+          payload = None
+          event_name = os.environ["GITHUB_EVENT_NAME"]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          user_agent = f"ContextQ-RAG-Bot (https://github.com/{repo}, 1.0)"
+
+          if event_name == "pull_request":
+              pr = event["pull_request"]
+              action = event["action"]
+
+              # Draft 상태에서 opened/reopened는 알림 생략
+              if pr.get("draft") and action in {"opened", "reopened"}:
+                  raise SystemExit(0)
+              # 머지 없이 닫힌 경우 알림 생략
+              if action == "closed" and not pr.get("merged"):
+                  raise SystemExit(0)
+
+              def section(heading):
+                  """PR 본문에서 ## heading 섹션 내용 추출 (HTML 주석 제거 후)"""
+                  body = re.sub(r"<!--.*?-->", "", pr.get("body") or "", flags=re.S)
+                  match = re.search(
+                      rf"^##\s+[^\n]*{re.escape(heading)}\s*\n(.*?)(?=^##\s+|\Z)",
+                      body, flags=re.M | re.S,
+                  )
+                  value = match.group(1).strip() if match else ""
+                  return value[:800] or "-"
+
+              merged = action == "closed"
+              title = "🟣 PR 머지" if merged else "🟢 PR 오픈"
+              fields = [
+                  {"name": "작성자", "value": pr["user"]["login"], "inline": True},
+                  {"name": "브랜치", "value": f'{pr["head"]["ref"]} → {pr["base"]["ref"]}', "inline": True},
+                  {"name": "변경량", "value": f'+{pr.get("additions", 0)} / -{pr.get("deletions", 0)}', "inline": True},
+              ]
+              if not merged:
+                  fields.extend([
+                      {"name": "개요", "value": section("개요"), "inline": False},
+                      {"name": "구현", "value": section("구현"),     "inline": False},
+                  ])
+
+              content = ""
+              ids = []
+              if not merged:
+                  ids = list(reviewer_map.values())
+                  if ids:
+                      content = " ".join(f"<@{uid}>" for uid in ids) + " PR 오픈됐습니다."
+
+              payload = {
+                  "content": content,
+                  "allowed_mentions": {"parse": [], "users": ids},
+                  "embeds": [{
+                      "title": title,
+                      "description": f'#{pr["number"]} {pr["title"]}'[:4000],
+                      "url": pr["html_url"],
+                      "color": 10181046 if merged else 5763719,
+                      "fields": fields,
+                  }],
+              }
+
+          elif event_name == "workflow_run":
+              run = event["workflow_run"]
+              prs = run.get("pull_requests") or []
+              # 실패한 경우만, PR이 연결된 경우만 알림
+              if run.get("conclusion") != "failure" or not prs:
+                  raise SystemExit(0)
+
+              pr_number = prs[0]["number"]
+              author = "-"
+              req = urllib.request.Request(
+                  f"https://api.github.com/repos/{repo}/pulls/{pr_number}",
+                  headers={
+                      "Accept": "application/vnd.github+json",
+                      "Authorization": f'Bearer {os.environ["GITHUB_TOKEN"]}',
+                      "User-Agent": user_agent,
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=15) as resp:
+                      author = json.load(resp)["user"]["login"]
+              except (urllib.error.URLError, KeyError, ValueError) as e:
+                  print(f"PR 작성자 조회 실패 — 멘션 없이 알림: {e}")
+
+              author_id = reviewer_map.get(author.casefold())
+              content = f"<@{author_id}> CI 실패 확인 부탁드립니다." if author_id else "CI 실패 확인 부탁드립니다."
+              payload = {
+                  "content": content,
+                  "allowed_mentions": {"parse": [], "users": [author_id] if author_id else []},
+                  "embeds": [{
+                      "title": "🔴 CI 실패",
+                      "description": f"#{pr_number} CI 검사에 실패했습니다.",
+                      "url": run["html_url"],
+                      "color": 15548997,
+                      "fields": [
+                          {"name": "작성자", "value": author, "inline": True},
+                          {"name": "브랜치", "value": run.get("head_branch") or "-", "inline": True},
+                          {"name": "검사", "value": run.get("name") or "CI", "inline": True},
+                      ],
+                  }],
+              }
+
+          if payload is None:
+              raise SystemExit(0)
+
+          req = urllib.request.Request(
+              webhook,
+              data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+              headers={"Content-Type": "application/json", "User-Agent": user_agent},
+              method="POST",
+          )
+          try:
+              with urllib.request.urlopen(req, timeout=15) as resp:
+                  if resp.status not in (200, 204):
+                      raise SystemExit(f"Discord 알림 실패: HTTP {resp.status}")
+          except urllib.error.HTTPError as e:
+              print(f"Discord 알림 실패: HTTP {e.code}")
+              try:
+                  detail = json.loads(e.read(4096))
+              except (ValueError, UnicodeError):
+                  detail = None
+              if isinstance(detail, dict):
+                  code = detail.get("code")
+                  if isinstance(code, int):
+                      print(f"Discord 오류 코드: {code}")
+                  message = str(detail.get("message", ""))
+                  # 로그에서 민감값 마스킹
+                  for secret in [webhook, webhook.rsplit("/", 1)[-1],
+                                  os.environ.get("GITHUB_TOKEN", ""), *reviewer_map.values()]:
+                      if secret:
+                          message = message.replace(secret, "[REDACTED]")
+                  message = re.sub(r"https?://[^\s<>]+", "[REDACTED URL]", message)
+                  print(f"Discord 오류 메시지: {message[:500]}")
+              raise SystemExit(1)
+          except urllib.error.URLError as e:
+              print(f"Discord 연결 실패: {type(e.reason).__name__}")
+              raise SystemExit(1)
+          PY

@@ -1,0 +1,73 @@
+name: PR Lint
+
+on:
+  pull_request:
+    branches: [develop, main]
+    types: [opened, edited, synchronize, reopened]
+
+concurrency:
+  group: pr-lint-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  pr-title:
+    name: pr-title
+    runs-on: ubuntu-latest
+    steps:
+      - name: PR 제목 형식 검사
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          pattern='^(feat|fix|refactor|perf|test|docs|chore|style|hotfix|ci)\([a-z0-9-]+\)!?: .{1,72}$'
+          release_pattern='^chore\(release\): (v[0-9]+\.[0-9]+\.[0-9]+|main → develop 동기화)$'
+
+          if echo "$PR_TITLE" | grep -Eq "$pattern" || \
+             echo "$PR_TITLE" | grep -Eq "$release_pattern"; then
+            echo "✅ PR 제목 검사 통과: $PR_TITLE"
+          else
+            echo "❌ PR 제목이 Conventional Commits 형식을 따르지 않습니다."
+            echo "   형식: <type>(<scope>): <subject>"
+            echo "   예시: feat(rag): 버전 인식 컨텍스트 필터 구현"
+            echo "   허용 타입: feat|fix|refactor|perf|test|docs|chore|style|hotfix|ci"
+            echo "   입력: $PR_TITLE"
+            exit 1
+          fi
+
+  branch-name:
+    name: branch-name
+    runs-on: ubuntu-latest
+    steps:
+      - name: 브랜치명 형식 검사
+        env:
+          BRANCH_NAME: ${{ github.head_ref }}
+        run: |
+          scopes="api|rag|retrieval|ingest|shared|backend|frontend|scripts|configs|infra|ci|deps|docs|setup"
+          pattern="^(feat|fix|refactor|perf|test|docs|chore|style|hotfix)/[0-9]+-($scopes)-[a-z0-9][a-z0-9-]*$"
+
+          if echo "$BRANCH_NAME" | grep -Eq "$pattern"; then
+            echo "✅ 브랜치명 검사 통과: $BRANCH_NAME"
+          else
+            echo "❌ 브랜치 이름이 규칙을 따르지 않습니다."
+            echo "   형식: <type>/<issue-number>-<scope>-<summary>"
+            echo "   예시: feat/12-rag-version-aware-filter"
+            echo "   scope: api|rag|retrieval|ingest|shared|backend|frontend|scripts"
+            echo "          configs|infra|ci|deps|docs|setup"
+            echo "   입력: $BRANCH_NAME"
+            exit 1
+          fi
+
+  linked-issue:
+    name: linked-issue
+    runs-on: ubuntu-latest
+    steps:
+      - name: 연결된 이슈 검사
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          if echo "$PR_BODY" | grep -Eq "(Closes|Fixes|Resolves|Related to) #[0-9]+"; then
+            echo "✅ 연결된 이슈 검사 통과"
+          else
+            echo "❌ PR 본문에 연결된 이슈가 없습니다."
+            echo "   PR 본문에 'Closes #N' 또는 'Related to #N' 형식을 추가하세요."
+            exit 1
+          fi
