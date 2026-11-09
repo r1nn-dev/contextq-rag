@@ -1,0 +1,65 @@
+name: Issue Automation
+
+on:
+  issues:
+    types: [opened, edited, reopened]
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: issue-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  sync-issue:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: 담당자 지정 및 타입 라벨 설정
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          issue_number="$(jq -r '.issue.number' "$GITHUB_EVENT_PATH")"
+          author="$(jq -r '.issue.user.login' "$GITHUB_EVENT_PATH")"
+          title="$(jq -r '.issue.title' "$GITHUB_EVENT_PATH")"
+          repo="$GITHUB_REPOSITORY"
+
+          # 이슈 열릴 때 작성자를 담당자로 자동 지정
+          if [ "${{ github.event.action }}" = "opened" ]; then
+            gh issue edit "$issue_number" --repo "$repo" --add-assignee "$author" || true
+          fi
+
+          # 이슈 제목 타입으로 라벨 자동 설정 (CONTRIBUTING.md §1.1 타입 기준)
+          case "$title" in
+            feat\(*)     label="feat"     ;;
+            fix\(*)      label="fix"      ;;
+            refactor\(*) label="refactor" ;;
+            perf\(*)     label="perf"     ;;
+            test\(*)     label="test"     ;;
+            docs\(*)     label="docs"     ;
+            chore\(*)    label="chore"    ;;
+            style\(*)    label="style"    ;;
+            hotfix\(*)   label="hotfix"   ;;
+            *)           label=""         ;;
+          esac
+
+          if [ -n "$label" ]; then
+            current_labels="$(jq -r '.issue.labels[]?.name' "$GITHUB_EVENT_PATH")"
+
+            # 새 라벨 추가
+            if ! grep -Fxq "$label" <<< "$current_labels"; then
+              gh issue edit "$issue_number" --repo "$repo" --add-label "$label"
+            fi
+
+            # 기존 타입 라벨 제거 (중복 방지 — 제목 수정으로 타입이 바뀐 경우)
+            for old_label in "feat" "fix" "refactor" "perf" "test" \
+                             "docs" "chore" "style" "hotfix"; do
+              if [ "$old_label" != "$label" ] && grep -Fxq "$old_label" <<< "$current_labels"; then
+                gh issue edit "$issue_number" --repo "$repo" --remove-label "$old_label"
+              fi
+            done
+          fi
