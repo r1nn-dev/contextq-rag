@@ -35,7 +35,9 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - contextq-net
+      contextq-net:
+        aliases:
+          - contextq-backend   # frontend/nginx.conf의 upstream 호스트명과 일치
 
   ai-server:
     build:
