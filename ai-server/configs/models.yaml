@@ -1,0 +1,7 @@
+llm:
+  model: "gpt-4o-mini"
+  temperature: 0.1            # low = consistent answers; keep low for RAG
+  max_tokens: 1024
+
+embedding:
+  model: "text-embedding-3-small"  # 1536 dims (default)
