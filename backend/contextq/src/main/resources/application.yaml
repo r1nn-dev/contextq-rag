@@ -1,0 +1,29 @@
+# common settings — loaded for all profiles
+
+spring:
+  application:
+    name: contextq
+  profiles:
+    active: local             # override with SPRING_PROFILES_ACTIVE=prod in production
+
+  jpa:
+    open-in-view: false       # disables Open Session in View anti-pattern
+    hibernate:
+      ddl-auto: validate      # Flyway manages schema; Hibernate validates only
+    properties:
+      hibernate:
+        default_schema: public
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+ai-server:
+  base-url: ${AI_SERVER_INTERNAL_URL:http://localhost:8000}
+
+jwt:
+  secret: ${JWT_SECRET}       # required — set JWT_SECRET in .env
+  expiration-ms: 86400000     # 24 hours in ms
+
+server:
+  port: 8080
