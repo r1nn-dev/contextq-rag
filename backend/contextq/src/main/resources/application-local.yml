@@ -2,7 +2,7 @@
 
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/contextq
+    url: jdbc:postgresql://localhost:5433/contextq
     username: app_user
     password: password        # plaintext OK for local dev only
     driver-class-name: org.postgresql.Driver
