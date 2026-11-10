@@ -40,7 +40,7 @@ jobs:
             refactor\(*) label="refactor" ;;
             perf\(*)     label="perf"     ;;
             test\(*)     label="test"     ;;
-            docs\(*)     label="docs"     ;
+            docs\(*)     label="docs"     ;;
             chore\(*)    label="chore"    ;;
             style\(*)    label="style"    ;;
             hotfix\(*)   label="hotfix"   ;;
