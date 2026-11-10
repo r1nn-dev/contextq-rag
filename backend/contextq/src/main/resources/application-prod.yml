@@ -1,0 +1,12 @@
+# production profile stub
+
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+logging:
+  level:
+    root: WARN
+    com.r1nn.contextq: INFO

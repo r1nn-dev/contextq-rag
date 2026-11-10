@@ -1,0 +1,17 @@
+# local development profile (spring.profiles.active=local)
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/contextq
+    username: app_user
+    password: password        # plaintext OK for local dev only
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    show-sql: true
+
+logging:
+  level:
+    com.r1nn.contextq: DEBUG
+    org.flywaydb: DEBUG
+    org.springframework.web: DEBUG
