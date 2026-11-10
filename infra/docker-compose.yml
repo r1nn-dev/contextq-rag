@@ -1,0 +1,78 @@
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - contextq-net
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    networks:
+      - contextq-net
+
+  backend:
+    build:
+      context: ../backend/contextq
+      dockerfile: Dockerfile
+    environment:
+      SPRING_DATASOURCE_URL: ${DATABASE_URL}
+      SPRING_DATASOURCE_USERNAME: ${DATABASE_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${DATABASE_PASSWORD}
+      SPRING_PROFILES_ACTIVE: docker
+      AI_SERVER_INTERNAL_URL: ${AI_SERVER_INTERNAL_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      contextq-net:
+        aliases:
+          - contextq-backend   # frontend/nginx.conf의 upstream 호스트명과 일치
+
+  ai-server:
+    build:
+      context: ../ai-server
+      dockerfile: Dockerfile
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+      CHROMA_DATA_PATH: ${CHROMA_DATA_PATH:-/app/chroma_db}
+    volumes:
+      - chroma_data:${CHROMA_DATA_PATH:-/app/chroma_db}
+    networks:
+      - contextq-net
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-contextq_db}
+      POSTGRES_USER: ${POSTGRES_USER:-contextq}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-contextq} -d ${POSTGRES_DB:-contextq_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - contextq-net
+
+volumes:
+  postgres_data:
+  chroma_data:
+
+networks:
+  contextq-net:
+    driver: bridge
