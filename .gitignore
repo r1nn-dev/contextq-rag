@@ -90,12 +90,14 @@ chroma_db/
 # Raw crawled dataset
 data/
 
-# Claude Code / AI tools
+# AI tools
 **/.claude/*
 !/.claude/settings.json
-
-# MCP server config
 .mcp.json
+.codex/
+.cursor/
+.aider*
+.continue/ 
 
 # Personal notes / local scratch
 .personal/
