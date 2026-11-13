@@ -1,0 +1,1320 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ContextQ-RAG — 버전별 LangChain 질의응답</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:          #0d0f1b;
+  --sidebar-bg:  #131629;
+  --surface:     #1a1e32;
+  --surface-2:   #1f2438;
+  --border:      rgba(255,255,255,0.08);
+  --border-2:    rgba(255,255,255,0.12);
+  --accent:      #5b6cf7;
+  --accent-dim:  rgba(91,108,247,0.15);
+  --accent-hover:#6b7cf8;
+  --green:       #4ade80;
+  --green-dim:   rgba(74,222,128,0.12);
+  --yellow:      #fbbf24;
+  --red:         #f87171;
+  --text:        #e8ecff;
+  --text-2:      #9ba3c8;
+  --text-3:      #5a6080;
+  --mono:        "JetBrains Mono", "Fira Code", monospace;
+  --sans:        "Noto Sans KR", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --r:           8px;
+  --r-lg:        12px;
+  --sidebar-w:   288px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── TOP BAR ── */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  height: 44px;
+  display: flex; align-items: center;
+  padding: 0 20px;
+  background: rgba(13,15,27,0.9);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px; color: var(--text-2);
+}
+
+/* ── LAYOUT ── */
+.layout {
+  display: flex;
+  padding-top: 44px;
+}
+
+/* ── SIDEBAR ── */
+.sidebar {
+  position: sticky; top: 44px;
+  width: var(--sidebar-w);
+  height: calc(100svh - 44px);
+  flex-shrink: 0;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-logo {
+  display: flex; align-items: center; gap: 10px;
+  padding: 18px 16px 14px;
+}
+
+.logo-mark {
+  width: 36px; height: 36px; border-radius: 9px;
+  background: var(--accent);
+  display: grid; place-items: center; flex-shrink: 0;
+  font-size: 16px; font-weight: 700; color: white;
+}
+
+.logo-text { }
+.logo-title { font-size: 15px; font-weight: 600; color: var(--text); line-height: 1.1; }
+.logo-sub { font-size: 10px; color: var(--text-3); letter-spacing: 0.08em; margin-top: 1px; }
+
+.sidebar-new-btn {
+  margin: 0 12px 16px;
+  padding: 9px 0;
+  background: var(--accent);
+  border: none; border-radius: var(--r);
+  color: white; font-family: var(--sans);
+  font-size: 14px; font-weight: 500;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
+  transition: background 0.15s;
+}
+.sidebar-new-btn:hover { background: var(--accent-hover); }
+
+.sidebar-section-label {
+  padding: 0 16px 6px;
+  font-size: 11px; color: var(--text-3); font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+.conv-list { display: flex; flex-direction: column; gap: 2px; padding: 0 8px; }
+
+.conv-item {
+  padding: 7px 10px; border-radius: 6px;
+  cursor: pointer; transition: background 0.1s;
+}
+.conv-item:hover { background: var(--surface); }
+.conv-title { font-size: 13px; color: var(--text); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.conv-meta {
+  font-size: 11px; color: var(--text-3); margin-top: 2px;
+  display: flex; align-items: center; gap: 5px;
+}
+
+.conv-ver {
+  font-size: 10px; padding: 1px 5px; border-radius: 3px;
+  font-family: var(--mono); font-weight: 500;
+}
+.ver-03 { background: rgba(251,191,36,0.15); color: #fbbf24; }
+.ver-1x { background: var(--green-dim); color: var(--green); }
+.ver-cmp { background: rgba(91,108,247,0.15); color: var(--accent); }
+
+.sidebar-spacer { flex: 1; }
+
+.sidebar-footer { padding: 12px 8px; display: flex; flex-direction: column; gap: 2px; }
+
+.sidebar-footer-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border-radius: 6px;
+  font-size: 13px; color: var(--text-2); cursor: pointer;
+  transition: background 0.1s;
+}
+.sidebar-footer-item:hover { background: var(--surface); color: var(--text); }
+.sidebar-footer-item svg { flex-shrink: 0; opacity: 0.6; }
+
+.sidebar-guest {
+  margin: 0 8px 8px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.guest-label { font-size: 11px; color: var(--text-3); margin-bottom: 2px; }
+.guest-count { font-size: 13px; color: var(--text); font-weight: 500; }
+.guest-badge {
+  font-size: 11px; padding: 3px 8px; border-radius: 4px;
+  background: var(--accent-dim); color: var(--accent); font-weight: 500;
+}
+
+/* ── MAIN ── */
+main { flex: 1; min-width: 0; }
+
+/* ── HERO SECTION ── */
+.hero {
+  min-height: calc(100svh - 44px);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 48px 48px 64px;
+  gap: 28px;
+  position: relative;
+}
+
+.hero-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 14px; border-radius: 100px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  font-size: 13px; color: var(--text-2);
+}
+
+.badge-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+  flex-shrink: 0;
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.hero h1 {
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 700; text-align: center;
+  letter-spacing: -0.02em; line-height: 1.1;
+}
+
+.hero-sub {
+  text-align: center; color: var(--text-2);
+  font-size: 15px; line-height: 1.65;
+  max-width: 52ch;
+}
+
+/* VERSION SELECTOR */
+.query-box {
+  width: 100%; max-width: 640px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+
+.selector-row {
+  display: flex; gap: 16px;
+}
+
+.selector-group {
+  display: flex; flex-direction: column; gap: 6px;
+  flex: 1;
+}
+
+.selector-label { font-size: 11px; color: var(--text-3); letter-spacing: 0.04em; }
+
+.tabs {
+  display: flex; background: var(--surface); border-radius: var(--r);
+  border: 1px solid var(--border); overflow: hidden; gap: 0;
+}
+
+.tab {
+  flex: 1; padding: 8px 0;
+  font-size: 13px; font-weight: 500;
+  text-align: center; cursor: pointer;
+  color: var(--text-2); background: transparent;
+  border: none; font-family: var(--sans);
+  transition: all 0.15s; position: relative;
+}
+.tab.active { background: var(--accent); color: white; }
+
+.tab-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: rgba(255,255,255,0.15);
+  font-size: 10px; font-weight: 600; margin-left: 4px;
+}
+
+.input-area {
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-lg);
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+
+.input-placeholder { font-size: 13px; color: var(--text-3); }
+.input-example { font-size: 13px; color: var(--text-2); line-height: 1.4; }
+
+.input-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 4px;
+}
+
+.input-status {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--text-3);
+}
+
+.status-ver {
+  font-family: var(--mono); font-size: 11px;
+  padding: 2px 6px; border-radius: 4px;
+  background: rgba(251,191,36,0.12); color: #fbbf24;
+}
+
+.btn-submit {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: var(--r);
+  background: var(--accent); border: none;
+  color: white; font-family: var(--sans);
+  font-size: 13px; font-weight: 500;
+  cursor: pointer; transition: background 0.15s;
+}
+.btn-submit:hover { background: var(--accent-hover); }
+
+/* EXAMPLE QUESTIONS */
+.examples { width: 100%; max-width: 640px; display: flex; flex-direction: column; gap: 8px; }
+.ex-label { font-size: 11px; color: var(--text-3); letter-spacing: 0.04em; margin-bottom: 2px; }
+
+.ex-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r); cursor: pointer;
+  font-size: 13px; color: var(--text-2);
+  transition: all 0.15s;
+}
+.ex-item:hover { border-color: var(--border-2); color: var(--text); }
+.ex-icon { opacity: 0.4; flex-shrink: 0; }
+
+/* ── SECTION SHELL ── */
+.section {
+  padding: 72px 48px;
+  position: relative;
+}
+
+.section + .section { border-top: 1px solid var(--border); }
+
+.section-eyebrow {
+  font-size: 11px; color: var(--text-3);
+  letter-spacing: 0.08em; margin-bottom: 10px;
+  display: flex; align-items: center; gap: 8px;
+}
+
+.section-eyebrow::before {
+  content: '';
+  display: block; width: 20px; height: 1px;
+  background: var(--text-3);
+}
+
+.section-title {
+  font-size: clamp(1.5rem, 2.5vw, 2.25rem);
+  font-weight: 700; letter-spacing: -0.02em;
+  line-height: 1.1; margin-bottom: 12px;
+}
+
+.section-desc {
+  font-size: 15px; color: var(--text-2);
+  line-height: 1.65; max-width: 52ch;
+  margin-bottom: 40px;
+}
+
+/* ── 실제 화면 — CHAT DEMO ── */
+.chat-demo-wrap {
+  display: grid; grid-template-columns: 1fr 1.2fr;
+  gap: 40px; align-items: start;
+}
+
+.chat-window {
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+
+.chat-topbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.chat-ver-pill {
+  font-family: var(--mono); font-size: 11px;
+  padding: 2px 7px; border-radius: 4px;
+  font-weight: 500;
+}
+
+.chat-mode-pill {
+  font-size: 11px; color: var(--text-3);
+  padding: 2px 8px; border-radius: 4px;
+  background: rgba(255,255,255,0.05);
+}
+
+.chat-topbar-title { font-size: 13px; color: var(--text-2); flex: 1; }
+
+.chat-messages {
+  padding: 20px 16px;
+  display: flex; flex-direction: column; gap: 20px;
+}
+
+.msg { display: flex; flex-direction: column; gap: 8px; }
+
+.msg-role {
+  font-size: 11px; color: var(--text-3);
+  display: flex; align-items: center; gap: 6px;
+  letter-spacing: 0.04em;
+}
+
+.role-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  display: inline-block;
+}
+.role-dot.user { background: var(--accent); }
+.role-dot.ai { background: var(--green); }
+
+.msg-bubble {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-size: 13px; color: var(--text);
+  line-height: 1.6;
+}
+
+.msg-bubble.user-msg {
+  background: var(--accent-dim);
+  border-color: rgba(91,108,247,0.2);
+}
+
+.sources-block {
+  display: flex; flex-direction: column; gap: 6px;
+}
+
+.source-card {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  background: var(--green-dim);
+  border: 1px solid rgba(74,222,128,0.2);
+  border-radius: 6px;
+}
+
+.source-num {
+  font-family: var(--mono); font-size: 10px;
+  color: var(--green); background: rgba(74,222,128,0.1);
+  width: 20px; height: 20px; border-radius: 4px;
+  display: grid; place-items: center; flex-shrink: 0;
+  font-weight: 600;
+}
+
+.source-info { flex: 1; min-width: 0; }
+
+.source-path {
+  font-family: var(--mono); font-size: 11px;
+  color: var(--green);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.source-score { font-family: var(--mono); font-size: 10px; color: var(--text-3); }
+
+.code-block {
+  font-family: var(--mono); font-size: 12px;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 6px; padding: 12px 14px;
+  line-height: 1.65; overflow-x: auto;
+}
+
+.c-kw { color: #89b4fa; }
+.c-fn { color: #cba6f7; }
+.c-str { color: #a6e3a1; }
+.c-cm { color: #45475a; }
+.c-num { color: #fab387; }
+
+.stream-cursor {
+  display: inline-block; width: 2px; height: 1em;
+  background: var(--accent); vertical-align: text-bottom;
+  animation: blink 1s step-end infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+.demo-explain {
+  display: flex; flex-direction: column; gap: 20px;
+  padding-top: 8px;
+}
+
+.explain-step {
+  display: flex; gap: 14px;
+  align-items: flex-start;
+}
+
+.explain-num {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--accent-dim); border: 1px solid rgba(91,108,247,0.3);
+  display: grid; place-items: center; flex-shrink: 0;
+  font-size: 12px; font-weight: 600; color: var(--accent);
+  margin-top: 2px;
+}
+
+.explain-content { }
+.explain-title { font-size: 14px; font-weight: 500; color: var(--text); margin-bottom: 4px; }
+.explain-desc { font-size: 13px; color: var(--text-2); line-height: 1.55; }
+
+/* ── 핵심 요소 ── */
+.features-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.feature-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 24px 24px 20px;
+  display: flex; flex-direction: column; gap: 12px;
+  transition: border-color 0.15s;
+}
+.feature-card:hover { border-color: var(--border-2); }
+
+.feature-icon {
+  width: 40px; height: 40px; border-radius: 10px;
+  display: grid; place-items: center; flex-shrink: 0;
+}
+
+.feature-title { font-size: 15px; font-weight: 600; color: var(--text); }
+.feature-desc { font-size: 13px; color: var(--text-2); line-height: 1.6; }
+
+.feature-tags {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-top: 4px;
+}
+
+.tag {
+  font-family: var(--mono); font-size: 11px;
+  padding: 3px 8px; border-radius: 4px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border);
+  color: var(--text-3);
+}
+
+/* ── COMPARE MODE ── */
+.compare-wrap {
+  display: grid; grid-template-columns: 1fr 1.5fr;
+  gap: 40px; align-items: center;
+}
+
+.compare-panel {
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+
+.compare-tabs {
+  display: flex; border-bottom: 1px solid var(--border);
+}
+
+.ctab {
+  flex: 1; padding: 10px;
+  font-size: 12px; font-weight: 500; text-align: center;
+  color: var(--text-3);
+}
+.ctab.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-bottom: 2px solid var(--accent);
+}
+
+.ctab.sep { flex: 0 0 auto; padding: 10px 8px; color: var(--text-3); font-size: 11px; pointer-events: none; }
+
+.compare-cols { display: grid; grid-template-columns: 1fr 1fr; }
+.compare-col { padding: 16px; }
+.compare-col + .compare-col { border-left: 1px solid var(--border); }
+
+.cver-badge {
+  font-family: var(--mono); font-size: 11px;
+  padding: 2px 7px; border-radius: 4px; font-weight: 500;
+  display: inline-block; margin-bottom: 10px;
+}
+
+.compare-answer {
+  font-size: 12px; color: var(--text-2); line-height: 1.6;
+  margin-bottom: 10px;
+}
+
+.compare-answer code {
+  font-family: var(--mono); font-size: 11px;
+  color: var(--c-str, #a6e3a1);
+  background: rgba(255,255,255,0.05);
+  padding: 1px 4px; border-radius: 3px;
+}
+
+.compare-src {
+  font-family: var(--mono); font-size: 10px;
+  color: var(--text-3); padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.compare-src a { color: #89b4fa; text-decoration: none; }
+
+/* ── 로그인 ── */
+.login-section {
+  background: var(--surface);
+}
+
+.login-wrap {
+  max-width: 440px; margin: 0 auto;
+  text-align: center; display: flex; flex-direction: column;
+  align-items: center; gap: 24px;
+}
+
+.login-wrap .section-title { font-size: 1.75rem; }
+
+.login-wrap .section-desc { text-align: center; max-width: 36ch; }
+
+.login-benefits {
+  display: flex; flex-direction: column; gap: 10px;
+  width: 100%;
+}
+
+.benefit-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  font-size: 13px; color: var(--text-2);
+  text-align: left;
+}
+
+.benefit-check {
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--green-dim); border: 1px solid rgba(74,222,128,0.3);
+  display: grid; place-items: center; flex-shrink: 0;
+}
+
+.btn-login {
+  width: 100%; padding: 12px 0;
+  background: white; border: none; border-radius: var(--r);
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  font-family: var(--sans); font-size: 14px; font-weight: 500;
+  color: #111; cursor: pointer; transition: opacity 0.15s;
+}
+.btn-login:hover { opacity: 0.9; }
+
+.login-free {
+  font-size: 12px; color: var(--text-3);
+}
+
+/* ── 데모 사용하기 ── */
+.demo-cta-wrap {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 40px; align-items: center;
+}
+
+.try-panel {
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-lg);
+  padding: 24px;
+  display: flex; flex-direction: column; gap: 16px;
+}
+
+.try-selector-row {
+  display: flex; gap: 10px;
+}
+
+.try-sel { flex: 1; }
+.try-sel-label { font-size: 11px; color: var(--text-3); margin-bottom: 6px; letter-spacing: 0.04em; }
+
+.try-input {
+  background: var(--bg);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r); padding: 12px 14px;
+  display: flex; align-items: flex-start; gap: 8px;
+}
+
+.try-input-text {
+  font-size: 13px; color: var(--text-2);
+  line-height: 1.5; flex: 1;
+}
+
+.try-suggested {
+  display: flex; flex-direction: column; gap: 6px;
+}
+
+.try-sug-label { font-size: 11px; color: var(--text-3); letter-spacing: 0.04em; }
+
+.try-sug-items { display: flex; flex-direction: column; gap: 4px; }
+
+.try-sug-item {
+  padding: 8px 12px; border-radius: 6px;
+  background: var(--bg); border: 1px solid var(--border);
+  font-size: 12px; color: var(--text-2); cursor: pointer;
+  transition: all 0.1s;
+}
+.try-sug-item:hover { border-color: var(--border-2); color: var(--text); }
+
+.try-btn-row { display: flex; gap: 8px; }
+
+.btn-try-primary {
+  flex: 1; padding: 10px 0;
+  background: var(--accent); border: none; border-radius: var(--r);
+  color: white; font-family: var(--sans); font-size: 13px; font-weight: 500;
+  cursor: pointer; transition: background 0.15s;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.btn-try-primary:hover { background: var(--accent-hover); }
+
+.btn-try-sec {
+  padding: 10px 16px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--r);
+  color: var(--text-2); font-family: var(--sans); font-size: 13px;
+  cursor: pointer; transition: all 0.15s;
+}
+.btn-try-sec:hover { color: var(--text); border-color: var(--border-2); }
+
+.cta-left { display: flex; flex-direction: column; gap: 20px; }
+
+.cta-stat-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.cta-stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r); padding: 14px 16px;
+}
+
+.stat-num {
+  font-size: 1.75rem; font-weight: 700;
+  letter-spacing: -0.02em; line-height: 1;
+  margin-bottom: 4px;
+}
+
+.stat-label { font-size: 12px; color: var(--text-3); }
+
+/* ── 콘텐츠 네비게이션 ── */
+.nav-section { background: var(--sidebar-bg); }
+
+.docs-nav-wrap {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 24px;
+}
+
+.doc-group {
+  display: flex; flex-direction: column; gap: 8px;
+}
+
+.doc-group-title {
+  font-size: 12px; color: var(--text-3); font-weight: 500;
+  letter-spacing: 0.06em;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px;
+}
+
+.doc-items { display: flex; flex-direction: column; gap: 2px; }
+
+.doc-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; border-radius: 5px;
+  font-size: 13px; color: var(--text-2);
+  cursor: pointer; text-decoration: none;
+  transition: all 0.1s;
+}
+.doc-item:hover { background: var(--surface); color: var(--text); }
+
+.doc-item-ver {
+  font-family: var(--mono); font-size: 10px;
+  padding: 1px 5px; border-radius: 3px; flex-shrink: 0;
+}
+
+.docs-sha {
+  margin-top: 32px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  display: flex; align-items: center; gap: 12px;
+  font-size: 12px; color: var(--text-3);
+}
+
+.sha-code {
+  font-family: var(--mono); font-size: 11px;
+  color: var(--accent); background: var(--accent-dim);
+  padding: 2px 8px; border-radius: 4px;
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 1024px) {
+  .sidebar { display: none; }
+  .hero { padding: 40px 24px; }
+  .section { padding: 48px 24px; }
+  .chat-demo-wrap, .compare-wrap, .demo-cta-wrap { grid-template-columns: 1fr; }
+  .features-grid { grid-template-columns: 1fr; }
+  .docs-nav-wrap { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .badge-dot { animation: none; }
+  .stream-cursor { animation: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">메인 채팅</div>
+
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-mark">C</div>
+      <div class="logo-text">
+        <div class="logo-title">ContextQ</div>
+        <div class="logo-sub">RAG PLATFORM</div>
+      </div>
+    </div>
+
+    <button class="sidebar-new-btn">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="white" stroke-width="1.8" stroke-linecap="round"/></svg>
+      새 대화
+    </button>
+
+    <div class="sidebar-section-label">최근 대화</div>
+    <div class="conv-list">
+      <div class="conv-item">
+        <div class="conv-title">LLMChain 사용법 (v0.3)</div>
+        <div class="conv-meta">
+          <span class="conv-ver ver-03">v0.3</span>
+          오늘
+        </div>
+      </div>
+      <div class="conv-item">
+        <div class="conv-title">에이전트 구성 방법</div>
+        <div class="conv-meta">
+          <span class="conv-ver ver-1x">v1.x</span>
+          어제
+        </div>
+      </div>
+      <div class="conv-item">
+        <div class="conv-title">LCEL vs Chain 차이</div>
+        <div class="conv-meta">
+          <span class="conv-ver ver-cmp">비교</span>
+          3일 전
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-spacer"></div>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-footer-item">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M2 7.5h11M7.5 2v11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" opacity=".5"/><rect x="1" y="1" width="13" height="13" rx="2.5" stroke="currentColor" stroke-width="1.2" opacity=".3"/></svg>
+        이력 전체 보기
+      </div>
+      <div class="sidebar-footer-item">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><circle cx="7.5" cy="5" r="2.5" stroke="currentColor" stroke-width="1.2" opacity=".5"/><path d="M2 13c0-3.038 2.462-5.5 5.5-5.5S13 9.962 13 13" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity=".5"/></svg>
+        관리자
+      </div>
+    </div>
+
+    <div class="sidebar-guest">
+      <div>
+        <div class="guest-label">비로그인 세션</div>
+        <div class="guest-count">잔여 3 / 5회</div>
+      </div>
+      <span class="guest-badge">게스트</span>
+    </div>
+  </aside>
+
+  <main>
+
+    <!-- ── HERO ── -->
+    <section class="hero">
+      <div class="hero-badge">
+        <span class="badge-dot"></span>
+        LangChain 공식 문서 연동 · 버전 격리 검색
+      </div>
+
+      <h1>버전별 LangChain 질의응답</h1>
+
+      <p class="hero-sub">
+        v0.3과 v1.x 공식 문서에서 직접 검색한 근거 기반 답변.<br>
+        출처(heading path + permalink)를 답변과 함께 제공합니다.
+      </p>
+
+      <div class="query-box">
+        <div class="selector-row">
+          <div class="selector-group">
+            <div class="selector-label">버전</div>
+            <div class="tabs">
+              <button class="tab active">v0.3</button>
+              <button class="tab">v1.x</button>
+            </div>
+          </div>
+          <div class="selector-group">
+            <div class="selector-label">모드</div>
+            <div class="tabs">
+              <button class="tab active">단일</button>
+              <button class="tab">비교 <span class="tab-badge">2회</span></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="input-area">
+          <div class="input-placeholder">질문 입력 (최대 1,000자)</div>
+          <div class="input-example">예: LangChain v0.3에서 ConversationBufferMemory는 어떻게 사용하나요?</div>
+          <div class="input-footer">
+            <div class="input-status">
+              <span class="status-ver">v0.3</span>
+              단일 모드 · 잔여 3회
+            </div>
+            <button class="btn-submit">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6h8M6 2l4 4-4 4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              질문하기
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="examples">
+        <div class="ex-label">예시 질문</div>
+        <div class="ex-item">
+          <svg class="ex-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="currentColor" stroke-width="1.2"/><path d="M7 5v3M7 9.5v.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+          LangChain에서 LLMChain을 더 이상 쓸 수 없나요? (v0.3)
+        </div>
+        <div class="ex-item">
+          <svg class="ex-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="currentColor" stroke-width="1.2"/><path d="M7 5v3M7 9.5v.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+          v1.x에서 에이전트를 만드는 방법은 무엇인가요?
+        </div>
+        <div class="ex-item">
+          <svg class="ex-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="currentColor" stroke-width="1.2"/><path d="M7 5v3M7 9.5v.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+          LCEL(LangChain Expression Language)란 무엇인가요?
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 실제 화면 ── -->
+    <section class="section" id="screen">
+      <div class="section-eyebrow">실제 화면</div>
+      <h2 class="section-title">질문하면 이렇게 답합니다</h2>
+      <p class="section-desc">출처를 먼저 확인하고, 근거 기반으로 답변을 스트리밍합니다. 답변에는 문서 섹션 경로와 불변 permalink가 항상 포함됩니다.</p>
+
+      <div class="chat-demo-wrap">
+        <!-- 채팅 창 목업 -->
+        <div class="chat-window">
+          <div class="chat-topbar">
+            <span class="chat-ver-pill ver-1x">v1.x</span>
+            <span class="chat-mode-pill">단일 모드</span>
+            <span class="chat-topbar-title">에이전트 구성 방법</span>
+          </div>
+          <div class="chat-messages">
+
+            <!-- 사용자 질문 -->
+            <div class="msg">
+              <div class="msg-role"><span class="role-dot user"></span> 사용자</div>
+              <div class="msg-bubble user-msg">
+                v1.x에서 에이전트에 커스텀 툴을 붙이는 방법이 뭔가요? <code style="font-family:var(--mono);font-size:12px;color:#89b4fa">create_tool_calling_agent</code> 쓰면 되나요?
+              </div>
+            </div>
+
+            <!-- 소스 먼저 -->
+            <div class="msg">
+              <div class="msg-role"><span class="role-dot ai"></span> ContextQ · 출처 검색 완료 (3개)</div>
+              <div class="sources-block">
+                <div class="source-card">
+                  <div class="source-num">1</div>
+                  <div class="source-info">
+                    <div class="source-path">langchain-ai/docs@a3f9c21 · agents/tools/defining-tools</div>
+                  </div>
+                  <span class="source-score">0.94</span>
+                </div>
+                <div class="source-card">
+                  <div class="source-num">2</div>
+                  <div class="source-info">
+                    <div class="source-path">langchain-ai/docs@a3f9c21 · agents/quickstart</div>
+                  </div>
+                  <span class="source-score">0.91</span>
+                </div>
+                <div class="source-card">
+                  <div class="source-num">3</div>
+                  <div class="source-info">
+                    <div class="source-path">langchain-ai/docs@a3f9c21 · how_to/custom_tools</div>
+                  </div>
+                  <span class="source-score">0.87</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 답변 -->
+            <div class="msg">
+              <div class="msg-role"><span class="role-dot ai"></span> ContextQ</div>
+              <div class="msg-bubble">
+                <p style="margin-bottom:10px">네, v1.x에서는 <code style="font-family:var(--mono);font-size:11px;color:#cba6f7">@tool</code> 데코레이터로 툴을 정의하고, <code style="font-family:var(--mono);font-size:11px;color:#cba6f7">create_tool_calling_agent()</code>에 전달합니다.</p>
+                <div class="code-block"><span class="c-kw">from</span> langchain_core.tools <span class="c-kw">import</span> tool
+<span class="c-kw">from</span> langchain.agents <span class="c-kw">import</span> create_tool_calling_agent
+
+<span class="c-fn">@tool</span>
+<span class="c-kw">def</span> <span class="c-fn">search</span>(query: <span class="c-num">str</span>) -> <span class="c-num">str</span>:
+    <span class="c-str">"""인터넷 검색 툴"""</span>
+    <span class="c-kw">return</span> <span class="c-fn">my_search</span>(query)
+
+agent = <span class="c-fn">create_tool_calling_agent</span>(llm, [search], prompt)<span class="stream-cursor"></span></div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- 설명 -->
+        <div class="demo-explain">
+          <div class="explain-step">
+            <div class="explain-num">1</div>
+            <div class="explain-content">
+              <div class="explain-title">출처를 먼저 반환합니다</div>
+              <div class="explain-desc">답변 생성 전에 검색된 문서 섹션과 유사도 점수를 먼저 확인할 수 있습니다. 어떤 근거로 답하는지 투명하게 보여줍니다.</div>
+            </div>
+          </div>
+          <div class="explain-step">
+            <div class="explain-num">2</div>
+            <div class="explain-content">
+              <div class="explain-title">선택한 버전에서만 검색합니다</div>
+              <div class="explain-desc">v1.x를 선택하면 v1.x 컬렉션에서만 검색합니다. v0.3 문서가 섞이는 일은 구조적으로 차단됩니다.</div>
+            </div>
+          </div>
+          <div class="explain-step">
+            <div class="explain-num">3</div>
+            <div class="explain-content">
+              <div class="explain-title">근거 없으면 답하지 않습니다</div>
+              <div class="explain-desc">유사도가 임계값 미만이면 LLM 호출 없이 "근거를 찾지 못했습니다"를 반환합니다. 불확실한 답변 대신 명확한 한계를 알려줍니다.</div>
+            </div>
+          </div>
+          <div class="explain-step">
+            <div class="explain-num">4</div>
+            <div class="explain-content">
+              <div class="explain-title">멀티턴 대화를 이어갑니다</div>
+              <div class="explain-desc">직전 3턴을 참조해 질의를 재작성하므로 연속 질문이 자연스럽게 이어집니다.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 핵심 요소 ── -->
+    <section class="section" id="features">
+      <div class="section-eyebrow">핵심 요소</div>
+      <h2 class="section-title">다른 LLM 도구와 무엇이 다른가</h2>
+      <p class="section-desc">범용 LLM은 v0.3과 v1.x를 훈련 데이터 안에서 뒤섞어 가지고 있습니다. 버전을 명시해도 모델이 "요청"을 받을 뿐, 실제로 어떤 지식을 꺼낼지는 통제되지 않습니다.</p>
+
+      <div class="features-grid">
+
+        <div class="feature-card">
+          <div class="feature-icon" style="background:rgba(91,108,247,0.12);">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="7" height="7" rx="2" stroke="#5b6cf7" stroke-width="1.5"/><rect x="11" y="2" width="7" height="7" rx="2" stroke="#5b6cf7" stroke-width="1.5"/><rect x="2" y="11" width="7" height="7" rx="2" stroke="#5b6cf7" stroke-width="1.5" opacity=".4"/><rect x="11" y="11" width="7" height="7" rx="2" stroke="#5b6cf7" stroke-width="1.5" opacity=".4"/></svg>
+          </div>
+          <div class="feature-title">버전 격리 검색</div>
+          <div class="feature-desc">v0.3과 v1.x는 별도의 Chroma 컬렉션에 저장됩니다. 버전 선택이 쿼리 파라미터가 아니라 물리적 컬렉션 분리로 구현되므로, 혼입이 구조적으로 불가능합니다.</div>
+          <div class="feature-tags">
+            <span class="tag">Chroma</span>
+            <span class="tag">컬렉션 분리</span>
+            <span class="tag">text-embedding-3-small</span>
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon" style="background:rgba(74,222,128,0.1);">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10" cy="10" r="8" stroke="#4ade80" stroke-width="1.2" opacity=".3"/></svg>
+          </div>
+          <div class="feature-title">커밋 SHA 고정 출처</div>
+          <div class="feature-desc">모든 답변에 섹션 경로와 GitHub SHA 고정 permalink가 포함됩니다. URL은 자동으로 HTTP 200 검증되며, 수집 커밋과 날짜가 함께 표시됩니다.</div>
+          <div class="feature-tags">
+            <span class="tag">permalink</span>
+            <span class="tag">SHA 고정</span>
+            <span class="tag">자동 검증</span>
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon" style="background:rgba(251,191,36,0.1);">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 4v7M10 14v2" stroke="#fbbf24" stroke-width="1.5" stroke-linecap="round"/><circle cx="10" cy="10" r="8" stroke="#fbbf24" stroke-width="1.2" opacity=".3"/></svg>
+          </div>
+          <div class="feature-title">NO_CONTEXT 처리</div>
+          <div class="feature-desc">검색 결과 유사도가 임계값 미만이면 LLM 호출 없이 "근거를 찾지 못했습니다"를 반환합니다. 환각된 답변 대신 명확한 한계를 알려줍니다.</div>
+          <div class="feature-tags">
+            <span class="tag">임계값 필터</span>
+            <span class="tag">NO_CONTEXT</span>
+            <span class="tag">환각 방지</span>
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon" style="background:rgba(203,166,247,0.1);">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 10h5M11 10h5" stroke="#cba6f7" stroke-width="1.5" stroke-linecap="round"/><path d="M6 7l-3 3 3 3M14 7l3 3-3 3" stroke="#cba6f7" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div class="feature-title">버전 비교 모드</div>
+          <div class="feature-desc">v0.3과 v1.x를 나란히 비교합니다. 같은 질문에 대해 양쪽 문서를 각각 검색하고, 무엇이 바뀌었는지 양측 출처와 함께 정리합니다.</div>
+          <div class="feature-tags">
+            <span class="tag">비교 모드</span>
+            <span class="tag">양측 출처</span>
+            <span class="tag">마이그레이션</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 버전 비교 미리보기 -->
+      <div style="margin-top:40px">
+        <div class="compare-panel">
+          <div class="compare-tabs">
+            <div class="ctab active">v0.3</div>
+            <div class="ctab sep">↔</div>
+            <div class="ctab active" style="background:rgba(74,222,128,0.07);color:var(--green);border-bottom:2px solid var(--green)">v1.x</div>
+          </div>
+          <div class="compare-cols">
+            <div class="compare-col">
+              <span class="compare-ver cver-badge ver-03">LangChain 0.3</span>
+              <div class="compare-answer">
+                v0.3에서는 <code>AgentExecutor</code>와 <code>initialize_agent()</code>를 사용합니다.<br><br>
+                <code>from langchain.agents import initialize_agent, Tool</code><br>
+                <code>agent = initialize_agent(tools, llm, agent="zero-shot-react-description")</code>
+              </div>
+              <div class="compare-src">출처 [1]&emsp;<a href="#">agents/agent_types/react →</a></div>
+            </div>
+            <div class="compare-col">
+              <span class="compare-ver cver-badge ver-1x">LangChain 1.x</span>
+              <div class="compare-answer">
+                v1.x에서는 <code>create_tool_calling_agent()</code> 또는 LangGraph 기반 접근을 권장합니다.<br><br>
+                <code>from langchain.agents import create_tool_calling_agent</code><br>
+                <code>agent = create_tool_calling_agent(llm, tools, prompt)</code>
+              </div>
+              <div class="compare-src">출처 [1]&emsp;<a href="#">agents/concepts →</a></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 로그인 ── -->
+    <section class="section login-section" id="login">
+      <div class="login-wrap">
+        <div>
+          <div class="section-eyebrow" style="justify-content:center">로그인</div>
+          <h2 class="section-title">대화 이력을 저장하고<br>계속 질문하세요</h2>
+        </div>
+        <p class="section-desc">비로그인으로 세션당 5회 무료. 로그인하면 대화 이력 저장, 무제한 질문, 북마크 기능을 사용할 수 있습니다.</p>
+
+        <div class="login-benefits">
+          <div class="benefit-row">
+            <div class="benefit-check">
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2.5" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            대화 이력 무제한 저장 · 언제든 이어서 질문
+          </div>
+          <div class="benefit-row">
+            <div class="benefit-check">
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2.5" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            비교 모드 10회 / 월 (비로그인 2회)
+          </div>
+          <div class="benefit-row">
+            <div class="benefit-check">
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2.5" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            질문 북마크 · 나중에 다시 보기
+          </div>
+        </div>
+
+        <button class="btn-login">
+          <svg width="18" height="18" viewBox="0 0 18 18"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/><path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/></svg>
+          Google로 계속하기
+        </button>
+
+        <p class="login-free">신용카드 불필요 · 비로그인으로 먼저 5회 무료 체험</p>
+      </div>
+    </section>
+
+    <!-- ── 데모 사용하기 ── -->
+    <section class="section" id="demo">
+      <div class="demo-cta-wrap">
+        <div class="cta-left">
+          <div>
+            <div class="section-eyebrow">데모 사용하기</div>
+            <h2 class="section-title">지금 바로<br>질문해보세요</h2>
+            <p class="section-desc" style="margin-bottom:0">로그인 없이 세션당 5회 무료. v0.3과 v1.x 모두 지원합니다.</p>
+          </div>
+
+          <div class="cta-stat-grid">
+            <div class="cta-stat">
+              <div class="stat-num" style="color:var(--accent)">0건</div>
+              <div class="stat-label">버전 혼입 (격리 실험 E1)</div>
+            </div>
+            <div class="cta-stat">
+              <div class="stat-num" style="color:var(--green)">100%</div>
+              <div class="stat-label">permalink HTTP 200 검증</div>
+            </div>
+            <div class="cta-stat">
+              <div class="stat-num" style="color:var(--yellow)">≤3s</div>
+              <div class="stat-label">첫 토큰 응답 (p50)</div>
+            </div>
+            <div class="cta-stat">
+              <div class="stat-num">2종</div>
+              <div class="stat-label">지원 버전 v0.3 / v1.x</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="try-panel">
+          <div class="try-selector-row">
+            <div class="try-sel">
+              <div class="try-sel-label">버전</div>
+              <div class="tabs">
+                <button class="tab active">v0.3</button>
+                <button class="tab">v1.x</button>
+              </div>
+            </div>
+            <div class="try-sel">
+              <div class="try-sel-label">모드</div>
+              <div class="tabs">
+                <button class="tab active">단일</button>
+                <button class="tab">비교</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="try-input">
+            <div class="try-input-text" style="color:var(--text-3)">LangChain 질문을 입력하세요...</div>
+          </div>
+
+          <div class="try-suggested">
+            <div class="try-sug-label">추천 질문</div>
+            <div class="try-sug-items">
+              <div class="try-sug-item">LLMChain이 v0.3에서 deprecated 된 이유가 뭔가요?</div>
+              <div class="try-sug-item">v1.x에서 Memory를 어떻게 구현하나요?</div>
+              <div class="try-sug-item">LCEL(LangChain Expression Language)란 무엇인가요?</div>
+            </div>
+          </div>
+
+          <div class="try-btn-row">
+            <button class="btn-try-primary">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6h8M6 2l4 4-4 4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              질문하기
+            </button>
+            <button class="btn-try-sec">예시로 채우기</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 콘텐츠 네비게이션 ── -->
+    <section class="section nav-section" id="sources">
+      <div class="section-eyebrow">콘텐츠 네비게이션</div>
+      <h2 class="section-title">어떤 문서에서 답합니까</h2>
+      <p class="section-desc">LangChain 공식 GitHub 리포지터리에서 직접 수집한 문서만 사용합니다. 커밋 SHA를 고정해 "어느 스냅샷 기준인지"를 항상 추적합니다.</p>
+
+      <div class="docs-nav-wrap">
+        <div class="doc-group">
+          <div class="doc-group-title">
+            <span class="conv-ver ver-03" style="font-size:10px">v0.3</span>
+            langchain-ai/langchain
+          </div>
+          <div class="doc-items">
+            <a class="doc-item" href="#">
+              <span class="doc-item-ver ver-03">v0.3</span>
+              Agents / AgentExecutor
+            </a>
+            <a class="doc-item" href="#">
+              <span class="doc-item-ver ver-03">v0.3</span>
+              Chains / LLMChain
+            </a>
+            <a class="doc-item" href="#">
+              <span class="doc-item-ver ver-03">v0.3</span>
+              Memory / ConversationBufferMemory
+            </a>
+            <a class="doc-item" href="#">
+              <span class="doc-item-ver ver-03">v0.3</span>
+              Retrievers / VectorStoreRetriever
+            </a>
+            <a class="doc-item" href="#">
+              <span class="doc-item-ver ver-03">v0.3</span>
+              Callbacks / BaseCallbackHandler
+            </a>
+          </div>
+        </div>
+
+        <div class="doc-group">
+          <div class="doc-group-title">
+            <span class="conv-ver ver-1x" style="font-size:10px">v1.x</span>
+            langchain-ai/langchain-docs
+          </div>
+          <div class="doc-items">
+            <a class="doc-item" href="#">
+              <span class="doc-item-ver ver-1x">v1.x</span>
+              Agents / create_tool_calling_agent
+            </a>
+            <a class="doc-item" href="#">
+              <span class="doc-item-ver ver-1x">v1.x</span>
+              LCEL / LangChain Expression Language
+            </a>
+            <a class="doc-item" href="#">
+              <span class="doc-item-ver ver-1x">v1.x</span>
+              Tools / @tool decorator
+            </a>
+            <a class="doc-item" href="#">
+              <span class="doc-item-ver ver-1x">v1.x</span>
+              Runnable / RunnablePassthrough
+            </a>
+            <a class="doc-item" href="#">
+              <span class="doc-item-ver ver-1x">v1.x</span>
+              Streaming / astream_events
+            </a>
+          </div>
+        </div>
+
+        <div class="doc-group">
+          <div class="doc-group-title">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><circle cx="5" cy="5" r="4" stroke="currentColor" stroke-width="1"/></svg>
+            수집 현황
+          </div>
+          <div class="doc-items">
+            <a class="doc-item" href="#" style="flex-direction:column;align-items:flex-start;gap:3px">
+              <span style="font-size:12px;color:var(--text)">v0.3 스냅샷</span>
+              <span class="sha-code" style="font-size:10px">SHA: a3f9c21</span>
+            </a>
+            <a class="doc-item" href="#" style="flex-direction:column;align-items:flex-start;gap:3px">
+              <span style="font-size:12px;color:var(--text)">v1.x 스냅샷</span>
+              <span class="sha-code" style="font-size:10px">SHA: 8d2b4e7</span>
+            </a>
+          </div>
+          <div style="margin-top:16px;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);">
+            <div style="font-size:11px;color:var(--text-3);margin-bottom:6px">범위 외 질문 처리</div>
+            <div style="font-size:12px;color:var(--text-2);line-height:1.5">LangGraph, LangSmith 등 범위 밖 질문은 LLM 호출 없이 <code style="font-family:var(--mono);font-size:11px;color:var(--accent)">NO_CONTEXT</code>를 반환합니다.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="docs-sha">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="currentColor" stroke-width="1.1" opacity=".5"/><path d="M5 7l1.5 1.5L9 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        모든 출처 URL은 HTTP 200 자동 검증됩니다 ·
+        <span class="sha-code">permalink 검증률 100%</span>
+        · 불변 GitHub URL로 직접 확인 가능
+      </div>
+    </section>
+
+  </main>
+</div>
+
+</body>
+</html>
