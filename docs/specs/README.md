@@ -14,5 +14,5 @@
 
 ## 규칙
 
-- API 계약 변경 시 `interfaces.md` 또는 `api-spec-v1.md` 반영 필수.
+- API 계약 변경 시 `interfaces.md` 또는 `api-spec.md` 반영 필수.
 - PR 셀프 체크리스트 "계약 변경 `docs/specs/` 문서 반영" 항목 체크.
