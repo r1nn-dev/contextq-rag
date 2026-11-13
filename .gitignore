@@ -46,6 +46,7 @@ backend/build/
 backend/.gradle/
 *.class
 *.jar
+!gradle/wrapper/gradle-wrapper.jar
 *.war
 *.nar
 *.ear
@@ -53,6 +54,12 @@ backend/.gradle/
 *.tar.gz
 *.rar
 hs_err_pid*
+
+# Spring Boot 로컬 설정 오버라이드
+application-local.yml
+application-local.properties
+**/application-local.yml
+**/application-local.properties
 
 # Node.js / Frontend (frontend/)
 node_modules/
@@ -67,6 +74,15 @@ frontend/build/
 .env
 .env.*
 !.env.example
+
+# Security — 키·인증서 파일
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Docker Compose 로컬 오버라이드
+docker-compose.override.yml
 
 # Data / index 
 chroma_db/
@@ -107,3 +123,4 @@ Desktop.ini
 *.pid
 *.seed
 *.pid.lock
+logs/
