@@ -10,8 +10,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  pr-title:
-    name: pr-title
+  lint:
+    name: lint
     runs-on: ubuntu-latest
     steps:
       - name: PR 제목 형식 검사
@@ -33,10 +33,6 @@ jobs:
             exit 1
           fi
 
-  branch-name:
-    name: branch-name
-    runs-on: ubuntu-latest
-    steps:
       - name: 브랜치명 형식 검사
         env:
           BRANCH_NAME: ${{ github.head_ref }}
@@ -56,10 +52,6 @@ jobs:
             exit 1
           fi
 
-  linked-issue:
-    name: linked-issue
-    runs-on: ubuntu-latest
-    steps:
       - name: 연결된 이슈 검사
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
