@@ -1,7 +1,7 @@
 # ADR-008: 유사도 임계값 미만 NO_CONTEXT 반환
 
 ## Status
-Draft
+Accepted
 
 ## Date
 2026-11-14
@@ -21,36 +21,51 @@ RAG 시스템에서 LLM 할루시네이션 억제 요건:
 
 ## Decision
 
-**코사인 유사도 < τ (기본값 0.72) 시 LLM 호출 없이 `NO_CONTEXT` 응답을 반환**한다.
+**코사인 유사도 < τ(source_key) 시 LLM 호출 없이 `NO_CONTEXT` 응답을 반환**한다.
+
+τ는 단일 전역값이 아닌 **source_key별 개별값**으로 관리한다.
+source_key마다 문서 도메인·임베딩 분포가 달라 동일 임계값 적용 시 편향이 발생하기 때문이다.
 
 ```python
-NO_CONTEXT_THRESHOLD = 0.72  # configs/rag.yaml 에서 override 가능
-
 class RAGPipeline:
-    def query(self, q: str, version: str) -> RAGResponse:
-        results = self.retriever.retrieve(q, version, top_k=5)
+    def query(self, q: str, source_key: str) -> RAGResponse:
+        threshold = self._get_threshold(source_key)
+        results = self.retriever.retrieve(q, source_key, top_k=5)
 
-        if not results or results[0].score < NO_CONTEXT_THRESHOLD:
+        if not results or results[0].score < threshold:
             return RAGResponse(
                 answer=None,
                 sources=[],
                 status="NO_CONTEXT",
                 message="관련 문서를 찾을 수 없습니다. 질문을 구체화하거나 다른 버전을 선택해 주세요."
             )
-
-        # 임계값 이상: LLM 호출
         return self._generate(q, results)
+
+    def _get_threshold(self, source_key: str) -> float:
+        # 환경 변수 TAU_{SOURCE_KEY_UPPER} 가 설정된 경우 yaml 기본값을 오버라이드
+        env_key = f"TAU_{source_key.upper()}"
+        default = self.config.retrieval.thresholds.get(source_key, 0.5)
+        return float(os.getenv(env_key, default))
 ```
 
 Spring Boot는 `status == "NO_CONTEXT"` 수신 시 SSE `error` 이벤트 없이
 UI 전용 메시지를 `done` 이벤트와 함께 전달한다.
 
-τ 값은 `configs/rag.yaml`에서 조정 가능:
+τ 기본값은 `configs/rag.yaml`에서 source_key별로 선언한다:
 
 ```yaml
 retrieval:
   top_k: 5
-  no_context_threshold: 0.72
+  thresholds:
+    langchain_v03: 0.5   # E1 실험 확정값
+    langchain_v1x: 0.5   # E1 실험 확정값
+```
+
+운영 환경 오버라이드 (.env):
+
+```dotenv
+TAU_LANGCHAIN_V03=0.5
+TAU_LANGCHAIN_V1X=0.5
 ```
 
 ## Consequences
@@ -66,8 +81,9 @@ retrieval:
 - 임계값은 임베딩 모델 교체 시 재교정 필요
 
 **τ 선정 근거**
-- `text-embedding-3-small` 모델 기준, LangChain 문서 도메인 내 실험적 최솟값
-- R-1 단계에서 평가 시나리오(`eval-scenarios.md`)로 검증 예정
+- E1 평가 실험(`eval-scenarios.md`) 결과 source_key별 0.5가 precision/recall 균형점으로 확인됨
+- `text-embedding-3-small` 모델 기준, 0.5 미만은 도메인 무관 문서 혼입 위험
+- source_key 추가 시 E1 동일 프로토콜로 개별 교정 필요
 
 **관련 ADR**
 - ADR-003: SSE 중계 (`NO_CONTEXT` 이벤트 흐름)
