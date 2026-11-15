@@ -3,7 +3,7 @@ name = "ai-server"
 version = "0.1.0"
 description = "ContextQ RAG AI Server"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",   # includes websocket, http2 support
@@ -46,7 +46,7 @@ ignore = []
 [tool.mypy]
 strict = false
 ignore_missing_imports = true      # ignore missing type stubs for third-party packages
-python_version = "3.11"
+python_version = "3.12"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

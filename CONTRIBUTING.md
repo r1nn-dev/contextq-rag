@@ -263,7 +263,7 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP", "SIM"]
+select = ["E", "F", "I", "UP"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -303,7 +303,7 @@ plugins {
 
 spotless {
     java {
-        googleJavaFormat('1.22.0')
+        googleJavaFormat('1.24.0')
         removeUnusedImports()
         trimTrailingWhitespace()
         endWithNewline()
