@@ -1,3 +1,5 @@
+# ContextQ-RAG 로컬 개발 환경 세팅
+
 > **최종 수정일**: 2026-11-14
 
 ---
@@ -64,7 +66,7 @@ cp .env.example .env
 cd ai-server && uv sync && cd ..
 
 # backend (Spring Boot) — 첫 빌드 시 Gradle이 자동으로 의존성 다운로드
-./gradlew -p backend/contextq dependencies --quiet
+cd backend/contextq && ./gradlew dependencies --quiet && cd ../..
 
 # frontend (React + Vite)
 cd frontend && npm install && cd ..
@@ -99,16 +101,16 @@ make validate-index
 ## Step 5 — GitHub Actions Secrets 설정
 
 > Settings → Secrets and variables → Actions → New repository secret
-> 
 
-| Secret | 값 |
-| --- | --- |
-| `OPENAI_API_KEY` | OpenAI API 키 |
-| `POSTGRES_PASSWORD` | PostgreSQL 비밀번호 |
-| `JWT_SECRET` | JWT 서명 키 |
-| `EC2_HOST` | AWS EC2 퍼블릭 IP |
-| `EC2_SSH_KEY` | EC2 SSH 비밀키 (PEM 전체) |
-| `GHCR_TOKEN` | GitHub PAT (packages write 권한) |
+| Secret | 값 | 발급 방법 |
+| --- | --- | --- |
+| `OPENAI_API_KEY` | OpenAI API 키 | [platform.openai.com](https://platform.openai.com) → API keys |
+| `POSTGRES_PASSWORD` | PostgreSQL 비밀번호 | `openssl rand -hex 16` |
+| `JWT_SECRET` | JWT 서명 키 | `openssl rand -hex 32` |
+| `EC2_HOST` | AWS EC2 퍼블릭 IP | EC2 콘솔 → 인스턴스 → Public IPv4 address |
+| `EC2_SSH_KEY` | EC2 SSH 비밀키 | EC2 콘솔 → Key Pairs → PEM 파일 전체 내용 |
+| `GHCR_TOKEN` | GitHub PAT | GitHub → Settings → Developer settings → PAT (Classic) · 권한: `write:packages` |
+| `DISCORD_WEBHOOK_URL` | Discord 웹훅 URL | Discord 서버 설정 → 연동 → 웹후크 → 새 웹후크 → URL 복사 |
 
 ---
 
@@ -130,57 +132,10 @@ make validate-index
 }
 ```
 
-PAT 발급: GitHub → Settings → Developer settings → Personal access tokens (Classic)
-필요 권한: `repo`, `read:org`
+- PAT 발급: GitHub → Settings → Developer settings → Personal access tokens (Classic)
+- 필요 권한: `repo`
 
 > **보안**: `.mcp.json`은 절대 커밋하지 않는다. `.gitignore`에 `.mcp.json` 항목 등록됨.
-> 
-
-### `.personal/` 초기 구조
-
-```
-.personal/
-├── templates/
-│   ├── dev-log-ai.md
-│   ├── dev-log-backend.md
-│   └── task-plan.md
-└── context/
-    ├── repo-guide.md
-    └── contributing.md
-```
-
-| Project Space 경로 | 로컬 복사 대상 |
-| --- | --- |
-| `claude/dev-log-ai.md` | `.personal/templates/dev-log-ai.md` |
-| `claude/dev-log-backend.md` | `.personal/templates/dev-log-backend.md` |
-| `claude/repo-guide.md` | `.personal/context/repo-guide.md` |
-| `claude/contributing.md` | `.personal/context/contributing.md` |
-
----
-
-## Step 7 — Branch Protection 설정
-
-PR 머지 후 `docs/ops/branch-protection.md` 체크리스트 순서대로 GitHub UI에서 직접 적용.
-상세 설정 절차는 `docs/ops/branch-protection.md` 참고.
-
----
-
-## Step 8 — 첫 작업 시작
-
-```bash
-git switch develop && git pull origin develop
-gh issue create --title "feat(rag): 질의 재작성 프롬프트 구현" --label feat
-git switch -c feat/<issue-number>-rag-query-rewrite
-git push -u origin feat/<issue-number>-rag-query-rewrite
-gh pr create --draft --base develop \
-  --title "feat(rag): 질의 재작성 프롬프트 구현" --web
-```
-
-**커밋 스코프 기준:**
-
-```
-auth · chat · rag · ingest · eval · ui · infra · ci · docs
-```
 
 ---
 
@@ -199,3 +154,7 @@ cd ai-server && uv lock && uv sync
 ```bash
 ./gradlew -p backend/contextq clean build
 ```
+
+---
+
+end.
