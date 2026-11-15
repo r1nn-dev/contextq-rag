@@ -93,8 +93,10 @@ When the user asks for one of the stages below, read the file first and follow i
 | Start a session | `docs/ai/prompts/00-session-start.md` |
 | Plan a milestone, break down Issues | `docs/ai/prompts/10-plan.md` |
 | Write or register an Issue | `docs/ai/prompts/20-issue-write.md` |
-| Implement | `docs/ai/prompts/30-implement.md` |
-| Self-review, help review a PR | `docs/ai/prompts/40-review.md` |
+| Implement (ai-server) | `docs/ai/prompts/30-implement-ai-server.md` |
+| Implement (backend)   | `docs/ai/prompts/30-implement-backend.md` |
+| Implement (frontend)  | `docs/ai/prompts/30-implement-frontend.md` |
+| Self-review before PR | `docs/ai/prompts/40-review.md` |
 | Write or register a PR | `docs/ai/prompts/50-pr-write.md` |
 | Build or test failure, applying review comments | `docs/ai/prompts/60-troubleshoot.md` |
 
