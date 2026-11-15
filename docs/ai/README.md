@@ -18,9 +18,9 @@ ContextQ-RAG 저장소에서 AI 도구(Claude Code, Gemini 등)와 협업하는 
 | `00-session-start.md` | 세션 시작 | 컨텍스트 로딩 |
 | `10-plan.md` | 계획 | 작업 계획 수립 |
 | `20-issue-write.md` | 이슈 작성 | GitHub 이슈 초안 |
-| `30-implement.md` | 구현 | 코드 구현 |
-| `40-review.md` | 리뷰 | 코드 리뷰 |
+| `30-implement-ai-server.md` | 구현 (ai-server) | Python/FastAPI/RAG 구현 |
+| `30-implement-backend.md` | 구현 (backend) | Spring Boot/Java 구현 |
+| `30-implement-frontend.md` | 구현 (frontend) | React/Vite/TypeScript 구현 |
+| `40-review.md` | 리뷰 | 셀프 리뷰 (PR 생성 전) |
 | `50-pr-write.md` | PR 작성 | Pull Request 초안 |
 | `60-troubleshoot.md` | 트러블슈팅 | 에러 디버깅 |
-
-> 프롬프트 파이프라인 파일은 별도 이슈에서 작성 예정.
