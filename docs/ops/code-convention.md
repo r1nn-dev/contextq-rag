@@ -175,45 +175,7 @@ ai-server/
 
 ---
 
-## 5. 커밋·PR 타입·스코프
-
-PR 제목 및 커밋 메시지 형식: `type(scope): subject`
-
-**type 목록**
-
-| type | 용도 |
-|---|---|
-| `feat` | 새 기능 |
-| `fix` | 버그 수정 |
-| `chore` | 빌드·설정·문서 (기능 무관) |
-| `docs` | 문서 전용 |
-| `test` | 테스트 추가·수정 |
-| `ci` | CI/CD 워크플로우 |
-| `refactor` | 리팩터링 (기능 변화 없음) |
-| `perf` | 성능 개선 |
-
-**scope 목록** (`.github/workflows/pr-lint.yml` 기준)
-
-| scope | 범위 |
-|---|---|
-| `backend` | Spring Boot 전체 |
-| `ai-server` | FastAPI 전체 |
-| `frontend` | 프론트엔드 |
-| `rag` | RAG 파이프라인 |
-| `retrieval` | 검색·임베딩 |
-| `ingest` | 문서 수집·파싱 |
-| `api` | REST API 계층 |
-| `auth` | 인증·JWT |
-| `chat` | 질의·이력 |
-| `eval` | 평가·실험 |
-| `db` | DB 마이그레이션 |
-| `infra` | 인프라·배포 |
-| `docs` | 문서 전용 |
-| `ci` | CI/CD |
-
----
-
-## 6. CI 잡
+## 5. CI 잡
 
 | 잡 이름 | 주요 단계 |
 |---|---|
@@ -224,7 +186,7 @@ PR 제목 및 커밋 메시지 형식: `type(scope): subject`
 
 ---
 
-## 7. 의존성 주의 (Spring Boot 4.1.2)
+## 6. 의존성 주의 (Spring Boot 4.1.2)
 
 ### Flyway
 
@@ -252,7 +214,7 @@ testImplementation 'org.testcontainers:testcontainers-postgresql'
 
 ---
 
-## 8. pyproject.toml — pytest 마커
+## 7. pyproject.toml — pytest 마커
 
 LLM 호출 및 RAG 평가 테스트는 CI에서 돌지 않는다. 아래 설정으로 기본 실행에서 제외된다.
 
