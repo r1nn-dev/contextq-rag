@@ -71,7 +71,7 @@ The source of the document list is `docs/README.md`.
 | Deployment | `docs/ops/deployment.md` |
 | RAG evaluation | `docs/experiments/evaluation.md` |
 | System diagrams | `docs/architecture/diagrams.md` |
-| AI collaboration guides | `docs/guides/ai/README.md`, prompts in `docs/guides/ai/prompts/` |
+| AI collaboration guides | `docs/ai/README.md`, prompts in `docs/ai/prompts/` |
 
 ---
 
@@ -90,15 +90,15 @@ When the user asks for one of the stages below, read the file first and follow i
 
 | Request | Prompt |
 | --- | --- |
-| Start a session | `docs/guides/ai/prompts/00-session-start.md` |
-| Plan a milestone, break down Issues | `docs/guides/ai/prompts/10-plan.md` |
-| Write or register an Issue | `docs/guides/ai/prompts/20-issue-write.md` |
-| Implement | `docs/guides/ai/prompts/30-implement.md` |
-| Self-review, help review a PR | `docs/guides/ai/prompts/40-review.md` |
-| Write or register a PR | `docs/guides/ai/prompts/50-pr-write.md` |
-| Build or test failure, applying review comments | `docs/guides/ai/prompts/60-troubleshoot.md` |
+| Start a session | `docs/ai/prompts/00-session-start.md` |
+| Plan a milestone, break down Issues | `docs/ai/prompts/10-plan.md` |
+| Write or register an Issue | `docs/ai/prompts/20-issue-write.md` |
+| Implement | `docs/ai/prompts/30-implement.md` |
+| Self-review, help review a PR | `docs/ai/prompts/40-review.md` |
+| Write or register a PR | `docs/ai/prompts/50-pr-write.md` |
+| Build or test failure, applying review comments | `docs/ai/prompts/60-troubleshoot.md` |
 
-Use only `docs/guides/ai/review-checklist.md` as the review standard.
+Use only `docs/ai/review-checklist.md` as the review standard.
 
 ---
 
