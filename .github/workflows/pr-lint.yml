@@ -41,7 +41,7 @@ jobs:
         env:
           BRANCH_NAME: ${{ github.head_ref }}
         run: |
-          scopes="api|rag|retrieval|ingest|shared|backend|frontend|scripts|configs|infra|ci|deps|docs|setup"
+          scopes="api|rag|retrieval|ingest|shared|backend|frontend|scripts|configs|infra|ci|deps|docs|setup|auth|chat|eval"
           pattern="^(feat|fix|refactor|perf|test|docs|chore|style|hotfix)/[0-9]+-($scopes)-[a-z0-9][a-z0-9-]*$"
 
           if echo "$BRANCH_NAME" | grep -Eq "$pattern"; then
@@ -51,7 +51,7 @@ jobs:
             echo "   형식: <type>/<issue-number>-<scope>-<summary>"
             echo "   예시: feat/12-rag-version-aware-filter"
             echo "   scope: api|rag|retrieval|ingest|shared|backend|frontend|scripts"
-            echo "          configs|infra|ci|deps|docs|setup"
+            echo "          configs|infra|ci|deps|docs|setup|auth|chat|eval"
             echo "   입력: $BRANCH_NAME"
             exit 1
           fi
