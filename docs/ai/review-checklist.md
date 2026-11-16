@@ -24,6 +24,7 @@
 - **ai-server/ RAG 변경 시**: E
 - **infra/ Docker Compose·nginx 변경 시**: F
 - **frontend/ 변경 시**: G
+- **새 도메인 추가 시**: L
 
 ---
 
@@ -156,13 +157,15 @@
 
 | # | 확인 | 방법 | 근거 |
 | --- | --- | --- | --- |
-| L1 | 패키지 위치가 기준과 같은가 (`com.r1nn.contextq.{domain}/controller, service, repository, domain, dto, client`) | 변경 파일 경로 | `docs/ops/package-structure.md` > §1.2 레이어별 역할 |
-| L2 | Controller 반환 타입이 `ResponseEntity<ApiResponse<T>>`인가 | Controller 반환 타입 | `docs/ops/package-structure.md` > §1.1 도메인 구조 |
+| L1 | 패키지 위치가 기준과 같은가 (`com.r1nn.contextq.{domain}/controller, service, repository, domain, dto, client`) | 변경 파일 경로 | `docs/ops/package-structure.md` > §1.2 도메인별 레이어 구조 |
+| L2 | Controller 반환 타입이 `ResponseEntity<ApiResponse<T>>`인가 | Controller 반환 타입 | `docs/ops/code-convention.md` > §4 |
 | L3 | Service: public 메서드에만 `@Transactional`, 조회는 `readOnly=true`인가 | 서비스 어노테이션 | `docs/ops/code-convention.md` > §4 |
 | L4 | Domain: `@Setter/@Builder` 없음, protected 기본 생성자, 정적 팩토리인가 | 엔티티 클래스 | `docs/ops/code-convention.md` > §4 |
 | L5 | DTO: `record` 사용, 응답용 `static from(entity)` 패턴인가 | DTO 클래스 | `docs/ops/code-convention.md` > §4 |
-| L6 | 외부 HTTP 호출이 `client/` 패키지에서 트랜잭션 밖에서 실행되는가 | 클라이언트 호출 위치 | `docs/ops/package-structure.md` > §1.3 도메인 간 의존 규칙 |
+| L6 | 외부 HTTP 호출이 `infra/` 패키지에서 트랜잭션 밖에서 실행되는가 | 클라이언트 호출 위치 | `docs/ops/package-structure.md` > §1.1 루트 패키지 |
 | L7 | 전역 설정이 `@ConfigurationProperties`를 사용하는가 (`@Value` 금지) | 설정 클래스 | `docs/ops/code-convention.md` > §4 |
+| L8 | 도메인 간 직접 참조가 없는가 | `grep -rn "import com.r1nn.contextq\.<다른도메인>"` 소스 검색 | `docs/ops/package-structure.md` > §1.3 도메인 간 의존 규칙 |
+| L9 | 신규 도메인 추가 시 4단계 절차를 준수했는가 | `docs/ops/package-structure.md` §1.5 항목 대조 | `docs/ops/package-structure.md` > §1.5 신규 도메인 추가 절차 |
 
 ---
 
