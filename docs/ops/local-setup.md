@@ -55,6 +55,7 @@ cp .env.example .env
 | `OPENAI_API_KEY` | OpenAI API 키 | platform.openai.com |
 | `POSTGRES_PASSWORD` | PostgreSQL 비밀번호 | `openssl rand -hex 16` |
 | `JWT_SECRET` | JWT 서명 키 | `openssl rand -hex 32` |
+| `INTERNAL_TOKEN` | 서비스 간 내부 인증 토큰 | `openssl rand -hex 32` |
 | `VITE_API_BASE_URL` | 프론트엔드 API 엔드포인트 | 로컬: `http://localhost:8080` |
 
 ---
