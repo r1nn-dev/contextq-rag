@@ -156,12 +156,12 @@
 
 | # | 확인 | 방법 | 근거 |
 | --- | --- | --- | --- |
-| L1 | 패키지 위치가 기준과 같은가 (`com.r1nn.contextq.{domain}/controller, service, repository, domain, dto, client`) | 변경 파일 경로 | `AGENTS.md` > §8 Backend package layout |
-| L2 | Controller 반환 타입이 `ResponseEntity<ApiResponse<T>>`인가 | Controller 반환 타입 | `AGENTS.md` > §8 Backend package layout |
+| L1 | 패키지 위치가 기준과 같은가 (`com.r1nn.contextq.{domain}/controller, service, repository, domain, dto, client`) | 변경 파일 경로 | `docs/ops/package-structure.md` > §1.2 레이어별 역할 |
+| L2 | Controller 반환 타입이 `ResponseEntity<ApiResponse<T>>`인가 | Controller 반환 타입 | `docs/ops/package-structure.md` > §1.1 도메인 구조 |
 | L3 | Service: public 메서드에만 `@Transactional`, 조회는 `readOnly=true`인가 | 서비스 어노테이션 | `docs/ops/code-convention.md` > §4 |
 | L4 | Domain: `@Setter/@Builder` 없음, protected 기본 생성자, 정적 팩토리인가 | 엔티티 클래스 | `docs/ops/code-convention.md` > §4 |
 | L5 | DTO: `record` 사용, 응답용 `static from(entity)` 패턴인가 | DTO 클래스 | `docs/ops/code-convention.md` > §4 |
-| L6 | 외부 HTTP 호출이 `client/` 패키지에서 트랜잭션 밖에서 실행되는가 | 클라이언트 호출 위치 | `AGENTS.md` > §8 Backend package layout |
+| L6 | 외부 HTTP 호출이 `client/` 패키지에서 트랜잭션 밖에서 실행되는가 | 클라이언트 호출 위치 | `docs/ops/package-structure.md` > §1.3 도메인 간 의존 규칙 |
 | L7 | 전역 설정이 `@ConfigurationProperties`를 사용하는가 (`@Value` 금지) | 설정 클래스 | `docs/ops/code-convention.md` > §4 |
 
 ---
@@ -170,10 +170,10 @@
 
 | # | 확인 | 방법 | 근거 |
 | --- | --- | --- | --- |
-| M1 | 모듈 위치가 `ai-server/src/<module>/`인가 (`ai-server/ai_server/` 아님) | 변경 파일 경로 | `AGENTS.md` > §8 AI Server package layout |
-| M2 | import 경로가 `from src.<module> import ...`인가 (`from ai_server...` 아님) | import 문 | `AGENTS.md` > §8 AI Server package layout |
+| M1 | 모듈 위치가 `ai-server/src/<module>/`인가 (`ai-server/ai_server/` 아님) | 변경 파일 경로 | `docs/ops/package-structure.md` > §2 ai-server 모듈 구조 |
+| M2 | import 경로가 `from src.<module> import ...`인가 (`from ai_server...` 아님) | import 문 | `docs/ops/package-structure.md` > §2.2 임포트 규칙 |
 | M3 | 환경 변수 접근이 `src/config/settings.py` BaseSettings를 통해서만 이루어지는가 | `grep -rn "os.environ\|os.getenv"` | `ai-server/pyproject.toml` > pydantic-settings |
-| M4 | mypy 검사 대상이 `src`인가 (`ai_server` 아님) | `uv run mypy src` 명령 | `AGENTS.md` > §7 Build & test commands |
+| M4 | mypy 검사 대상이 `src`인가 (`ai_server` 아님) | `uv run mypy src` 명령 | `docs/ops/package-structure.md` > §2.3 명령어 |
 | M5 | 프롬프트 문자열이 `configs/prompts/` Jinja2 템플릿으로 외부화됐는가 | `grep -rn` 소스 검색 | `CONTRIBUTING.md` > §9.5 LLMOps |
 
 ---
