@@ -13,9 +13,10 @@ from collections.abc import Sequence
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from src.config.ingest_config import load_embedding_config
+from src.config.ingest_config import load_embedding_config, load_smoke_config
 from src.config.settings import Settings
 from src.ingest.embedder import OpenAIEmbeddingClient
+from src.ingest.permalinks import PermalinkChecker
 from src.ingest.pipeline import (
     IngestDependencies,
     IngestFailedError,
@@ -85,6 +86,8 @@ def main(argv: Sequence[str] | None = None, settings: Settings | None = None) ->
                 embedder_factory=lambda: OpenAIEmbeddingClient(settings.openai_api_key, embedding),
                 store=ChromaVectorStore(settings.chroma_data_dir),
                 price_per_1m_tokens_usd=embedding.price_per_1m_tokens_usd,
+                permalink_checker=PermalinkChecker.create(settings.github_token),
+                smoke=load_smoke_config(),
             )
             summary = run_ingest(session_factory, args.source, options, deps)
             print(
