@@ -4,8 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { AssistantMessage, type SnapshotInfo } from '@/components/chat/AssistantMessage'
 import { Composer } from '@/components/chat/Composer'
+import { GuestLimitModal } from '@/components/chat/GuestLimitModal'
 import { SourcePanel, type PanelSource } from '@/components/chat/SourcePanel'
+import { StartPanel } from '@/components/chat/StartPanel'
 import { Icon } from '@/components/common/Icon'
+import { useAuth } from '@/hooks/useAuth'
 import { useGuestUsage } from '@/hooks/useGuestUsage'
 import { findSource, frameworkName, useSources, versionTone } from '@/hooks/useSources'
 import { useSseQuery, type Turn } from '@/hooks/useSseQuery'
@@ -31,6 +34,9 @@ export function ChatPage(): JSX.Element {
   const location = useLocation()
   const { status, sources, errorMessage, reload } = useSources()
   const guest = useGuestUsage()
+  const { user } = useAuth()
+  const isGuest = user === null
+  const [limitCode, setLimitCode] = useState<string | null>(null)
   const [pickedKey, setPickedKey] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [focusKey, setFocusKey] = useState<string | null>(null)
@@ -38,9 +44,12 @@ export function ChatPage(): JSX.Element {
   const listRef = useRef<HTMLDivElement>(null)
 
   const { turns, busy, ask, stop, reset } = useSseQuery({
-    onMeta: () => guest.recordQuestion(),
+    onMeta: () => {
+      if (isGuest) guest.recordQuestion()
+    },
     onPreStreamError: (err) => {
       if (err.code === 'GUEST_QUOTA_EXCEEDED') guest.markExhausted()
+      if (err.code === 'GUEST_QUOTA_EXCEEDED' || err.code === 'GUEST_SESSION_LIMIT') setLimitCode(err.code)
     },
   })
 
@@ -63,7 +72,9 @@ export function ChatPage(): JSX.Element {
   const source = findSource(sources, sourceKey)
   const tone = versionTone(sources, sourceKey)
   const framework = frameworkName(sources) ?? '공식 문서'
-  const exhausted = guest.used >= guest.limit
+  // the tab-local count is approximate; the input stays enabled so the server's
+  // GUEST_QUOTA_EXCEEDED response decides and opens the login modal
+  const exhausted = isGuest && guest.used >= guest.limit
 
   const panelTurn = useMemo(() => {
     const focused = turns.find((t) => t.key === focusKey)
@@ -118,7 +129,7 @@ export function ChatPage(): JSX.Element {
   const last = turns[turns.length - 1]
   const lastNoContext = last?.done?.status === 'NO_CONTEXT'
   const placeholder = exhausted
-    ? `게스트 질문 ${guest.limit}회를 모두 사용했습니다. 로그인 후 계속 이용하세요.`
+    ? `게스트 질문 ${guest.limit}회를 모두 사용했습니다. 로그인하면 계속 질문할 수 있습니다.`
     : turns.length === 0
       ? `${framework}에 대해 무엇이든 질문하세요… (Ctrl+Enter로 전송)`
       : lastNoContext
@@ -129,12 +140,18 @@ export function ChatPage(): JSX.Element {
   return (
     <div className="chat-layout">
       <section className="chat-main">
-        <div className="banner banner-warn">
-          <Icon name="info" size={15} />
-          게스트 모드 · 질문 {guest.limit}회 중 {guest.used}회 사용 · 비교 모드 비활성
-        </div>
+        {isGuest && (
+          <div className="banner banner-warn">
+            <Icon name="info" size={15} />
+            게스트 모드 · 질문 {guest.limit}회 중 {guest.used}회 사용 · 비교 모드 비활성
+          </div>
+        )}
 
-        {turns.length === 0 ? (
+        {turns.length === 0 && !isGuest ? (
+          <header className="page-header">
+            <h1>새 대화</h1>
+          </header>
+        ) : turns.length === 0 ? (
           <div className="chat-toolbar">
             <span className="faint">버전</span>
             {sources.map((s) => (
@@ -177,7 +194,15 @@ export function ChatPage(): JSX.Element {
         )}
 
         <div className="chat-scroll" ref={listRef}>
-          {turns.length === 0 ? (
+          {turns.length === 0 && !isGuest ? (
+            <StartPanel
+              sources={sources}
+              sourceKey={sourceKey}
+              onSource={setPickedKey}
+              mode="SINGLE"
+              compareHint="비교 모드: 두 버전 답변을 나란히 확인"
+            />
+          ) : turns.length === 0 ? (
             <div className="center-fill">
               <div className="emoji">💬</div>
               <h2>{framework}에 대해 질문해보세요</h2>
@@ -217,7 +242,7 @@ export function ChatPage(): JSX.Element {
         <Composer
           placeholder={placeholder}
           hint={source !== null ? `${source.versionLabel} — ${source.displayName} 공식 문서 검색 · Ctrl+Enter로 전송` : null}
-          disabled={busy || exhausted}
+          disabled={busy}
           value={draft}
           onChange={setDraft}
           onSubmit={submit}
@@ -225,6 +250,8 @@ export function ChatPage(): JSX.Element {
           streaming={busy}
         />
       </section>
+
+      {limitCode !== null && <GuestLimitModal code={limitCode} onClose={() => setLimitCode(null)} />}
 
       {showPanel && (
         <SourcePanel

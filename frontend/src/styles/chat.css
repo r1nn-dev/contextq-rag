@@ -396,3 +396,33 @@
     display: none;
   }
 }
+
+/* start panel (screenshot 06) */
+.start-panel {
+  gap: 6px;
+}
+.start-group {
+  margin-top: 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.start-label {
+  font-size: 13px;
+  color: var(--text-2);
+}
+.start-options {
+  display: flex;
+  gap: 10px;
+}
+.chip-lg {
+  padding: 9px 24px;
+  border-radius: 100px;
+  font-size: 15px;
+}
+.start-note {
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: pre;
+}

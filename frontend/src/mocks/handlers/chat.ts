@@ -8,6 +8,7 @@ import { QUESTION_MAX_LENGTH } from '@/types/chat'
 import { answerFixture, findSource, newRequestId, toTokens } from '../data'
 import { fail, route } from '../router'
 import { GUEST_LIMIT, mockState } from '../state'
+import { authenticate } from './auth'
 import { sseResponse, type MockFrame } from '../stream'
 
 const TOKEN_WAIT_MS = 25
@@ -20,20 +21,23 @@ route('POST', '/chat/stream', (req) => {
       details: [{ field: 'question', reason: `질문은 1~${QUESTION_MAX_LENGTH}자로 입력해주세요.` }],
     })
   }
-  if (body.mode === 'COMPARE') {
+  const auth = authenticate(req)
+  if (auth.kind === 'error') return auth.response
+  const isGuest = auth.kind === 'guest'
+  if (body.mode === 'COMPARE' && isGuest) {
     return fail('GUEST_MODE_NOT_ALLOWED', '비교 모드는 로그인 후 이용할 수 있습니다.', 403)
   }
   const source = findSource(typeof body.sourceKey === 'string' ? body.sourceKey : null)
   if (source === null) {
     return fail('SOURCE_NOT_FOUND', '존재하지 않는 버전입니다.', 404)
   }
-  if (mockState.guestUsed >= GUEST_LIMIT) {
+  if (isGuest && mockState.guestUsed >= GUEST_LIMIT) {
     return fail('GUEST_QUOTA_EXCEEDED', '게스트 질문 5회를 모두 사용했습니다.', 429)
   }
   if (question.includes('실패')) {
     return fail('AI_UNAVAILABLE', 'AI 서버에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.', 503)
   }
-  mockState.guestUsed += 1
+  if (isGuest) mockState.guestUsed += 1
 
   const requestId = newRequestId()
   const snapshot = {

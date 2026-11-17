@@ -198,3 +198,14 @@
 .full-center h1 {
   font-size: 22px;
 }
+
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+}
+.icon-btn:hover {
+  background: var(--surface);
+}
