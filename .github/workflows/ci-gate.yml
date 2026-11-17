@@ -47,6 +47,11 @@ jobs:
         working-directory: ai-server
         run: uv run ruff format --check .
 
+      - name: mypy 타입 검사
+        if: steps.check.outputs.exists == 'true'
+        working-directory: ai-server
+        run: uv run mypy src
+
       - name: pytest (단위 테스트, llm·eval 제외)
         if: steps.check.outputs.exists == 'true'
         working-directory: ai-server
