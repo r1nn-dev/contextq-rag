@@ -65,7 +65,7 @@
 
 | # | 확인 | 방법 | 근거 |
 | --- | --- | --- | --- |
-| D1 | 엔티티·제약이 ERD와 같고 Flyway 마이그레이션(`V{n}__{desc}.sql`)이 있는가 | 엔티티 ↔ ERD ↔ `V*.sql` | `docs/specs/db-design.md` |
+| D1 | 엔티티·제약이 ERD와 같고 Flyway 마이그레이션(`V{n}__{desc}.sql`)이 있는가 | 엔티티 ↔ ERD ↔ `V*.sql` | `docs/architecture/db-design.md` |
 | D2 | `ddl-auto: validate` 환경에서 DDL을 `init.sql`에 직접 쓰지 않았는가 | `src/main/resources/` 확인 | `AGENTS.md` > §8 Architecture overview |
 | D3 | `@Transactional` 위치가 올바른가 (서비스 public 메서드, 조회 `readOnly=true`) | 서비스 코드 | `docs/ops/code-convention.md` > §4 |
 | D4 | `open-in-view: false` 환경에서 Lazy 로딩이 발생하지 않는가 | 서비스·컨트롤러 호출 흐름 | `docs/ops/code-convention.md` > §4 |

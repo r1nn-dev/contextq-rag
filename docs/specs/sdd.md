@@ -37,16 +37,16 @@
 
 ```
 event: meta
-data: {"sources": [{"heading_path": "...", "permalink": "...", "chunk_id": "...", "similarity": 0.87}], "source_key": "langchain_v03"}
+data: {"event": "meta", "requestId": "...", "conversationId": 42, "messageId": 305, "sourceKey": "langchain_v03", "noContext": false, "sources": [{"rank": 1, "headingPath": "...", "permalink": "...", "siteUrl": "...", "similarity": 0.87}]}
 
 event: token
-data: {"text": "LangChain v0.3에서 Memory는 ..."}
+data: {"event": "token", "t": "LangChain v0.3에서 Memory는 ..."}
 
 event: token
-data: {"text": " ConversationBufferMemory를 사용합니다."}
+data: {"event": "token", "t": " ConversationBufferMemory를 사용합니다."}
 
 event: done
-data: {"status": "OK", "finish_reason": "stop"}
+data: {"event": "done", "status": "COMPLETED", "finishReason": "stop", "invalidCitations": []}
 ```
 
 **예외:**
@@ -106,10 +106,10 @@ data: {"status": "OK", "finish_reason": "stop"}
 
 ```
 event: meta
-data: {"noContext": true, "sources": []}
+data: {"event": "meta", "requestId": "...", "conversationId": 42, "messageId": 306, "noContext": true, "sources": []}
 
 event: done
-data: {"status": "NO_CONTEXT"}
+data: {"event": "done", "status": "NO_CONTEXT", "statusReason": "LOW_SIMILARITY"}
 ```
 
 **임계값 τ 결정:**
@@ -156,7 +156,7 @@ data: {"status": "NO_CONTEXT"}
 
 1. 사용자가 "비교 모드"를 활성화하고 질문을 입력한다.
 2. ai-server가 v0.3·v1.x 컬렉션에 **동시에** 검색 요청을 보낸다 (`asyncio.gather`).
-3. 두 컨텍스트를 하나의 OpenAI **Structured Outputs** 요청으로 비스트리밍 호출한다. JSON 스키마로 `answerA`·`answerB` 필드를 강제한다.
+3. 두 컨텍스트를 하나의 OpenAI **Structured Outputs** 요청으로 비스트리밍 호출한다. JSON 스키마로 `version_a`·`version_b`·`changes` 구조(정책서 §5.6)를 강제한다.
 4. 결과를 검증 후 `meta → done` 이벤트 2회로 반환한다. **token 이벤트 없음.**
 5. 프론트엔드는 `done.compareResult`를 받아 좌/우 패널로 렌더링한다.
 
@@ -164,14 +164,18 @@ data: {"status": "NO_CONTEXT"}
 
 ```
 event: meta
-data: {"mode": "COMPARE", "sources": {"langchain_v03": [...], "langchain_v1x": [...]}}
+data: {"event": "meta", "requestId": "...", "conversationId": 42, "messageId": 307, "sourceKeyA": "langchain_v03", "sourceKeyB": "langchain_v1x", "noContext": false, "sources": [{"rank": "A1", ...}, {"rank": "B1", ...}]}
 
 event: done
 data: {
-  "status": "OK",
+  "event": "done",
+  "status": "COMPLETED",
   "compareResult": {
-    "answerA": "v0.3에서는 AgentExecutor.from_agent_and_tools(...)를 사용합니다.",
-    "answerB": "v1.x에서는 create_react_agent(llm, tools, prompt)를 사용합니다."
+    "version_a": { "summary": "v0.3은 AgentExecutor로 에이전트를 실행한다.", "citations": ["A1"], "no_evidence": false },
+    "version_b": { "summary": "v1.x는 create_agent로 에이전트를 만든다.", "citations": ["B1"], "no_evidence": false },
+    "changes": [
+      { "aspect": "에이전트 생성 함수", "a": "AgentExecutor", "b": "create_agent", "citations_a": ["A1"], "citations_b": ["B1"] }
+    ]
   }
 }
 ```
@@ -180,8 +184,8 @@ data: {
 
 **인수 기준 (RAG-09):**
 - [ ] `meta` 이벤트가 먼저 도달하고 `done` 이벤트가 뒤따른다. token 이벤트는 발생하지 않는다.
-- [ ] `done.compareResult.answerA`와 `answerB` 모두 비어 있지 않다.
-- [ ] 한 쪽이 NO_CONTEXT 범위이면 해당 answer 필드에 "관련 내용 없음" 메시지가 포함된다.
+- [ ] `done.compareResult.version_a.summary`와 `version_b.summary`가 모두 비어 있지 않다.
+- [ ] 한쪽 top-1 < τ이면 그 측 `no_evidence`가 `true`이고 `changes`는 비어 있다 (정책서 §5.6).
 - [ ] OpenAI Structured Outputs JSON 스키마 검증을 통과한다.
 
 ---
@@ -367,7 +371,7 @@ Q-oos 질문셋(버전 범위 밖 주제 10문항)으로 FPR(정상 질문을 NO
 
 **Q5. 비교 모드에서 왜 SSE 스트리밍 대신 Structured Outputs를 사용하는가?**
 
-두 버전의 답변을 각각 스트리밍하면 클라이언트가 채널별 토큰을 인터리빙해야 하고, 한 채널이 먼저 끝났을 때 UI 처리가 복잡해진다. Structured Outputs는 JSON 스키마로 `answerA`·`answerB` 필드를 보장하므로 파싱 없이 바로 렌더링할 수 있고, 형식 오류 없이 두 답변이 함께 완성되는 원자성을 얻는다. 비교 모드는 사용자가 버전 차이를 대조하는 것이 목적이므로 TTFT보다 답변 일관성이 더 중요하다.
+두 버전의 답변을 각각 스트리밍하면 클라이언트가 채널별 토큰을 인터리빙해야 하고, 한 채널이 먼저 끝났을 때 UI 처리가 복잡해진다. Structured Outputs는 JSON 스키마로 `version_a`·`version_b`·`changes` 구조를 보장하므로 파싱 없이 바로 렌더링할 수 있고, 형식 오류 없이 두 답변이 함께 완성되는 원자성을 얻는다. 비교 모드는 사용자가 버전 차이를 대조하는 것이 목적이므로 TTFT보다 답변 일관성이 더 중요하다.
 
 **Q6. 멀티턴 질의 재작성이 왜 필요한가? 그냥 대화 이력을 붙이면 안 되는가?**
 

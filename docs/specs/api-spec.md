@@ -963,7 +963,7 @@ data: {"event":"done", "status":"COMPLETED", ...}
 ## 6. 내부 API (ai-server · FastAPI)
 
 > **서비스**: ai-server (Python FastAPI + uvicorn)\
-**Base URL**: `http://ai-server:8001` (Docker Compose 내부망 전용)\
+**Base URL**: `http://ai-server:8000` (Docker Compose 내부망 전용)\
 **노출 범위**: 외부 인터넷 미노출. nginx에서 `/internal/**` 차단\
 **인증**: 내부망 신뢰. 별도 토큰 없음\
 **FastAPI 문서**: `/docs` — local·staging 프로필만 노출 (prod 비노출, 9.1 참고)

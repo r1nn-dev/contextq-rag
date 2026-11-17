@@ -23,12 +23,12 @@ ContextQ-RAG는 두 가지 성격이 다른 책임을 갖는다.
 **옵션 C — Spring Boot + FastAPI 이중 서버 구조**를 채택한다.
 
 - Spring Boot 4.1.2 (Java 21): 인증·세션·대화 이력·쿼터·REST API
-- FastAPI (Python 3.11): 임베딩·Chroma 검색·LLM 호출·SSE 스트리밍
+- FastAPI (Python 3.12): 임베딩·Chroma 검색·LLM 호출·SSE 스트리밍
 
 서버 간 통신은 HTTP REST (`INTERNAL_TOKEN` 헤더 인증). 외부에는 Spring Boot만 노출.
 
 ```
-Frontend → Spring Boot (8080) → FastAPI (8001)
+Frontend → Spring Boot (8080) → FastAPI (8000)
                                ↕
                            Chroma (embedded)
                            PostgreSQL (5432)

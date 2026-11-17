@@ -38,7 +38,7 @@ proposal, and record the finding in a structured troubleshooting entry.
    - **ADR conflict check**: before proposing, verify that the fix does not contradict any ADR
      in `docs/adr/`. If it does, report the conflict and stop — do not proceed without approval.
    - If the fix requires a change to `docs/specs/interfaces.md`, `docs/specs/api-spec.md`, or
-     `docs/specs/db-design.md`, stop and propose a prerequisite document Issue first.
+     `docs/architecture/db-design.md`, stop and propose a prerequisite document Issue first.
 6. Write the fix commit message following `CONTRIBUTING.md` commit message conventions.
    Include the root cause in the subject line (e.g., `fix(ai-server): resolve mypy error — missing return type on ...`).
 7. Apply fixes through stage 30 Step B — one commit at a time. Do not batch multiple fixes.

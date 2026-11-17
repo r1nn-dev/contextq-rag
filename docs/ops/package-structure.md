@@ -1,6 +1,6 @@
 # 패키지 구조 기준
 
-> **최종 수정일:** 2026-11-16
+> **최종 수정일:** 2026-11-17
 
 ---
 
@@ -14,10 +14,12 @@ backend/contextq/src/main/java/com/r1nn/contextq/
 ├── chat/          # 질의 처리·이력 (Controller, Service, Repository)
 ├── domain/        # JPA Base 엔티티 공통 (createdAt, updatedAt)
 ├── infra/         # DB 설정, WebClient (ai-server 연동)
-└── common/        # 예외 처리, 응답 DTO, 유틸리티
+├── common/        # 예외 처리, 응답 DTO, 유틸리티
+└── global/
+    └── config/    # 앱 전역 설정 (Spring Security, @ConfigurationProperties)
 ```
 
-> 현재 `ContextqApplication.java`만 존재. 위 구조는 기능 구현 이슈에서 순차적으로 추가된다.
+> 현재 `ContextqApplication.java`와 `global/config/SecurityConfig.java`가 존재한다. 나머지 구조는 기능 구현 이슈에서 순차적으로 추가된다.
 
 ### 1.2 도메인별 레이어 구조
 
@@ -47,11 +49,12 @@ backend/contextq/src/main/java/com/r1nn/contextq/
 | `domain` | 여러 도메인에서 공통으로 사용하는 JPA Base 엔티티 |
 | `infra` | DataSource 설정, Flyway, WebClient (ai-server 연동) |
 | `common` | 글로벌 예외 핸들러, 표준 응답 래퍼 (`ApiResponse<T>`), 유틸리티 |
+| `global` | `config/`: 도메인에 속하지 않는 앱 전역 설정 — Spring Security 필터 체인, `@ConfigurationProperties` 바인딩 |
 
 ### 1.5 신규 도메인 추가 절차
 
 1. `docs/ops/package-structure.md` §1.4 테이블에 역할 추가
-2. `docs/specs/db-design.md`에 관련 ERD 추가
+2. `docs/architecture/db-design.md`에 관련 ERD 추가
 3. `code-convention.md §5` 스코프 목록 업데이트 (신규 scope 필요 시)
 4. `docs/ai/review-checklist.md §L` 업데이트
 

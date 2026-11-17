@@ -31,7 +31,7 @@ Report only. Do not write code, create files, or change branches in this stage.
    | Change area | Documents to read |
    | --- | --- |
    | RAG / ai-server (retrieval, ingest, rag) | `docs/specs/rag-pipeline.md`, `docs/specs/interfaces.md`, ADR-002–009 |
-   | Backend / Java (backend, api, auth) | `docs/specs/api-spec.md`, `docs/specs/db-design.md`, `docs/ops/code-convention.md` |
+   | Backend / Java (backend, api, auth) | `docs/specs/api-spec.md`, `docs/architecture/db-design.md`, `docs/ops/code-convention.md` |
    | Config / prompt / eval (configs, eval) | `CONTRIBUTING.md` §9.5 LLMOps, `docs/experiments/evaluation.md` |
    | Infra / Docker (infra, ci, deps) | `docs/ops/deployment.md`, `docs/ops/env-reference.md` |
    | Frontend (frontend) | `frontend/AGENTS.md` (if present), `docs/specs/api-spec.md` |

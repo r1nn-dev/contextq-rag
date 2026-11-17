@@ -45,10 +45,10 @@ Client
 [6. LLM 스트리밍]  GPT-4o-mini, temperature=0
   │
   ▼
-SSE Stream
-  event: meta   → {"sources": [...], "source_key": "langchain_v03"}
-  event: token  → {"text": "..."} (반복)
-  event: done   → {"status": "OK", "finish_reason": "stop"}
+SSE Stream  (계약: contracts/sse-events.schema.json · API 명세 부록 B)
+  event: meta   → {"event": "meta", "requestId": "...", "sourceKey": "langchain_v03", "noContext": false, "sources": [...]}
+  event: token  → {"event": "token", "t": "..."} (반복)
+  event: done   → {"event": "done", "status": "COMPLETED", "finishReason": "stop", ...}
 ```
 
 ### 2.2 버전 비교 모드 흐름
@@ -57,7 +57,7 @@ COMPARE 모드는 SSE 스트리밍이 **아니다**. OpenAI Structured Outputs �
 
 ```
 Client
-  │  POST /api/v1/chat/compare  (question, source_key_a, source_key_b)
+  │  POST /internal/v1/chat/stream  (mode=COMPARE, sourceKeyA, sourceKeyB, question)
   ▼
 [FastAPI Router]
   │
@@ -69,12 +69,12 @@ Client
   ▼
 [Structured Outputs 비스트리밍 호출]
   OpenAI gpt-4o-mini, response_format=CompareResult
-  (두 컨텍스트 + 질문 → answerA, answerB 동시 생성)
+  (두 컨텍스트 + 질문 → version_a · version_b · changes 생성, 정책서 §5.6)
   │
   ▼
 SSE Stream (token 이벤트 없음)
-  event: meta   → {"mode": "COMPARE", "sources": {"langchain_v03": [...], "langchain_v1x": [...]}}
-  event: done   → {"status": "OK", "compareResult": {"answerA": "...", "answerB": "..."}}
+  event: meta   → {"event": "meta", "sourceKeyA": "langchain_v03", "sourceKeyB": "langchain_v1x", "sources": [{"rank": "A1", ...}, {"rank": "B1", ...}], ...}
+  event: done   → {"event": "done", "status": "COMPLETED", "compareResult": {"version_a": {...}, "version_b": {...}, "changes": [...]}}
 ```
 
 ---
@@ -246,19 +246,23 @@ messages.append({"role": "user", "content": current_question})
 
 ```python
 # 1. meta 이벤트 — LLM 호출 전에 먼저 전송
+# 필드 표기는 계약(contracts/sse-events.schema.json)을 따른다 — camelCase
 yield SseEvent(event="meta", data={
-    "sources": [asdict(doc) for doc in normalized_docs],
-    "source_key": source_key,
+    "requestId": request_id,
+    "sourceKey": source_key,
+    "noContext": False,
+    # rank·headingPath·permalink·siteUrl·similarity
+    "sources": [to_source_payload(rank, doc) for rank, doc in enumerate(normalized_docs, 1)],
 })
 
 # 2. token 이벤트 — LLM 스트림에서 수신 즉시 전송
 async for chunk in llm_stream:
     text = chunk.choices[0].delta.content or ""
     if text:
-        yield SseEvent(event="token", data={"text": text})
+        yield SseEvent(event="token", data={"t": text})
 
 # 3. done 이벤트
-yield SseEvent(event="done", data={"status": "OK", "finish_reason": "stop"})
+yield SseEvent(event="done", data={"status": "COMPLETED", "finishReason": "stop"})
 ```
 
 **클라이언트 연결 끊김 처리:**
@@ -277,15 +281,17 @@ event: meta
 data: {"noContext": true, "sources": []}
 
 event: done
-data: {"status": "NO_CONTEXT"}
+data: {"status": "NO_CONTEXT", "statusReason": "LOW_SIMILARITY"}
 ```
+
+> 예시는 핵심 필드만 적었다. `requestId` 등 필수 필드는 계약(`contracts/sse-events.schema.json`)을 따른다.
 
 **구현:**
 
 ```python
 async def _yield_no_context() -> AsyncIterator[SseEvent]:
     yield SseEvent(event="meta", data={"noContext": True, "sources": []})
-    yield SseEvent(event="done", data={"status": "NO_CONTEXT"})
+    yield SseEvent(event="done", data={"status": "NO_CONTEXT", "statusReason": "LOW_SIMILARITY"})
 ```
 
 > `max_similarity`·`threshold`는 서버 측 로그(`no_context_triggered` 이벤트)에만 기록한다. 클라이언트에 노출하지 않는다.
@@ -299,9 +305,25 @@ COMPARE 모드는 asyncio queue + SSE 인터리빙 방식을 **사용하지 않�
 ```python
 from pydantic import BaseModel
 
+class CompareSide(BaseModel):
+    summary: str
+    citations: list[str]   # A측 A1…Ak, B측 B1…Bk
+    no_evidence: bool      # 해당 측 top-1 < τ
+
+
+class CompareChange(BaseModel):
+    aspect: str
+    a: str
+    b: str
+    citations_a: list[str]
+    citations_b: list[str]
+
+
 class CompareResult(BaseModel):
-    answerA: str   # source_key_a에 대한 답변
-    answerB: str   # source_key_b에 대한 답변
+    """정책서 §5.6 비교 출력 JSON. 내부 키는 snake_case (계약 compareResult와 동일)."""
+    version_a: CompareSide
+    version_b: CompareSide
+    changes: list[CompareChange]
 
 
 async def compare_pipeline(
@@ -318,11 +340,13 @@ async def compare_pipeline(
 
     # 2. meta 이벤트 먼저 전송
     yield SseEvent(event="meta", data={
-        "mode": "COMPARE",
-        "sources": {
-            source_key_a: [asdict(c) for c in chunks_a],
-            source_key_b: [asdict(c) for c in chunks_b],
-        }
+        "requestId": request_id,
+        "sourceKeyA": source_key_a,
+        "sourceKeyB": source_key_b,
+        "noContext": False,
+        # 출처 rank는 A측 A1…, B측 B1… (정책서 §5.6 인용 번호 체계)
+        "sources": [to_source_payload(f"A{i}", c) for i, c in enumerate(chunks_a, 1)]
+        + [to_source_payload(f"B{i}", c) for i, c in enumerate(chunks_b, 1)],
     })
 
     # 3. Structured Outputs 비스트리밍 호출 (stream=False)
@@ -336,21 +360,24 @@ async def compare_pipeline(
     )
 
     result: CompareResult = response.choices[0].message.parsed
+    # 후처리 검증: 없는 인용 번호 제거, A·B 인용이 모두 없는 changes 항목 폐기 (정책서 §5.6)
 
     # 4. done 이벤트 1회 반환
     yield SseEvent(event="done", data={
-        "status": "OK",
-        "compareResult": {
-            "answerA": result.answerA,
-            "answerB": result.answerB,
-        }
+        "status": "COMPLETED",
+        "compareResult": result.model_dump(),
     })
 ```
 
-**에러 처리:** Structured Outputs 파싱 실패(`ValidationError`) 또는 OpenAI 호출 실패 시 `done` 이벤트를 `status: "ERROR"`로 반환한다.
+**에러 처리:** Structured Outputs 파싱 실패(`ValidationError`)는 1회 재시도하고, 그래도 실패하면 `error` 이벤트(`COMPARE_PARSE_ERROR`)로 종결한다(정책서 §5.6·§9.2). OpenAI 호출 실패는 `LLM_ERROR`다. `done`에 오류 상태를 싣지 않는다.
 
 ```python
-yield SseEvent(event="done", data={"status": "ERROR", "code": "STRUCTURED_OUTPUT_FAILED"})
+yield SseEvent(event="error", data={
+    "code": "COMPARE_PARSE_ERROR",
+    "message": "비교 결과를 만들지 못했습니다. 다시 질문해주세요.",
+    "requestId": request_id,
+    "partial": False,
+})
 ```
 
 ---
