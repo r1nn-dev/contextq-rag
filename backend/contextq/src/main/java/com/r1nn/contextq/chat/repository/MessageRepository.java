@@ -41,4 +41,18 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
           + " and m.status in :statuses and m.updatedAt < :threshold order by m.id")
   List<Long> findStuckAnswerIds(
       @Param("statuses") Collection<MessageStatus> statuses, @Param("threshold") Instant threshold);
+
+  /**
+   * Locks the user row so the daily-quota check and the question insert of one user are serialized
+   * (policy §8.1). A new conversation has no conversation row to lock (INV-11 lock does not help).
+   */
+  @Query(value = "SELECT id FROM users WHERE id = :userId FOR UPDATE", nativeQuery = true)
+  Long lockUserForQuota(@Param("userId") Long userId);
+
+  /** Sum of USER {@code quota_cost} since {@code since} (idx_msg_user_quota, policy §8.1). */
+  @Query(
+      "select coalesce(sum(m.quotaCost), 0) from Message m where m.userId = :userId"
+          + " and m.role = com.r1nn.contextq.chat.domain.MessageRole.USER"
+          + " and m.createdAt >= :since")
+  long sumQuotaCostSince(@Param("userId") Long userId, @Param("since") Instant since);
 }
