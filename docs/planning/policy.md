@@ -83,8 +83,8 @@
 | OpenAI 생성 첫 토큰 | 10초, 재시도 없음 | chat completion 스트림 시작 | 스트림은 재시도 시 중복·비용 발생. `meta` 15초 이내에 실패 확정 |
 | 질의 재작성 호출 | 3초 | 멀티턴 재작성 LLM 호출 | 초과 시 원 질문으로 폴백(실패 아님) |
 | nginx `proxy_read_timeout` | 150초 | nginx가 backend 응답을 기다리는 한도 | 반드시 스트림 최대 시간(120초)보다 커야 함 |
-| STREAMING 고착 판정 | 150초 | 스위퍼가 `FAILED(STALE)`로 전환하는 기준 | 스트림 최대 시간 + 30초. 프로세스 비정상 종료 대비 |
-| 스위퍼 주기 | 60초 | STREAMING 고착 정리 배치 | backend `@Scheduled` |
+| STREAMING·PENDING 고착 판정 | 150초 | 스위퍼가 `FAILED(STALE)`로 전환하는 기준(마지막 갱신 시각 기준) | 스트림 최대 시간 + 30초. 프로세스 비정상 종료 대비. PENDING도 대상: 남으면 그 대화가 INV-11로 영구히 막힘 |
+| 스위퍼 주기 | 60초 | STREAMING·PENDING 고착 정리 배치 | backend `@Scheduled` |
 | 메타 API 캐시 | 60초 | `GET /api/v1/sources` 응답 캐시 | 인덱스 활성화 시 캐시 즉시 무효화 |
 | ai-server 활성 인덱스 포인터 캐시 | 30초 (+ reload 즉시 반영) | ai-server가 활성 run을 재조회하는 주기 | reload 호출 실패 시 안전망 |
 | 인덱스 VALIDATING 제한 시간 | 10분 | 검증 단계 최대 시간 | 초과 시 `FAILED(VALIDATION_TIMEOUT)`, 기존 인덱스 유지 |
@@ -570,7 +570,7 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 | PENDING | STREAMING | `meta` 수신(단일) | — |
 | PENDING | PROCESSING | ai-server 호출 시작(비교) | — |
 | PENDING | NO_CONTEXT | top-1 < τ | `LOW_SIMILARITY` |
-| PENDING | FAILED | 연결 실패·첫 이벤트 타임아웃·5xx·ai-server 스트림 전 오류·클라이언트 취소 | `AI_UNAVAILABLE` · `UPSTREAM_TIMEOUT` · `LLM_ERROR` · `CLIENT_ABORTED` · ai-server 스트림 전 오류 코드(`AI_BUSY`·`INDEX_NOT_ACTIVE` 등, API 명세 §3.1) |
+| PENDING | FAILED | 연결 실패·첫 이벤트 타임아웃·5xx·ai-server 스트림 전 오류·클라이언트 취소·150초 고착 | `AI_UNAVAILABLE` · `UPSTREAM_TIMEOUT` · `LLM_ERROR` · `CLIENT_ABORTED` · `STALE` · `PERSIST_ERROR` · ai-server 스트림 전 오류 코드(`AI_BUSY`·`INDEX_NOT_ACTIVE` 등, API 명세 §3.1) |
 | STREAMING | COMPLETED | `done`, finishReason=stop | — |
 | STREAMING | NO_CONTEXT | sentinel 감지 | `LLM_ABSTAIN` |
 | STREAMING | PARTIAL | 토큰 ≥ 1 상태에서 중단 | `CLIENT_ABORTED` · `UPSTREAM_IDLE_TIMEOUT` · `LLM_ERROR` · `LENGTH` · `MAX_DURATION` · `AI_UNAVAILABLE`(종결 이벤트 없이 연결 끊김) · ai-server `error` 이벤트 코드 |

@@ -1347,7 +1347,7 @@ INSERT
       → FAILED       [종결, AI_UNAVAILABLE 등]
 
 [종결 상태: COMPLETED / PARTIAL / NO_CONTEXT / FAILED → 전이 불가 (INV-12)]
-[스위퍼: STREAMING + updated_at 150초 초과 → FAILED(STALE)]
+[스위퍼: STREAMING·PENDING + updated_at 150초 초과 → FAILED(STALE), 종결 저장 실패분은 FAILED(PERSIST_ERROR)]
 ```
 
 ### C.2 app.refresh\_tokens 상태 전이
