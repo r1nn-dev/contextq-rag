@@ -64,8 +64,8 @@ assert all(document.content[c.span.start:c.span.end] == c.content
 | 케이스 | 조건 | 기대 결과 |
 | --- | --- | --- |
 | 올바른 source_key | `retrieve(query, source_key="langchain_v03", top_k=5)` | 반환 청크 전부 `metadata.source_key = "langchain_v03"` |
-| 미지원 source_key | `source_key="langchain_v2x"` | `VersionNotFoundError` 발생 |
-| 존재하지 않는 컬렉션 | 해당 source_key 컬렉션 미존재 | `VersionNotFoundError` 발생 |
+| 미지원 source_key | `source_key="langchain_v2x"` | `SourceNotFoundError` 발생 |
+| 존재하지 않는 컬렉션 | 해당 source_key 컬렉션 미존재 | `IndexNotActiveError` 발생 |
 | `top_k=0` | 경계값 | `ValueError` 또는 빈 리스트 (interfaces.md 불변식에 따라) |
 
 **불변식 검증**
@@ -87,7 +87,7 @@ assert len(chunks) <= top_k
 | 항목 | 내용 |
 | --- | --- |
 | **목적** | `max_score < τ` 조건에서 LLM 미호출 및 안내 메시지 반환 보장 |
-| **관련** | ADR-007 (τ 결정), protocol.md E1, 정책 및 상태.md |
+| **관련** | ADR-008 (τ 결정), protocol.md E1, `policy.md` |
 
 **검증 케이스**
 
@@ -113,7 +113,7 @@ assert stub_gen.call_count == 0  # LLM 호출 없음
 | 항목 | 내용 |
 | --- | --- |
 | **목적** | 최종 답변에 첨부되는 인용 청크가 실제 검색 결과와 일치하는지 검증 |
-| **관련** | interfaces.md `AnswerResult`, DevDocs-RAG API v1.md `meta` SSE 이벤트 |
+| **관련** | interfaces.md `AnswerResult`, `api-spec.md` `meta` SSE 이벤트 |
 
 **검증 케이스**
 
@@ -128,7 +128,7 @@ assert stub_gen.call_count == 0  # LLM 호출 없음
 | 항목 | 내용 |
 | --- | --- |
 | **목적** | 발급·만료·재사용 금지 로직이 정책대로 동작하는지 검증 |
-| **관련** | 정책 및 상태.md 인증 정책, ADR-xxx (JWT 전략) |
+| **관련** | `policy.md` 인증 정책, §1.2 로그인·토큰 (JWT 전략 ADR 없음) |
 
 **검증 케이스**
 
@@ -145,7 +145,7 @@ assert stub_gen.call_count == 0  # LLM 호출 없음
 | 항목 | 내용 |
 | --- | --- |
 | **목적** | 쿠키 기반 세션이 5회 초과 시 올바르게 차단되는지 검증 |
-| **관련** | 정책 및 상태.md 비로그인 정책, protocol.md E6 S4 |
+| **관련** | `policy.md` 비로그인 정책, protocol.md E6 S4 |
 
 **검증 케이스**
 
@@ -168,7 +168,7 @@ assert stub_gen.call_count == 0  # LLM 호출 없음
 | 항목 | 내용 |
 | --- | --- |
 | **목적** | FastAPI가 10초 이상 응답하지 않을 때 Spring Boot가 올바르게 클라이언트에 에러를 돌려주는지 확인 |
-| **관련** | DevDocs-RAG API v1.md 에러 코드, 정책 및 상태.md |
+| **관련** | `api-spec.md` 에러 코드, `policy.md` |
 
 **시나리오**
 
@@ -182,7 +182,7 @@ assert stub_gen.call_count == 0  # LLM 호출 없음
 | 항목 | 내용 |
 | --- | --- |
 | **목적** | FastAPI가 500 오류를 반환할 때 Spring Boot가 적절한 에러를 클라이언트에 전달하는지 확인 |
-| **관련** | DevDocs-RAG API v1.md |
+| **관련** | `api-spec.md` |
 
 **시나리오**
 
@@ -196,7 +196,7 @@ assert stub_gen.call_count == 0  # LLM 호출 없음
 | 항목 | 내용 |
 | --- | --- |
 | **목적** | SSE 스트리밍 도중 클라이언트가 연결을 끊을 때 FastAPI가 LLM 호출을 조기 종료하는지 확인 |
-| **관련** | DevDocs-RAG API v1.md SSE 스트리밍, ADR-xxx (스트리밍 취소 전략) |
+| **관련** | `api-spec.md` SSE 스트리밍, ADR-003 (SSE), rag-pipeline §3.6 (클라이언트 연결 끊김) |
 
 **시나리오**
 
@@ -210,7 +210,7 @@ assert stub_gen.call_count == 0  # LLM 호출 없음
 | 항목 | 내용 |
 | --- | --- |
 | **목적** | 요청한 source_key 컬렉션이 Chroma에 없을 때 적절한 에러가 반환되는지 확인 |
-| **관련** | interfaces.md `VersionNotFoundError`, DevDocs-RAG API v1.md |
+| **관련** | interfaces.md `IndexNotActiveError`, `api-spec.md` |
 
 **시나리오**: Chroma에 `langchain_v03` 활성 컬렉션 없이 `source_key=langchain_v03` 요청
 
@@ -221,7 +221,7 @@ assert stub_gen.call_count == 0  # LLM 호출 없음
 | 항목 | 내용 |
 | --- | --- |
 | **목적** | 운영 중 인덱스 스냅샷 교체 시 진행 중인 쿼리가 에러 없이 완료되는지 확인 |
-| **관련** | ADR-xxx (Chroma 스냅샷 교체 전략), 정책 및 상태.md |
+| **관련** | ADR-004 (run 컬렉션·활성 포인터), ADR-005 (오프라인 빌드·스냅샷), `policy.md` |
 
 **시나리오**
 
@@ -236,7 +236,7 @@ assert stub_gen.call_count == 0  # LLM 호출 없음
 | 항목 | 내용 |
 | --- | --- |
 | **목적** | `meta → token* → done` 순서와 각 이벤트의 JSON 스키마가 명세와 일치하는지 확인 |
-| **관련** | DevDocs-RAG API v1.md SSE 명세 |
+| **관련** | `api-spec.md` SSE 명세 |
 
 **합격 조건**
 
@@ -253,7 +253,7 @@ assert stub_gen.call_count == 0  # LLM 호출 없음
 | 항목 | 내용 |
 | --- | --- |
 | **목적** | Spring Boot 세션 카운터와 429 차단이 실제 HTTP 흐름에서 동작하는지 확인 |
-| **관련** | 정책 및 상태.md, 8.1-6 단위 테스트와 연동 |
+| **관련** | `policy.md`, 8.1-6 단위 테스트와 연동 |
 
 **시나리오**: 비로그인 쿠키로 `POST /api/v1/chat` 6회 연속 호출
 
@@ -264,7 +264,7 @@ assert stub_gen.call_count == 0  # LLM 호출 없음
 | 항목 | 내용 |
 | --- | --- |
 | **목적** | 회원가입 → 로그인 → 질문 → 로그아웃 → 보호된 엔드포인트 접근 차단 흐름 E2E |
-| **관련** | DevDocs-RAG API v1.md 인증 API |
+| **관련** | `api-spec.md` 인증 API |
 
 **합격 조건**: 로그아웃 후 같은 Access 토큰으로 `POST /api/v1/chat` 호출 시 `401 ACCESS_TOKEN_EXPIRED` 또는 `401 INVALID_TOKEN` 반환.
 
@@ -273,7 +273,7 @@ assert stub_gen.call_count == 0  # LLM 호출 없음
 | 항목 | 내용 |
 | --- | --- |
 | **목적** | 비교 모드 `POST /api/v1/chat/stream`(`mode=COMPARE`)이 sourceKeyA·sourceKeyB 각각 독립된 RAG 파이프라인을 호출하고 Structured Outputs로 결과를 반환하는지 확인 |
-| **관련** | DevDocs-RAG API v1.md §3.1, 기획서_v1.md 비교 모드 |
+| **관련** | `api-spec.md` §3.1, `planning.md` 비교 모드 |
 
 **합격 조건**
 
@@ -302,7 +302,7 @@ assert stub_gen.call_count == 0  # LLM 호출 없음
 | 항목 | 내용 |
 | --- | --- |
 | **목적** | Chroma 프로세스 종료 시 FastAPI가 503을 반환하고 Spring Boot가 이를 클라이언트에 전달하는지 확인 |
-| **관련** | 정책 및 상태.md 장애 처리 |
+| **관련** | `policy.md` 장애 처리 |
 
 **합격 조건**: Chroma 컨테이너 중지 후 질문 요청 → `503 VECTOR_DB_UNAVAILABLE` 반환.
 

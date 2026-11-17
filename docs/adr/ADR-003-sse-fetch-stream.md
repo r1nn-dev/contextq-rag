@@ -4,7 +4,7 @@
 Draft
 
 ## Date
-2026-11-14
+2026-11-14 (2026-11-18 개정: 중계 경로를 API 명세 경로로 정정)
 
 ## Context
 
@@ -27,8 +27,8 @@ LLM 답변은 토큰 단위로 생성되므로 스트리밍이 필요하다. 옵
 
 ```
 Frontend (fetch + ReadableStream)
-  → Spring Boot /api/chat/stream (인증 · 쿼터 검사)
-    → FastAPI /internal/rag/stream (SSE)
+  → Spring Boot POST /api/v1/chat/stream (인증 · 쿼터 검사)
+    → FastAPI POST /internal/v1/chat/stream (SSE, X-Internal-Token — ADR-012)
       → LLM API (토큰 스트리밍)
 ```
 

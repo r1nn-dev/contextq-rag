@@ -535,7 +535,7 @@ agent = create_agent(model=..., tools=[...])
 
 ### 6.3 정책 및 제약사항
 
-> 정책 및 상태 v0.1 문서 참고
+> `docs/planning/policy.md` 참고
 > 
 
 | 항목 | 정책 |

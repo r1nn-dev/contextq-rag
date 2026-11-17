@@ -83,11 +83,11 @@ chore/3-ci-github-actions-setup
 
 | 모듈 / 관심사 | scope | 위치 |
 | --- | --- | --- |
-| FastAPI 라우터·의존성 주입 | `api` | `ai-server/src/api/` |
-| RAG 파이프라인 (체인·컨텍스트 구성) | `rag` | `ai-server/src/rag/` |
+| FastAPI 라우터·의존성 주입 | `api` | `ai-server/src/routers/` |
+| RAG 파이프라인 (프롬프트·생성·단일 모드 조립) | `rag` | `ai-server/src/pipeline/` |
 | 벡터 검색·재랭킹 | `retrieval` | `ai-server/src/retrieval/` |
 | 문서 수집·파싱·청킹·임베딩 | `ingest` | `ai-server/src/ingest/` |
-| 공통 DTO·설정·유틸리티 | `shared` | `ai-server/src/shared/` |
+| 공통 DTO·설정·유틸리티, SSE 계약 | `shared` | `ai-server/src/domain/`, `ai-server/src/config/`, `contracts/` |
 | Spring Boot 비즈니스 로직·API | `backend` | `backend/src/main/java/` |
 | React 프론트엔드 | `frontend` | `frontend/src/` |
 | 오프라인 수집·실험 스크립트 | `scripts` | `scripts/` |
@@ -435,7 +435,7 @@ git commit -m "feat(rag): 버전 인식 컨텍스트 필터 구현"
 
 ```bash
 git add -p
-git add ai-server/src/rag/chain.py
+git add ai-server/src/pipeline/single.py
 git commit -m "feat(rag): 버전 인식 컨텍스트 필터 구현"
 ```
 

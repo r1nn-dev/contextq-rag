@@ -7,7 +7,7 @@
 ## 1. 개요
 
 - **목적**: FastAPI AI 서버 내부의 RAG 파이프라인 컴포넌트 간 입출력 계약을 정의한다.
-- **범위**: 이 문서는 Python Protocol 기반 인터페이스만 다룬다. FastAPI AI 서버 ↔ Spring Boot 메인 백엔드 간 HTTP 계약은 `DevDocs-RAG API v1.md`를 참조한다.
+- **범위**: 이 문서는 Python Protocol 기반 인터페이스만 다룬다. FastAPI AI 서버 ↔ Spring Boot 메인 백엔드 간 HTTP 계약은 `docs/specs/api-spec.md`(§6 내부 API, 부록 B SSE)를 참조한다.
 - **구현 언어**: Python 3.12
 
 ---

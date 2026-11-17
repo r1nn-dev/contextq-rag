@@ -4,7 +4,7 @@
 | --- | --- |
 | **상태** | 초안 |
 | **날짜** | 2026-11-06 |
-| **관련** | `기획서_v1.md` §5·§6·§8.5, `claude/interfaces.md`, `DevDocs-RAG API v1.md` |
+| **관련** | `docs/planning/planning.md` §5·§6·§8.5, `docs/specs/interfaces.md`, `docs/specs/api-spec.md` |
 
 ---
 
@@ -113,7 +113,7 @@ data: {"event": "done", "status": "NO_CONTEXT", "statusReason": "LOW_SIMILARITY"
 ```
 
 **임계값 τ 결정:**
-- E1 실험 프로토콜(`claude/protocol.md` §E1)에 따라 Q-oos 질문셋으로 FPR ≤ 5% 조건에서 τ를 결정한다.
+- E1 실험 프로토콜(`docs/experiments/protocol.md` > 실험 E1)에 따라 Q-oos 질문셋으로 FPR ≤ 5% 조건에서 τ를 결정한다.
 - τ는 `configs/retriever.yaml`에 버전별로 기록한다.
 
 **인수 기준 (RAG-06):**

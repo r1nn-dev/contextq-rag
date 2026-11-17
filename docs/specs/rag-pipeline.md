@@ -1,14 +1,14 @@
 # RAG 파이프라인 설계
 
-> **최종 수정**: 2026-11-17
+> **최종 수정**: 2026-11-18
 
 ---
 
 ## 1. 개요
 
 - **목적**: FastAPI ai-server 내 RAG 쿼리 처리 파이프라인의 전체 흐름, 컴포넌트 책임, 데이터 흐름을 정의한다.
-- **범위**: 단일 버전 RAG, 멀티턴 질의 재작성, 버전 비교 모드, NO_CONTEXT 판정을 모두 포함한다. 인덱스 빌드 파이프라인은 `claude/data-sources.md`를 참조한다.
-- **관련 문서**: `claude/interfaces.md` (Protocol 정의), `DevDocs-RAG API v1.md` (HTTP 계약), `claude/data-sources.md` (컬렉션 빌드 절차)
+- **범위**: 단일 버전 RAG, 멀티턴 질의 재작성, 버전 비교 모드, NO_CONTEXT 판정을 모두 포함한다. 인덱스 빌드 파이프라인은 `docs/specs/data-sources.md`·`docs/specs/doc-source.md`를 참조한다.
+- **관련 문서**: `docs/specs/interfaces.md` (Protocol 정의), `docs/specs/api-spec.md` §6·부록 B (HTTP·SSE 계약), `docs/specs/data-sources.md` (컬렉션 빌드 절차)
 
 ---
 
@@ -17,13 +17,14 @@
 ### 2.1 단일 버전 RAG 흐름
 
 ```
-Client
-  │  POST /api/v1/chat  (source_key, question, conversation_id?)
+backend (POST /api/v1/chat/stream 중계)
+  │  POST /internal/v1/chat/stream  (requestId, mode=SINGLE, sourceKey, question, history, promptVersion)
+  │  X-Internal-Token (ADR-012)
   ▼
-[FastAPI Router]
+[FastAPI Router]  검증 · ACTIVE run 확정 · 동시성 슬롯 (실패는 HTTP 상태, api-spec §6.1)
   │
-  ├─ conversation_id 있음?
-  │   ├─ YES → [1. 질의 재작성]  ← PostgreSQL 대화 이력 조회
+  ├─ history 있음?
+  │   ├─ YES → [1. 질의 재작성]  ← backend가 보낸 최근 3턴 (멀티턴, R-7-2)
   │   └─ NO  → 원본 질문 사용
   │
   ▼
@@ -36,10 +37,10 @@ Client
   │   └─ YES → [NO_CONTEXT 응답]  LLM 미호출, SSE meta→done 반환
   │
   ▼
-[4. Source Adapter]  NormalizedDocument 변환
+[4. 컨텍스트 선택]  similarity ≥ τ 청크, 3,000토큰 예산 (RetrievedChunk 그대로)
   │
   ▼
-[5. 프롬프트 조립]  system + context + history + question
+[5. 프롬프트 조립]  system(규칙 + 번호 붙은 참고 문서) + question
   │
   ▼
 [6. LLM 스트리밍]  GPT-4o-mini, temperature=0
@@ -127,7 +128,7 @@ user:
 | **출력** | `query_vector: list[float]` (1536차원) |
 | **p95 목표** | 200ms (8.3-2) |
 
-**에러 처리:** `EmbeddingError` 발생 시 HTTP 503 반환. 재시도는 호출자(Router) 책임.
+**에러 처리:** 질의 임베딩은 5초 제한·재시도 1회(정책서 §2.1). 그래도 실패하면 스트림 시작 후이므로 HTTP 상태가 아니라 `error` 이벤트(`LLM_ERROR`, `partial=false`)로 끝낸다 (INV-09, api-spec §6.1).
 
 ---
 
@@ -165,26 +166,16 @@ if max_similarity < τ:
 
 ---
 
-### 3.4 단계 4 — Source Adapter
+### 3.4 단계 4 — 컨텍스트 선택
 
 | 항목 | 값 |
 | --- | --- |
-| **입력** | `list[RetrievedChunk]` |
-| **출력** | `list[NormalizedDocument]` |
-| **구현체** | `V03SourceAdapter`, `V1xSourceAdapter` |
-| **추상화 목적** | v0.3(Docusaurus)·v1.x(Mintlify)의 메타데이터 차이를 `NormalizedDocument` 스키마로 통일 |
+| **입력** | `list[RetrievedChunk]` (similarity 내림차순, `interfaces.md` §2.1) |
+| **출력** | 컨텍스트 청크 목록 — 순서가 인용 번호 `[1..n]`이자 SSE meta.sources rank |
+| **규칙** | similarity ≥ τ 청크만, 최대 3,000토큰, 초과 시 낮은 rank부터 제외 (정책서 §5.3) |
 
-```python
-class NormalizedDocument(TypedDict):
-    chunk_id:     str    # Chroma 내 고유 ID
-    source_key:   str    # "langchain_v03" | "langchain_v1x"
-    heading_path: str    # "How-To > Memory > ConversationBufferMemory"
-    permalink:    str    # GitHub SHA-fixed URL
-    text:         str    # 청크 텍스트
-    similarity:   float  # 유사도 점수 (0.0~1.0)
-```
-
-> 상세 파싱 규칙은 `claude/doc-source.md`를 참조한다.
+- 질의 단계에는 Source Adapter가 없다. Adapter는 인덱스 빌드에서 원문을 `NormalizedDocument`로 바꾸는 데만 쓴다(ADR-006). 검색 결과는 Chroma 메타데이터(`heading_path`·`permalink`·`site_url` 등, 정책서 §4.2)를 그대로 담은 `RetrievedChunk`다.
+- 상세 파싱 규칙(인덱스 빌드)은 `docs/specs/doc-source.md`를 참조한다.
 
 ---
 
@@ -423,6 +414,7 @@ yield SseEvent(event="error", data={
 | v0.4 | §2.1 다이어그램 컬렉션 이름을 `{source_key}_run{active_run_id}`로 수정, §3.3 버전 필터(`where`) → 1차 컬렉션 지정 + 2차 메타데이터 검증·임베딩 모델 검사 (ADR-004, 정책서 §5.3) |
 | v0.5 | §3.3·§6 검색 설정 파일 `configs/retriever.yaml` → `configs/rag.yaml`(ADR-008), 컨텍스트 예산 키 추가 |
 | v0.6 | §3.5 프롬프트 위치 `configs/prompts/{prompt_version}.j2`·정책서 §5.5 규칙, 컨텍스트 초과 처리 → 정책서 §5.3 토큰 예산, §3.6 첫 토큰 타임아웃·모델 선택, §6 `configs/models.yaml` |
+| v0.7 | §1 관련 문서 경로 정정, §2.1 진입점을 backend → `POST /internal/v1/chat/stream`으로, 4단계 Source Adapter → 컨텍스트 선택(§3.4, ADR-006), §3.2 임베딩 실패는 `error` 이벤트 |
 
 ---
 

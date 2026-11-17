@@ -92,7 +92,7 @@
 | --- | --- | --- | --- |
 | F1 | docker-compose.yml 변경 시 `docs/ops/deployment.md`에 반영됐는가 | diff ↔ 문서 | `docs/ops/deployment.md` |
 | F2 | 환경 변수 추가·변경 시 `docs/ops/env-reference.md`와 `.env.example`에 반영됐는가 | diff ↔ 문서 ↔ `.env.example` | `docs/ops/env-reference.md` |
-| F3 | nginx SSE 설정 (`proxy_buffering off`, `proxy_read_timeout 300s`)이 제거·변경되지 않았는가 | `infra/nginx/conf.d/default.conf` diff | ADR-003 |
+| F3 | nginx SSE 설정 (`proxy_buffering off`)이 유지되고 `proxy_read_timeout`이 정책서 값(150초)과 같은가 | `infra/nginx/conf.d/default.conf` diff | ADR-003, `docs/planning/policy.md` > §2.1 |
 | F4 | 서비스 간 의존 순서 (`depends_on: service_healthy`)가 유지됐는가 | docker-compose.yml diff | ADR-002 |
 
 ---
@@ -113,7 +113,7 @@
 | # | 확인 | 방법 | 근거 |
 | --- | --- | --- | --- |
 | H1 | 비밀값이 코드·설정·로그·테스트·문서에 없는가 | `git grep -nE "password=\|secret=\|sk-\|ghp_\|BEGIN .*PRIVATE"` | `AGENTS.md` > §0 Absolute rules |
-| H2 | FastAPI 엔드포인트에 `X-Internal-Token` 검증 의존성이 있는가 | `src/api/` 의존성 주입 확인 | `AGENTS.md` > §8 Runtime topology |
+| H2 | FastAPI 엔드포인트에 `X-Internal-Token` 검증 의존성이 있는가 | `ai-server/src/routers/` 라우터 의존성(`verify_internal_token`) 확인. 예외는 `GET /internal/v1/health`뿐 | `AGENTS.md` > §8 Runtime topology |
 | H3 | Spring Boot에서 JWT 만료·유효성 검증을 처리하는가 | Security 설정·필터 코드 | `docs/planning/policy.md` > 인증 정책 |
 | H4 | 게스트 쿼터 우회가 불가한가 (`GUEST_QUOTA=5`) | 게스트 세션 카운터 로직 | `docs/planning/policy.md` > 게스트 정책 |
 | H5 | `.env`, `.mcp.json` 경로가 커밋 메시지·코드 주석·이슈·PR에 없는가 | diff 텍스트 검색 | `AGENTS.md` > §3 Scope and prohibitions |
