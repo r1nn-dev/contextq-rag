@@ -8,9 +8,9 @@ query: LangChain v0.3에서 with_structured_output으로 모델 출력을 Pydant
 gold:
   sections:
   - file_path: docs/docs/how_to/structured_output.ipynb
-    heading_path: How to return structured data from a model
+    heading_path: How to return structured data from a model > The .with_structured_output() method
 metadata:
   created_by: ai-draft
   created_at: '2026-11-17T00:00:00Z'
   is_decoy: false
-  reviewed_by: null
+  reviewed_by: r1nn-dev

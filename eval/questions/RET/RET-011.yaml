@@ -10,9 +10,9 @@ gold:
   - file_path: docs/docs/how_to/sequence.ipynb
     heading_path: How to chain runnables
   - file_path: docs/docs/concepts/lcel.mdx
-    heading_path: LangChain Expression Language (LCEL)
+    heading_path: LangChain Expression Language (LCEL) > Composition Syntax
 metadata:
   created_by: ai-draft
   created_at: '2026-11-17T00:00:00Z'
   is_decoy: false
-  reviewed_by: null
+  reviewed_by: r1nn-dev

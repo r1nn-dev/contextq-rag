@@ -9,8 +9,10 @@ gold:
   sections:
   - file_path: src/oss/langchain/middleware/built-in.mdx
     heading_path: Prebuilt middleware > Provider-agnostic middleware
+  - file_path: src/oss/langchain/middleware/overview.mdx
+    heading_path: Middleware overview
 metadata:
   created_by: ai-draft
   created_at: '2026-11-17T00:00:00Z'
   is_decoy: false
-  reviewed_by: null
+  reviewed_by: r1nn-dev

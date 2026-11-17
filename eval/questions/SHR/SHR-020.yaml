@@ -10,8 +10,6 @@ versions:
     gold_sections:
     - file_path: docs/docs/how_to/debugging.ipynb
       heading_path: How to debug your LLM apps
-    - file_path: docs/docs/concepts/tracing.mdx
-      heading_path: Tracing
   v1_x:
     source_key: langchain_v1x
     gold_sections:
@@ -24,4 +22,4 @@ label_schema:
 metadata:
   created_by: ai-draft
   created_at: '2026-11-17T00:00:00Z'
-  reviewed_by: null
+  reviewed_by: r1nn-dev

@@ -89,6 +89,8 @@ class Gold(_Strict):
 class ExpectedBehavior(_Strict):
     no_context: bool
     reason: NonEmpty
+    # false면 NO_CONTEXT 임계값 τ 결정(E1 부속) 표본에서 뺀다 — 범위 밖이 아니라 모호한 질문 등
+    tau_calibration: bool = True
 
 
 class _QuestionBase(_Strict):
@@ -215,6 +217,11 @@ def v1_composition_errors(sets: QuestionSets) -> list[str]:
         if len(decoys) != V1_DECOYS_PER_VERSION:
             errors.append(f"Q-ret {label} 디코이 {len(decoys)}개 (기대 {V1_DECOYS_PER_VERSION})")
     return errors
+
+
+def tau_calibration_oos(sets: QuestionSets) -> list[OosQuestion]:
+    """τ 결정 표본으로 쓰는 Q-oos 문항 (`expected_behavior.tau_calibration`이 true)."""
+    return [q for q in sets.oos if q.expected_behavior.tau_calibration]
 
 
 def unreviewed(sets: QuestionSets) -> list[str]:

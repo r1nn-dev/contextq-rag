@@ -11,8 +11,10 @@ gold:
     heading_path: Tools > Use MCP tools in an agent
   - file_path: src/oss/langchain/mcp/index.mdx
     heading_path: Model Context Protocol (MCP) > Quickstart
+  - file_path: src/oss/langchain/tools.mdx
+    heading_path: Tools > Tools from MCP servers
 metadata:
   created_by: ai-draft
   created_at: '2026-11-17T00:00:00Z'
   is_decoy: false
-  reviewed_by: null
+  reviewed_by: r1nn-dev

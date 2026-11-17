@@ -8,10 +8,12 @@ query: LangChain v0.3에서 AgentExecutor로 도구를 쓰는 에이전트를 �
 gold:
   sections:
   - file_path: docs/docs/how_to/agent_executor.ipynb
-    heading_path: Build an Agent with AgentExecutor (Legacy)
+    heading_path: Build an Agent with AgentExecutor (Legacy) > Create the agent
+  - file_path: docs/docs/how_to/agent_executor.ipynb
+    heading_path: Build an Agent with AgentExecutor (Legacy) > Run the agent
   note: v1.x에서는 create_agent로 대체 — 비격리 조건에서 혼입 가능성 높음
 metadata:
   created_by: ai-draft
   created_at: '2026-11-17T00:00:00Z'
   is_decoy: false
-  reviewed_by: null
+  reviewed_by: r1nn-dev
