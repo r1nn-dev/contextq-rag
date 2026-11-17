@@ -72,6 +72,7 @@ ai-server/
 │   ├── adapters/          # Source Adapter — 버전별 문서 수집·정규화 (ADR-006)
 │   ├── config/            # pydantic-settings — 비밀값 로드 (settings.py)
 │   ├── domain/            # 도메인 모델·값 객체 (NormalizedDocument 등)
+│   ├── eval/              # RAG 평가 — 질문셋 로더·검색 지표·평가 러너 (eval/ 데이터 사용)
 │   ├── ingest/            # 문서 파싱·청킹·Chroma 적재
 │   ├── pipeline/          # RAG 체인·LLM 호출 (LangChain LCEL)
 │   ├── routers/           # FastAPI 라우터·엔드포인트

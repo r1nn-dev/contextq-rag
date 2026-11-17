@@ -90,6 +90,9 @@ chroma_db/
 # Raw crawled dataset
 data/
 
+# RAG eval LLM response cache (docs/experiments/protocol.md §0.3)
+eval/cache/
+
 # AI tools
 **/.claude/*
 !/.claude/settings.json
