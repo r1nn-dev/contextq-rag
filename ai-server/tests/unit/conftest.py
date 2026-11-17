@@ -1,5 +1,6 @@
 """단위 테스트 공용 픽스처 — DB가 필요한 저장 계층은 인메모리 SQLite로 대신한다."""
 
+import hashlib
 from collections.abc import Iterator
 
 import pytest
@@ -50,3 +51,20 @@ def session_factory() -> Iterator[sessionmaker[Session]]:
 def session(session_factory: sessionmaker[Session]) -> Iterator[Session]:
     with session_factory() as db:
         yield db
+
+
+class FakeEmbedder:
+    """텍스트 해시로 만든 결정적 벡터 — OpenAI 호출 없이 파이프라인을 검증한다."""
+
+    def __init__(self, model: str = "text-embedding-3-small", dimensions: int = 1536) -> None:
+        self.model = model
+        self.dimensions = dimensions
+        self.total_tokens = 0
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        vectors = []
+        for text in texts:
+            digest = hashlib.sha256(text.encode("utf-8")).digest()
+            vectors.append([digest[i % len(digest)] / 255 for i in range(self.dimensions)])
+            self.total_tokens += len(text.split())
+        return vectors

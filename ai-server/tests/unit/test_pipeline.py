@@ -5,13 +5,23 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy.orm import Session, sessionmaker
 
+from src.config.ingest_config import load_embedding_config
 from src.domain.ingest_status import IngestStatus
 from src.domain.tables import IngestRun, Source
-from src.ingest.pipeline import IngestFailedError, IngestOptions, run_ingest
+from src.ingest.embedder import EmbeddingClient, OpenAIEmbeddingClient
+from src.ingest.pipeline import (
+    IngestDependencies,
+    IngestFailedError,
+    IngestOptions,
+    run_ingest,
+)
+from src.ingest.store import ChromaVectorStore, collection_name
+from tests.unit.conftest import FakeEmbedder
 
 MINTLIFY_FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "mintlify"
 
@@ -37,12 +47,29 @@ def _options(tmp_path: Path, remote_base: str) -> IngestOptions:
     return IngestOptions(data_dir=tmp_path / "data", remote_base=remote_base)
 
 
-def test_processing_records_sha_and_missing_snippets(
-    session_factory: sessionmaker[Session], tmp_path: Path, remote_base: str
-) -> None:
-    summary = run_ingest(session_factory, "langchain_v1x", _options(tmp_path, remote_base))
+@pytest.fixture()
+def store(tmp_path: Path) -> ChromaVectorStore:
+    return ChromaVectorStore(tmp_path / "chroma")
 
-    assert summary.status == IngestStatus.PROCESSING
+
+def _deps(store: ChromaVectorStore, embedder: EmbeddingClient | None = None) -> IngestDependencies:
+    fake = embedder or FakeEmbedder()
+    return IngestDependencies(
+        embedder_factory=lambda: fake, store=store, price_per_1m_tokens_usd=0.02
+    )
+
+
+def test_ingest_reaches_validating(
+    session_factory: sessionmaker[Session],
+    tmp_path: Path,
+    remote_base: str,
+    store: ChromaVectorStore,
+) -> None:
+    summary = run_ingest(
+        session_factory, "langchain_v1x", _options(tmp_path, remote_base), _deps(store)
+    )
+
+    assert summary.status == IngestStatus.VALIDATING
     assert (summary.documents, summary.sections, summary.missing_snippets) == (2, 3, 1)
     assert summary.chunks >= summary.sections
     with session_factory() as db:
@@ -82,7 +109,10 @@ def test_processing_records_sha_and_missing_snippets(
 
 
 def test_collect_failure_marks_run_failed_and_keeps_active(
-    session_factory: sessionmaker[Session], tmp_path: Path, remote_base: str
+    session_factory: sessionmaker[Session],
+    tmp_path: Path,
+    remote_base: str,
+    store: ChromaVectorStore,
 ) -> None:
     with session_factory() as db:
         active = IngestRun(
@@ -94,7 +124,7 @@ def test_collect_failure_marks_run_failed_and_keeps_active(
 
     # 카탈로그의 langchain-ai/langchain 저장소가 로컬 원격에 없으므로 clone이 실패한다
     with pytest.raises(IngestFailedError) as info:
-        run_ingest(session_factory, "langchain_v03", _options(tmp_path, remote_base))
+        run_ingest(session_factory, "langchain_v03", _options(tmp_path, remote_base), _deps(store))
 
     with session_factory() as db:
         failed = db.get_one(IngestRun, info.value.run_id)
@@ -105,7 +135,10 @@ def test_collect_failure_marks_run_failed_and_keeps_active(
 
 
 def test_unregistered_adapter_fails_processing(
-    session_factory: sessionmaker[Session], tmp_path: Path, remote_base: str
+    session_factory: sessionmaker[Session],
+    tmp_path: Path,
+    remote_base: str,
+    store: ChromaVectorStore,
 ) -> None:
     with session_factory() as db:
         db.add(
@@ -125,7 +158,7 @@ def test_unregistered_adapter_fails_processing(
         db.commit()
 
     with pytest.raises(IngestFailedError) as info:
-        run_ingest(session_factory, "test_unknown", _options(tmp_path, remote_base))
+        run_ingest(session_factory, "test_unknown", _options(tmp_path, remote_base), _deps(store))
 
     with session_factory() as db:
         failed = db.get_one(IngestRun, info.value.run_id)
@@ -134,9 +167,64 @@ def test_unregistered_adapter_fails_processing(
 
 
 def test_strategy_option_is_recorded(
-    session_factory: sessionmaker[Session], tmp_path: Path, remote_base: str
+    session_factory: sessionmaker[Session],
+    tmp_path: Path,
+    remote_base: str,
+    store: ChromaVectorStore,
 ) -> None:
     options = IngestOptions(data_dir=tmp_path / "data", strategy="C", remote_base=remote_base)
-    summary = run_ingest(session_factory, "langchain_v1x", options)
+    summary = run_ingest(session_factory, "langchain_v1x", options, _deps(store))
     with session_factory() as db:
         assert db.get_one(IngestRun, summary.run_id).chunk_strategy == "C"
+
+
+def test_embedding_stores_run_collection_and_cost(
+    session_factory: sessionmaker[Session],
+    tmp_path: Path,
+    remote_base: str,
+    store: ChromaVectorStore,
+) -> None:
+    summary = run_ingest(
+        session_factory, "langchain_v1x", _options(tmp_path, remote_base), _deps(store)
+    )
+    name = collection_name("langchain_v1x", summary.run_id)
+
+    with session_factory() as db:
+        run = db.get_one(IngestRun, summary.run_id)
+        assert run.chunk_count == summary.chunks == store.count(name)
+        assert run.embedding_tokens is not None and run.embedding_tokens > 0
+        assert run.embedding_cost_usd is not None
+    meta = store.collection_metadata(name)
+    assert meta["hnsw:space"] == "cosine"
+    assert (meta["embedding_model"], meta["embedding_dim"]) == ("text-embedding-3-small", 1536)
+    record = next(store.iter_records(name))
+    assert record["metadata"]["ingest_run_id"] == summary.run_id
+    assert record["metadata"]["source_key"] == "langchain_v1x"
+
+
+@pytest.mark.parametrize(
+    ("embedder_factory", "reason"),
+    [
+        (lambda: OpenAIEmbeddingClient("", load_embedding_config()), "OPENAI_API_KEY"),
+        (lambda: FakeEmbedder(model="text-embedding-3-large"), "모델 불일치"),
+    ],
+)
+def test_embedding_failure_marks_failed_without_collection(
+    session_factory: sessionmaker[Session],
+    tmp_path: Path,
+    remote_base: str,
+    store: ChromaVectorStore,
+    embedder_factory: Any,
+    reason: str,
+) -> None:
+    deps = IngestDependencies(
+        embedder_factory=embedder_factory, store=store, price_per_1m_tokens_usd=0.02
+    )
+    with pytest.raises(IngestFailedError) as info:
+        run_ingest(session_factory, "langchain_v1x", _options(tmp_path, remote_base), deps)
+
+    with session_factory() as db:
+        failed = db.get_one(IngestRun, info.value.run_id)
+        assert failed.failure_stage == "EMBEDDING"
+        assert reason in (failed.failure_reason or "")
+    assert not store.has_collection(collection_name("langchain_v1x", info.value.run_id))

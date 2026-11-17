@@ -1,11 +1,14 @@
 """인덱스 빌드 파이프라인 — `make ingest SOURCE=…` (ADR-005, 정책서 §10.1).
 
 현재 구현 범위: PENDING(파라미터 기록) → COLLECTING(sparse checkout, commit_sha 기록)
-→ PROCESSING(Source Adapter 전처리 → 청킹 → 메타데이터 조립, 리포트).
-임베딩 이후는 후속 작업에서 잇는다.
+→ PROCESSING(Source Adapter 전처리 → 청킹 → 메타데이터 조립, 리포트)
+→ EMBEDDING(임베딩 → run 전용 컬렉션 저장, 토큰·비용 기록) → VALIDATING.
+검증 게이트 이후는 후속 작업에서 잇는다.
 어느 단계든 실패하면 해당 run만 FAILED로 만들고 기존 ACTIVE run은 건드리지 않는다 (RAG-10).
 """
 
+import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -23,9 +26,11 @@ from src.domain.ingest_status import IngestStatus
 from src.domain.tables import IngestRun, Source
 from src.ingest.chunking import ChunkingError, make_chunker, splits_code_fence
 from src.ingest.collect import GITHUB, checkout_spec, sparse_checkout
+from src.ingest.embedder import EmbeddingClient, EmbeddingError, embedding_cost_usd
 from src.ingest.metadata import PreparedChunk, RunContext, assemble
 from src.ingest.reports import report_dir, write_json, write_missing_snippets
 from src.ingest.runs import create_run, fail, get_source, now_utc, transition
+from src.ingest.store import VectorStore, collection_name
 
 
 class IngestFailedError(RuntimeError):
@@ -53,6 +58,15 @@ class IngestOptions:
     accept_drift: bool = False
     strategy: Strategy | None = None  # None이면 configs/ingest.yaml 기본 전략
     remote_base: str = GITHUB
+
+
+@dataclass(frozen=True)
+class IngestDependencies:
+    """외부 자원 — 테스트에서는 가짜 임베더·임시 Chroma로 바꾼다."""
+
+    embedder_factory: Callable[[], EmbeddingClient]
+    store: VectorStore
+    price_per_1m_tokens_usd: float
 
 
 @dataclass
@@ -135,8 +149,59 @@ def _process(
     return result
 
 
+def _embed(
+    session: Session,
+    run: IngestRun,
+    chunks: list[PreparedChunk],
+    deps: IngestDependencies,
+) -> None:
+    """EMBEDDING — 임베딩 후 run 전용 컬렉션에 저장하고 토큰·비용을 기록한다 → VALIDATING."""
+    transition(session, run, IngestStatus.EMBEDDING)
+    session.commit()
+
+    if not chunks:
+        raise EmbeddingError("청크가 0건이라 임베딩할 수 없습니다")
+    embedder = deps.embedder_factory()
+    if embedder.model != run.embedding_model:  # INV-03: run에 기록한 모델로만 임베딩한다
+        raise EmbeddingError(
+            f"임베딩 모델 불일치: run {run.embedding_model}, 클라이언트 {embedder.model}"
+        )
+    vectors = asyncio.run(embedder.embed([c.content for c in chunks]))
+
+    name = collection_name(run.source_key, run.id)
+    deps.store.create_collection(
+        name,
+        {
+            "source_key": run.source_key,
+            "ingest_run_id": run.id,
+            "commit_sha": run.commit_sha or "",
+            "chunk_strategy": run.chunk_strategy or "",
+            "chunk_params_hash": run.chunk_params_hash or "",
+            "embedding_model": embedder.model,
+            "embedding_dim": embedder.dimensions,
+        },
+    )
+    deps.store.add(
+        name,
+        ids=[c.chunk_id for c in chunks],
+        embeddings=vectors,
+        documents=[c.content for c in chunks],
+        metadatas=[dict(c.metadata) for c in chunks],
+    )
+
+    run.chunk_count = len(chunks)
+    run.embedding_tokens = embedder.total_tokens
+    run.embedding_cost_usd = embedding_cost_usd(embedder.total_tokens, deps.price_per_1m_tokens_usd)
+    # EMBEDDING → VALIDATING: 컬렉션 저장 완료 (정책서 §10.1)
+    transition(session, run, IngestStatus.VALIDATING)
+    session.commit()
+
+
 def run_ingest(
-    session_factory: sessionmaker[Session], source_key: str, options: IngestOptions
+    session_factory: sessionmaker[Session],
+    source_key: str,
+    options: IngestOptions,
+    deps: IngestDependencies,
 ) -> IngestSummary:
     """새 run을 발급하고 현재 구현된 단계까지 진행한다."""
     strategy = options.strategy or load_chunking_config().default_strategy
@@ -162,6 +227,7 @@ def run_ingest(
             session.commit()
 
             processed = _process(session, run, source, checkout.root, options)
+            _embed(session, run, processed.chunks, deps)
         except Exception as exc:
             session.rollback()
             stage = run.status
