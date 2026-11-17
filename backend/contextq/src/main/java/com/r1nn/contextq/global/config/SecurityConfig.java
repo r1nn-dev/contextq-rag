@@ -47,6 +47,8 @@ public class SecurityConfig {
                     .permitAll() // guests may list sources
                     .requestMatchers(HttpMethod.POST, AUTH_PUBLIC)
                     .permitAll()
+                    .requestMatchers(HttpMethod.POST, "/api/v1/chat/stream")
+                    .permitAll() // guests ask with the devdocs_sid cookie (policy §1.3)
                     .requestMatchers("/api/v1/admin/**")
                     .hasRole("ADMIN")
                     .anyRequest()
