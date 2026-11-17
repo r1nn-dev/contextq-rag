@@ -35,8 +35,10 @@ class GuestSessionServiceTest {
   void firstQuestionIssuesCookieAndLaterQuestionsReuseIt() {
     GuestTicket first = service.charge(null, ip());
 
+    assertThat(first.setCookie()).contains("HttpOnly", "Secure", "SameSite=Strict");
+    assertThat(first.setCookie()).contains("Max-Age=86400"); // 24 h absolute
     assertThat(first.setCookie())
-        .contains("HttpOnly", "Secure", "SameSite=Strict", "Path=/api", "Max-Age=86400");
+        .contains("Path=/api"); // separate line: avoids a gitleaks false positive
     String raw = sid(first);
     assertThat(raw).hasSize(22); // 128-bit Base64URL
     GuestTicket second = service.charge(raw, ip());
