@@ -50,10 +50,12 @@ public final class AiServerStub implements AutoCloseable {
                                   route == null
                                       ? StubResponse.json(404, "{\"code\":\"NOT_FOUND\"}")
                                       : route.apply(recorded);
-                              return res.status(response.status())
-                                  .header("Content-Type", response.contentType())
-                                  .sendString(response.body(), StandardCharsets.UTF_8)
-                                  .then();
+                              return Mono.delay(response.headerDelay())
+                                  .then(
+                                      res.status(response.status())
+                                          .header("Content-Type", response.contentType())
+                                          .sendString(response.body(), StandardCharsets.UTF_8)
+                                          .then());
                             }))
             .bindNow();
   }
@@ -98,10 +100,25 @@ public final class AiServerStub implements AutoCloseable {
   }
 
   /** Response definition; {@code body} may emit SSE frames over time. */
-  public record StubResponse(int status, String contentType, Flux<String> body) {
+  public record StubResponse(
+      int status, String contentType, Flux<String> body, Duration headerDelay) {
+
+    public StubResponse(int status, String contentType, Flux<String> body) {
+      this(status, contentType, body, Duration.ZERO);
+    }
 
     public static StubResponse json(int status, String json) {
       return new StubResponse(status, "application/json", Flux.just(json));
+    }
+
+    /** Same response, but status and headers are sent only after {@code delay}. */
+    public StubResponse afterHeaderDelay(Duration delay) {
+      return new StubResponse(status, contentType, body, delay);
+    }
+
+    /** SSE {@code data:} frame for one JSON event. */
+    public static String frame(String json) {
+      return "data: " + json + "\n\n";
     }
 
     /** SSE frames ({@code data: …}) sent one by one with {@code gap} between them. */

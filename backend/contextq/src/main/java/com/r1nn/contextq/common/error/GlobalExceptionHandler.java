@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
@@ -24,6 +25,9 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 /**
  * Maps every failure to the common error body (api-spec §0.3, policy §9.2).
  *
+ * <p>Content-Type is always {@code application/json}, also for {@code Accept: text/event-stream}
+ * requests (pre-stream errors of the chat stream), so content negotiation cannot fail.
+ *
  * <p>Stack traces and messages of unexpected errors go to the server log only; the client gets
  * {@code INTERNAL_ERROR} with the default message. The request ID travels in the {@code
  * X-Request-Id} response header and in the log context.
@@ -35,7 +39,8 @@ public class GlobalExceptionHandler {
 
   @ExceptionHandler(BusinessException.class)
   ResponseEntity<ApiResponse<Void>> handleBusiness(BusinessException e) {
-    ResponseEntity.BodyBuilder builder = ResponseEntity.status(e.getErrorCode().status());
+    ResponseEntity.BodyBuilder builder =
+        ResponseEntity.status(e.getErrorCode().status()).contentType(MediaType.APPLICATION_JSON);
     e.getHeaders().forEach(builder::header);
     return builder.body(ApiResponse.fail(e.toBody()));
   }
@@ -118,6 +123,7 @@ public class GlobalExceptionHandler {
     log.error("unexpected_error", e);
     ErrorCode code = ErrorCode.INTERNAL_ERROR;
     return ResponseEntity.status(code.status())
+        .contentType(MediaType.APPLICATION_JSON)
         .body(ApiResponse.fail(new ErrorBody(code.name(), code.defaultMessage(), List.of())));
   }
 
@@ -125,6 +131,7 @@ public class GlobalExceptionHandler {
       HttpStatusCode status, List<FieldReason> details) {
     ErrorCode code = ErrorCode.INVALID_REQUEST;
     return ResponseEntity.status(status)
+        .contentType(MediaType.APPLICATION_JSON)
         .body(ApiResponse.fail(new ErrorBody(code.name(), code.defaultMessage(), details)));
   }
 
