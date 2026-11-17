@@ -15,6 +15,7 @@ class RetrievedChunk(TypedDict):
     file_path: str
     heading_path: str
     token_count: int
+    site_url: str
     similarity: float  # 0.0~1.0, 높을수록 관련성 높음
 
 

@@ -34,6 +34,7 @@ def _chunk(source_key: str, file_path: str, heading: str, sim: float) -> Retriev
         file_path=file_path,
         heading_path=heading,
         token_count=50,
+        site_url="",
         similarity=sim,
     )
 

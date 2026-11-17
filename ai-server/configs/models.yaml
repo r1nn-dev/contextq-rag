@@ -10,3 +10,5 @@ embedding:
   timeout_seconds: 60
   max_retries: 3                   # OpenAI SDK 재시도 (지수 백오프)
   price_per_1m_tokens_usd: 0.02    # text-embedding-3-small 단가 — 비용 기록용
+  query_timeout_seconds: 5         # 질의 임베딩 1회 제한 (정책서 §2.1 OpenAI 임베딩 호출)
+  query_max_retries: 1             # 질의 임베딩 재시도 (멱등 호출)

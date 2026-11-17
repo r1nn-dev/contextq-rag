@@ -28,6 +28,7 @@ def _chunk(
         file_path=file_path,
         heading_path=heading_path,
         token_count=tokens,
+        site_url="",
         similarity=similarity,
     )
 

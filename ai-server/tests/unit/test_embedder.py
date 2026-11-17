@@ -18,6 +18,8 @@ CONFIG = EmbeddingConfig(
     timeout_seconds=1,
     max_retries=0,
     price_per_1m_tokens_usd=0.02,
+    query_timeout_seconds=1,
+    query_max_retries=0,
 )
 
 

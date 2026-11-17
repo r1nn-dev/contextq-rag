@@ -12,7 +12,8 @@ from typing import Any, Literal
 
 from src.domain.retrieval import RetrievedChunk
 from src.ingest.embedder import EmbeddingClient
-from src.ingest.store import QueryHit, VectorStore
+from src.ingest.store import VectorStore
+from src.retrieval.search import to_retrieved_chunk
 
 Condition = Literal["N", "F", "C"]
 E1_CONDITIONS: tuple[Condition, ...] = ("N", "F", "C")
@@ -74,20 +75,6 @@ async def embed_queries(
     unique = sorted(set(queries))
     vectors = await embedder.embed(unique) if unique else []
     return dict(zip(unique, vectors, strict=True))
-
-
-def to_retrieved_chunk(hit: QueryHit) -> RetrievedChunk:
-    meta = hit.metadata
-    return RetrievedChunk(
-        chunk_id=hit.chunk_id,
-        content=hit.document,
-        permalink=str(meta.get("permalink", "")),
-        source_key=str(meta["source_key"]),
-        file_path=str(meta["file_path"]),
-        heading_path=str(meta["heading_path"]),
-        token_count=int(meta.get("token_count", 0)),
-        similarity=hit.similarity,
-    )
 
 
 @dataclass(frozen=True)
