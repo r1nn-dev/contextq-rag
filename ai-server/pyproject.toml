@@ -59,4 +59,5 @@ testpaths = ["tests"]
 markers = [
     "llm: calls real LLM API (excluded from CI, incurs cost)",
     "eval: runs RAGAS evaluation metrics (excluded from CI, incurs cost)",
+    "integration: needs a real PostgreSQL via TEST_DATABASE_URL (skipped when unset)",
 ]
