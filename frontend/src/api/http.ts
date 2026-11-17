@@ -1,6 +1,7 @@
 // Shared HTTP layer. Components never call fetch directly (frontend/AGENTS.md §2).
 
 import { isRecord, type ApiErrorDetail } from '@/types/api'
+import { getAccessToken } from './tokenStore'
 
 /** Same-origin prefix; empty means relative /api paths (frontend/AGENTS.md §1.4). */
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
@@ -72,23 +73,52 @@ export async function readApiError(res: Response): Promise<ApiError> {
   return new ApiError(`HTTP_${res.status}`, '서버 응답을 처리하지 못했습니다.', res.status, [], retryAfter)
 }
 
-/** Sends a request and returns the raw response. Network failures become ApiError. */
-export async function send(path: string, init: RequestInit = {}): Promise<Response> {
+export interface SendOptions {
+  /** attach the Access Token and retry once after a silent refresh (default true) */
+  auth?: boolean
+}
+
+/** Silent refresh hook registered by api/auth.ts; resolves true when a new token is set. */
+let refresher: (() => Promise<boolean>) | null = null
+
+export function setRefresher(fn: () => Promise<boolean>): void {
+  refresher = fn
+}
+
+async function attempt(path: string, init: RequestInit, withAuth: boolean): Promise<Response> {
+  const headers = new Headers(init.headers)
+  const token = withAuth ? getAccessToken() : null
+  if (token !== null) headers.set('Authorization', `Bearer ${token}`)
   try {
-    return await transport(`${API_PREFIX}${path}`, { credentials: 'same-origin', ...init })
+    return await transport(`${API_PREFIX}${path}`, { credentials: 'same-origin', ...init, headers })
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') throw err
     throw new ApiError(NETWORK_ERROR, '서버에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.', 0)
   }
 }
 
+/**
+ * Sends a request and returns the raw response. Network failures become ApiError.
+ * On AUTH_TOKEN_EXPIRED it refreshes once (single-flight in api/auth.ts) and retries
+ * the original request once (policy §9.2 "silent refresh 후 재시도").
+ */
+export async function send(path: string, init: RequestInit = {}, options: SendOptions = {}): Promise<Response> {
+  const withAuth = options.auth !== false
+  const res = await attempt(path, init, withAuth)
+  if (res.status !== 401 || !withAuth || refresher === null || getAccessToken() === null) return res
+  const error = await readApiError(res.clone())
+  if (error.code !== 'AUTH_TOKEN_EXPIRED') return res
+  const refreshed = await refresher()
+  return refreshed ? attempt(path, init, withAuth) : res
+}
+
 /** JSON request that unwraps ApiResponse.data. */
-export async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function requestJson<T>(path: string, init: RequestInit = {}, options: SendOptions = {}): Promise<T> {
   const headers = new Headers(init.headers)
   if (init.body !== undefined && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
-  const res = await send(path, { ...init, headers })
+  const res = await send(path, { ...init, headers }, options)
   if (!res.ok) throw await readApiError(res)
   const body: unknown = await res.json()
   if (!isRecord(body) || body.success !== true) {
