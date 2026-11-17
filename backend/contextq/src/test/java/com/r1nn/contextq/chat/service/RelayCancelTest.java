@@ -50,7 +50,8 @@ class RelayCancelTest {
               Duration.ofSeconds(30),
               Duration.ofSeconds(60)),
           new PersistFailureRegistry(),
-          mock(GuestSessionService.class));
+          mock(GuestSessionService.class),
+          mock(QuestionRateLimiter.class));
 
   @Test
   void cancelAfterTokenCancelsUpstreamAndStoresPartial() throws Exception {
