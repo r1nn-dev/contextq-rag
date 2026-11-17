@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Literal, Self
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import URL
 
@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     # OpenAI API 키
     openai_api_key: str = ""
 
+    # NO_CONTEXT 임계값 τ 덮어쓰기 (TAU_{SOURCE_KEY}, 선택) — 없으면 configs/rag.yaml 값 (ADR-008)
+    tau_langchain_v03: float | None = Field(default=None, ge=0, le=1)
+    tau_langchain_v1x: float | None = Field(default=None, ge=0, le=1)
+
     # ai-server ↔ backend 내부 인증 토큰
     # backend가 RAG 엔드포인트 호출 시 X-Internal-Token 헤더에 첨부
     internal_token: str = ""
@@ -68,6 +72,11 @@ class Settings(BaseSettings):
                 f"INV-17: prod 프로필에서 허용되지 않는 설정이 켜져 있습니다: {', '.join(enabled)}"
             )
         return self
+
+    def tau_overrides(self) -> dict[str, float]:
+        """설정된 TAU_{SOURCE_KEY}만 source_key → τ로 돌려준다."""
+        values = {"langchain_v03": self.tau_langchain_v03, "langchain_v1x": self.tau_langchain_v1x}
+        return {key: tau for key, tau in values.items() if tau is not None}
 
     @property
     def docs_enabled(self) -> bool:

@@ -4,7 +4,7 @@
 Accepted
 
 ## Date
-2026-11-14
+2026-11-14 (2026-11-17 개정: τ 값을 개발용 0.30으로 정정 — E1 미실행, 설정 구조는 유지)
 
 ## Context
 
@@ -42,10 +42,10 @@ class RAGPipeline:
         return self._generate(q, results)
 
     def _get_threshold(self, source_key: str) -> float:
-        # 환경 변수 TAU_{SOURCE_KEY_UPPER} 가 설정된 경우 yaml 기본값을 오버라이드
-        env_key = f"TAU_{source_key.upper()}"
-        default = self.config.retrieval.thresholds.get(source_key, 0.5)
-        return float(os.getenv(env_key, default))
+        # 환경 변수 TAU_{SOURCE_KEY_UPPER}가 설정된 경우 yaml 값을 덮어쓴다 (Settings 필드로 읽음)
+        override = self.settings.tau_overrides().get(source_key)
+        # 소스를 추가하면 yaml thresholds에도 함께 등록한다 (기본값 없음 — 누락은 설정 오류)
+        return override if override is not None else self.config.retrieval.thresholds[source_key]
 ```
 
 Spring Boot는 `status == "NO_CONTEXT"` 수신 시 SSE `error` 이벤트 없이
@@ -57,15 +57,15 @@ UI 전용 메시지를 `done` 이벤트와 함께 전달한다.
 retrieval:
   top_k: 5
   thresholds:
-    langchain_v03: 0.5   # E1 실험 확정값
-    langchain_v1x: 0.5   # E1 실험 확정값
+    langchain_v03: 0.30  # 개발용 가정값 — E1 부속 실험(R-4-6)에서 확정
+    langchain_v1x: 0.30  # 개발용 가정값 — E1 부속 실험(R-4-6)에서 확정
 ```
 
-운영 환경 오버라이드 (.env):
+운영 환경 오버라이드 (.env, 선택 — 설정하지 않으면 yaml 값):
 
 ```dotenv
-TAU_LANGCHAIN_V03=0.5
-TAU_LANGCHAIN_V1X=0.5
+# TAU_LANGCHAIN_V03=<value>
+# TAU_LANGCHAIN_V1X=<value>
 ```
 
 ## Consequences
@@ -81,8 +81,9 @@ TAU_LANGCHAIN_V1X=0.5
 - 임계값은 임베딩 모델 교체 시 재교정 필요
 
 **τ 선정 근거**
-- E1 평가 실험(`eval-scenarios.md`) 결과 source_key별 0.5가 precision/recall 균형점으로 확인됨
-- `text-embedding-3-small` 모델 기준, 0.5 미만은 도메인 무관 문서 혼입 위험
+- 현재 값 0.30은 개발용 가정값이다(`docs/planning/policy.md` > 미결정 사항 "NO_CONTEXT 임계값 τ"). E1 결과로 확인된 값이 아니다.
+- E1 부속 실험(`docs/experiments/protocol.md` > 실험 E1)에서 Q-oos·Q-ret similarity 분포의 오탐·미탐 균형점으로 source_key별 값을 확정한다.
+- 확정하면 이 ADR, 정책서 §5.3·미결정 사항, `configs/rag.yaml`, 검증 게이트 스모크 τ를 같은 PR에서 함께 바꾼다.
 - source_key 추가 시 E1 동일 프로토콜로 개별 교정 필요
 
 **관련 ADR**
