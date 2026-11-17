@@ -49,6 +49,7 @@ public class ChatRelayService {
   private final AiServerProperties properties;
   private final PersistFailureRegistry persistFailures;
   private final GuestSessionService guests;
+  private final QuestionRateLimiter rateLimiter;
 
   public ChatRelayService(
       SourceCatalog sourceCatalog,
@@ -56,13 +57,15 @@ public class ChatRelayService {
       AiServerChatClient aiServer,
       AiServerProperties properties,
       PersistFailureRegistry persistFailures,
-      GuestSessionService guests) {
+      GuestSessionService guests,
+      QuestionRateLimiter rateLimiter) {
     this.sourceCatalog = sourceCatalog;
     this.messages = messages;
     this.aiServer = aiServer;
     this.properties = properties;
     this.persistFailures = persistFailures;
     this.guests = guests;
+    this.rateLimiter = rateLimiter;
   }
 
   /** Guest stream plus the {@code Set-Cookie} value of a newly issued session (or null). */
@@ -77,6 +80,7 @@ public class ChatRelayService {
   public Flux<ServerSentEvent<String>> streamForUser(
       Long userId, ChatStreamRequest request, String requestId) {
     request.requireSupportedMode();
+    rateLimiter.acquire(userId); // 10 per minute (policy §8.1)
     boolean followUp = request.conversationId() != null;
     String sourceKey =
         followUp
