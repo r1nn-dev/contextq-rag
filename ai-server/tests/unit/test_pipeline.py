@@ -1,6 +1,7 @@
 """파이프라인 COLLECTING·PROCESSING — 성공 시 SHA·리포트, 실패 시 FAILED(단계)와 ACTIVE 유지."""
 
 import csv
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -43,11 +44,29 @@ def test_processing_records_sha_and_missing_snippets(
 
     assert summary.status == IngestStatus.PROCESSING
     assert (summary.documents, summary.sections, summary.missing_snippets) == (2, 3, 1)
+    assert summary.chunks >= summary.sections
     with session_factory() as db:
         run = db.get_one(IngestRun, summary.run_id)
         assert run.commit_sha is not None and len(run.commit_sha) == 40
         assert run.started_at is not None
         assert run.missing_snippets_count == 1
+        # PENDING 시점에 기록하는 실행 파라미터 (정책서 §10.1)
+        assert run.chunk_strategy == "B"
+        assert run.chunk_params == {
+            "chunk_size": 1000,
+            "chunk_overlap": 200,
+            "separators": ["\n\n", "\n", " "],
+        }
+        assert run.chunk_params_hash is not None and len(run.chunk_params_hash) == 8
+        assert run.embedding_model == "text-embedding-3-small"
+
+    chunking = json.loads(
+        (tmp_path / "data" / "reports" / f"run{summary.run_id}" / "chunking.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert chunking["chunks"] == summary.chunks
+    assert chunking["skipped_documents"] == []
 
     report = tmp_path / "data" / "reports" / f"run{summary.run_id}" / "missing_snippets.csv"
     with report.open(encoding="utf-8") as fp:
@@ -112,3 +131,12 @@ def test_unregistered_adapter_fails_processing(
         failed = db.get_one(IngestRun, info.value.run_id)
         assert failed.failure_stage == "PROCESSING"
         assert "AdapterNotRegisteredError" in (failed.failure_reason or "")
+
+
+def test_strategy_option_is_recorded(
+    session_factory: sessionmaker[Session], tmp_path: Path, remote_base: str
+) -> None:
+    options = IngestOptions(data_dir=tmp_path / "data", strategy="C", remote_base=remote_base)
+    summary = run_ingest(session_factory, "langchain_v1x", options)
+    with session_factory() as db:
+        assert db.get_one(IngestRun, summary.run_id).chunk_strategy == "C"

@@ -387,6 +387,7 @@ yield SseEvent(event="error", data={
 | 파일 | 주요 설정값 |
 | --- | --- |
 | `configs/pipeline.yaml` | `history_window` (멀티턴 N턴), `rewrite_model` |
+| `configs/ingest.yaml` | 청킹 전략 A·B·C 파라미터, 기본 전략 (인덱스 빌드 전용, `docs/specs/doc-source.md` §6) |
 | `configs/retriever.yaml` | `top_k`, `tau_langchain_v03`, `tau_langchain_v1x` |
 | `configs/models/openai.yaml` | `model`, `temperature`, `max_tokens` |
 | `configs/prompts/qa_system.jinja2` | 단일 모드 시스템 프롬프트 템플릿 |
