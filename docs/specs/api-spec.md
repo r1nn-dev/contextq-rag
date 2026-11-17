@@ -777,10 +777,17 @@ data: {"event":"done", "status":"COMPLETED", ...}
 | `lastMessageStatus` | 최신 ASSISTANT 메시지 status. null이면 USER 메시지만 존재 |
 | `cursor` | 다음 페이지 `before` 파라미터 값. 마지막 페이지이면 null |
 
+**조회 규칙**
+
+- 정렬은 `updatedAt` 내림차순, 같은 시각이면 `conversationId` 내림차순이다. `cursor`는 이번 페이지 마지막 항목의 `updatedAt`이다.
+- `versionLabel`·`status`는 소스 카탈로그(§6.3, 60초 캐시)로 계산한다. 카탈로그에 없는 `sourceKey`는 비활성으로 보고, `versionLabel`에는 `sourceKey` 값을 그대로 쓴다.
+- 카탈로그를 가져올 수 없으면(ai-server 장애, 캐시 없음) 목록 조회를 실패시키지 않는다. `status`는 메시지 수로만 판정하고 `versionLabel`은 `sourceKey` 값을 쓴다. 이어서 질문은 질문 시점에 다시 검증한다(§3.1).
+
 **에러**
 
 | 코드 | HTTP | 조건 |
 | --- | --- | --- |
+| `INVALID_REQUEST` | 400 | `size`가 1~20 밖이거나 `before`가 ISO 8601 시각이 아님 |
 | `AUTH_TOKEN_MISSING` | 401 | JWT 없음 |
 | `AUTH_TOKEN_EXPIRED` | 401 | Access Token 만료 |
 
@@ -852,7 +859,16 @@ data: {"event":"done", "status":"COMPLETED", ...}
 }
 ```
 
-**비교 모드 ASSISTANT 메시지 추가 필드**
+**응답 규칙**
+
+- `messages`는 생성 시각 오름차순, 같은 시각이면 `messageId` 오름차순이다. `status`·`messageCount`는 §4.1과 같은 규칙으로 계산한다.
+- 종결 전(`PENDING`·`STREAMING`·`PROCESSING`) ASSISTANT의 `content`는 빈 문자열이다. 토큰은 종결 시 한 번만 저장한다(정책서 §6.3).
+- `snapshot`은 `meta`를 받기 전에 끝난 답변(수집 커밋 SHA 없음)이면 null이다. `snapshot.versionLabel`은 §4.1 `versionLabel`과 같은 규칙으로 정한다.
+- `usage`는 토큰 수가 없으면 null이다. `latency`는 다섯 값이 모두 없으면 null이고, 일부만 없으면 그 값만 null이다.
+- `sources[].rank`는 `rankLabel`의 순번 숫자다. 출처가 없으면 빈 배열이다.
+- `rewrittenQuery`는 재작성하지 않았거나(첫 질문·`SKIPPED`) 폴백한 경우 null이다.
+
+**비교 모드 ASSISTANT 메시지 추가 필드** (비교 모드 구현 시 채운다)
 
 ```json
 {
@@ -882,6 +898,7 @@ data: {"event":"done", "status":"COMPLETED", ...}
 
 | 코드 | HTTP | 조건 |
 | --- | --- | --- |
+| `INVALID_REQUEST` | 400 | `conversationId`가 정수가 아님 |
 | `AUTH_TOKEN_MISSING` | 401 | JWT 없음 |
 | `AUTH_TOKEN_EXPIRED` | 401 | Access Token 만료 |
 | `CONVERSATION_NOT_FOUND` | 404 | 없는 대화 또는 타인 대화 (INV-14) |
