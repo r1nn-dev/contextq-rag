@@ -15,6 +15,9 @@ WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY src/ src/
 COPY configs/ configs/
+# ai 스키마 마이그레이션 — 배포 환경에서 `alembic upgrade head`로 적용
+COPY alembic.ini ./
+COPY alembic/ alembic/
 
 ENV PATH="/app/.venv/bin:$PATH"
 
