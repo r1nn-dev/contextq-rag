@@ -1,11 +1,13 @@
 """2단계 방어 측정 — 검색 단계 τ 차단(LOW_SIMILARITY) + 생성 단계 근거 부족 판정(LLM_ABSTAIN).
 
-    uv run python -m src.eval.abstain [--out ../eval/results/E1/e1_l3_results.jsonl]
+    uv run python -m src.eval.abstain [--prompt-version single_v2] [--out <경로>]
 
 - 서비스와 같은 `SingleModePipeline`(실제 검색기·생성기, `configs/rag.yaml` τ)을 그대로 돌린다.
 - Q-oos 10문항 × 두 버전, Q-ret 40문항 × 대상 버전. 생성 LLM은 τ를 통과한 질문에서만 호출된다.
 - 정책서 §5.4: 기획서 처리율 지표는 LOW_SIMILARITY만 센다. 이 측정은 LLM_ABSTAIN을 더한
   2단계 처리율과, 정상 질문이 생성 단계에서 막히는 비율(성능 손실)을 따로 보고한다.
+- 프롬프트 버전 비교(정책서 §5.5): 버전마다 `eval/results/E1/e1_l3_{prompt_version}.jsonl`에 쓴다.
+  기본값은 `configs/rag.yaml` `generation.prompt_version`.
 - DB(ACTIVE 포인터)·Chroma 인덱스·OpenAI 키가 필요하다 → 사용자 터미널에서 실행.
 """
 
@@ -35,7 +37,7 @@ from src.retrieval.embedding import OpenAIQueryEmbedder
 from src.retrieval.pointers import ActiveIndex, StaticPointers
 from src.retrieval.search import ChromaRetriever
 
-OUT_PATH = Path(__file__).resolve().parents[3] / "eval" / "results" / "E1" / "e1_l3_results.jsonl"
+RESULTS_DIR = Path(__file__).resolve().parents[3] / "eval" / "results" / "E1"
 CONCURRENCY = 4  # OpenAI 요청 동시 수 (측정 시간 단축용, 결과에는 영향 없음)
 
 
@@ -158,7 +160,8 @@ async def measure(
 
 def main(argv: Sequence[str] | None = None, settings: Settings | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m src.eval.abstain")
-    parser.add_argument("--out", type=Path, default=OUT_PATH)
+    parser.add_argument("--prompt-version", help="기본값: rag.yaml generation.prompt_version")
+    parser.add_argument("--out", type=Path, help="기본값: e1_l3_{prompt_version}.jsonl")
     args = parser.parse_args(argv)
     settings = settings or Settings()
     sets = load_question_sets()
@@ -171,6 +174,8 @@ def main(argv: Sequence[str] | None = None, settings: Settings | None = None) ->
     finally:
         engine.dispose()
     config = load_rag_config()
+    prompt_version = args.prompt_version or config.generation.prompt_version
+    out = args.out or RESULTS_DIR / f"e1_l3_{prompt_version}.jsonl"
     retriever = ChromaRetriever(
         ChromaVectorStore(settings.chroma_data_dir),
         StaticPointers(indexes),
@@ -182,19 +187,17 @@ def main(argv: Sequence[str] | None = None, settings: Settings | None = None) ->
     pipeline = SingleModePipeline(
         retriever, generator, config.retrieval, tau_overrides=settings.tau_overrides()
     )
-    outcomes = asyncio.run(
-        measure(pipeline, indexes, probes(tau_ids), config.generation.prompt_version)
-    )
+    outcomes = asyncio.run(measure(pipeline, indexes, probes(tau_ids), prompt_version))
 
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    with args.out.open("w", encoding="utf-8", newline="\n") as f:
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w", encoding="utf-8", newline="\n") as f:
         for o in outcomes:
             f.write(json.dumps(asdict(o), ensure_ascii=False) + "\n")
     reconfigure = getattr(sys.stdout, "reconfigure", None)
     if reconfigure is not None:
         reconfigure(encoding="utf-8")
     taus = {key: config.retrieval.tau(key, settings.tau_overrides()) for key in indexes}
-    print(f"τ: {taus} · 결과: {args.out}")
+    print(f"τ: {taus} · 프롬프트: {prompt_version} · 결과: {out}")
     for row in summarize(outcomes):
         print(
             f"{row['question_set']} {row['version']} n={row['n']} "

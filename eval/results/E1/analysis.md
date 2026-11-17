@@ -68,7 +68,7 @@ K별 전체 값은 `e1_summary.csv`를 본다.
 
 ## 4. 2단계 방어 측정 (생성 단계 근거 부족 판정)
 
-`uv run python -m src.eval.abstain` — 서비스와 같은 `SingleModePipeline`(τ 0.29/0.34, 프롬프트 `single_v1`, `gpt-4o-mini-2024-07-18`, temperature 0)으로 Q-oos 10문항 × 두 버전과 Q-ret 40문항을 실행했다. 결과는 `e1_l3_results.jsonl`(60행)이다. 오류 0건, 2차 검증 폐기 로그 0건, 생성 토큰은 프롬프트 43,985 · 완료 8,143(43회 호출)이었다.
+`uv run python -m src.eval.abstain` — 서비스와 같은 `SingleModePipeline`(τ 0.29/0.34, 프롬프트 `single_v1`, `gpt-4o-mini-2024-07-18`, temperature 0)으로 Q-oos 10문항 × 두 버전과 Q-ret 40문항을 실행했다. 결과는 `e1_l3_single_v1.jsonl`(60행)이다. 오류 0건, 2차 검증 폐기 로그 0건, 생성 토큰은 프롬프트 43,985 · 완료 8,143(43회 호출)이었다.
 
 | 구분 | n | τ 차단 | 생성 단계 근거 부족 | 답변 | 처리율(τ) | 처리율(τ + 생성) |
 | --- | --- | --- | --- | --- | --- | --- |
