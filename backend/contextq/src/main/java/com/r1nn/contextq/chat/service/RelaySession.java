@@ -21,6 +21,9 @@ import tools.jackson.databind.node.ObjectNode;
 /**
  * State of one relayed answer (one per request, used by one stream at a time).
  *
+ * <p>Methods are synchronized: events arrive on a worker thread while a client cancel arrives on
+ * the servlet thread.
+ *
  * <p>Turns each ai-server event into the event sent to the browser and persists the steps of policy
  * §6.3: {@code meta} → snapshot, {@code token} → memory only, {@code done}/{@code error}/
  * timeout/disconnect → one terminal UPDATE. After the terminal event nothing else is emitted
@@ -33,6 +36,7 @@ final class RelaySession {
   private static final int REWRITTEN_QUERY_MAX = 200;
 
   private final ChatMessageService messages;
+  private final PersistFailureRegistry persistFailures;
   private final ObjectMapper json;
   private final Long conversationId;
   private final Long answerId;
@@ -46,12 +50,14 @@ final class RelaySession {
 
   RelaySession(
       ChatMessageService messages,
+      PersistFailureRegistry persistFailures,
       ObjectMapper json,
       Long conversationId,
       Long answerId,
       String requestId,
       String sourceKey) {
     this.messages = messages;
+    this.persistFailures = persistFailures;
     this.json = json;
     this.conversationId = conversationId;
     this.answerId = answerId;
@@ -72,7 +78,7 @@ final class RelaySession {
   }
 
   /** Browser events for one upstream event (empty when nothing is relayed). */
-  List<ServerSentEvent<String>> handle(ServerSentEvent<String> event) {
+  synchronized List<ServerSentEvent<String>> handle(ServerSentEvent<String> event) {
     if (ended) {
       return List.of();
     }
@@ -100,7 +106,7 @@ final class RelaySession {
   }
 
   /** Stream failed before a terminal event: timeout or broken upstream (api-spec §3.1). */
-  List<ServerSentEvent<String>> fail(Throwable error) {
+  synchronized List<ServerSentEvent<String>> fail(Throwable error) {
     if (ended) {
       return List.of();
     }
@@ -114,8 +120,23 @@ final class RelaySession {
     return List.of(terminate(ErrorCode.AI_UNAVAILABLE.name(), "AI_UNAVAILABLE", null));
   }
 
+  /**
+   * Browser went away (policy §2.3): the upstream subscription is already being cancelled, which
+   * closes the ai-server connection and its OpenAI stream. Store what was received.
+   */
+  synchronized void onClientCancel() {
+    if (ended) {
+      return;
+    }
+    ended = true;
+    log.info("stream_aborted requestId={} reason=CLIENT_ABORTED tokens={}", requestId, tokens);
+    persist(
+        tokens > 0 ? MessageStatus.PARTIAL : MessageStatus.FAILED,
+        AnswerOutcome.interrupted(content.toString(), "CLIENT_ABORTED"));
+  }
+
   /** Upstream closed without {@code done}/{@code error}. */
-  List<ServerSentEvent<String>> endIfOpen() {
+  synchronized List<ServerSentEvent<String>> endIfOpen() {
     if (ended) {
       return List.of();
     }
@@ -209,12 +230,22 @@ final class RelaySession {
     return json.writeValueAsString(error);
   }
 
+  /**
+   * Terminal UPDATE with one retry (policy §2.3). When both attempts fail the browser already has
+   * the answer; the sweeper stores it as {@code FAILED(PERSIST_ERROR)} after 150 s.
+   */
   private void persist(MessageStatus status, AnswerOutcome outcome) {
     try {
       messages.finish(answerId, status, outcome);
-    } catch (RuntimeException e) {
-      // the browser already has the answer; the sweeper ends a stuck STREAMING row later
-      log.error("answer_persist_failed requestId={} messageId={}", requestId, answerId, e);
+      return;
+    } catch (RuntimeException first) {
+      log.warn("answer_persist_retry requestId={} messageId={}", requestId, answerId, first);
+    }
+    try {
+      messages.finish(answerId, status, outcome);
+    } catch (RuntimeException second) {
+      log.error("answer_persist_failed requestId={} messageId={}", requestId, answerId, second);
+      persistFailures.record(answerId, outcome.content());
     }
   }
 

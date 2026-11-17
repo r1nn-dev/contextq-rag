@@ -155,7 +155,7 @@ public class ChatMessageService {
    */
   @Transactional
   public MessageStatus finish(Long answerId, MessageStatus status, AnswerOutcome outcome) {
-    Message answer = messages.findById(answerId).orElseThrow();
+    Message answer = messages.findByIdForUpdate(answerId).orElseThrow();
     if (answer.getStatus().isTerminal()) {
       log.warn(
           "answer_already_terminal messageId={} stored={} ignored={}",
