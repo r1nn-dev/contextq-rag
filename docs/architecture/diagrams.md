@@ -36,7 +36,7 @@ graph TB
         N[nginx\n리버스 프록시·Rate Limit·SSE 중계]
         BE["Spring Boot\n인증·이력·프록시 (app 스키마 소유)"]
         AI["FastAPI\nRAG 파이프라인 (ai 스키마 소유)"]
-        VDB[("Chroma\nVector DB")]
+        VDB[("Chroma (임베디드)\nai-server 내부 · 볼륨")]
         RDB[("PostgreSQL\napp + ai 스키마")]
     end
 
@@ -60,7 +60,7 @@ graph TB
     AI -.->|"스냅샷 tar.gz 저장·복원"| S3
 ```
 
-- **컨테이너 5개:** nginx, backend(Spring Boot), ai-server(FastAPI), chroma, postgres — `docker-compose up`으로 통합 실행
+- **컨테이너 4개:** nginx, backend(Spring Boot), ai-server(FastAPI), postgres — `docker-compose up`으로 통합 실행. Chroma는 별도 컨테이너가 아니라 ai-server에 임베디드되고 데이터는 볼륨에 둔다 (ADR-002)
 - **네트워크 경계:** nginx만 외부 노출. ai-server `/internal/**`는 nginx에서 차단 — 외부에서 직접 접근 불가
 - **스키마 소유권:** `app` 스키마 = backend 독점 쓰기, `ai` 스키마 = ai-server 독점 쓰기. backend는 ai 스키마 테이블을 직접 읽지 않고 ai-server `GET /internal/v1/sources`로 조회
 

@@ -7,7 +7,7 @@
 ## 1. 개요
 
 - **목적**: E1~E6 실험에서 사용하는 평가 메트릭을 정의하고, 결과 기록 스키마 및 판정 기준을 명시한다.
-- **범위**: 검색 품질(E1·E2), 답변 정확도(E3), 성능(E5·E6)을 포함한다. 실험 절차 자체는 `claude/protocol.md`를, 질문셋 정의는 `claude/eval-scenarios.md`를 참조한다.
+- **범위**: 검색 품질(E1·E2), 답변 정확도(E3), 성능(E5·E6)을 포함한다. 실험 절차 자체는 `docs/experiments/protocol.md`를, 질문셋 정의는 `docs/experiments/eval-scenarios.md`를 참조한다.
 - **공통 조건**: seed=42, temperature=0, 모든 실험 결과는 `eval/results/{실험ID}/`(예: `eval/results/E1/`)에 저장.
 
 ---
@@ -82,7 +82,7 @@ ContaminationRate@K = (1/|Q|) × Σ ContaminationRate@K(q)
 | **FPR_NC** | Q-ret 중 NO_CONTEXT 오발동 비율 | ≤ 0.05 |
 | **F1_NC** | 2 × (Recall_NC × (1−FPR_NC)) / (Recall_NC + (1−FPR_NC)) | 최대화 |
 
-τ 결정 절차: `claude/protocol.md` §E1 참조.
+τ 결정 절차: `docs/experiments/protocol.md` > 실험 E1 참조.
 
 ---
 
@@ -343,7 +343,7 @@ E1·E2는 평가 러너가 행 단위 결과와 요약을 함께 만든다(`make
 
 - [ ] **EV-1** E3 외부 레이블러 섭외 및 레이블링 가이드 작성 (W4 이전)
 - [ ] **EV-2** `scripts/eval/aggregate_e3.py`·`aggregate_e5.py` 구현 (E1·E2 집계는 평가 러너가 수행)
-- [ ] **EV-3** E6 k6 시나리오 S0~S4 스크립트 작성 (`scripts/load/`) — `claude/protocol.md` §E6 참조
+- [ ] **EV-3** E6 k6 시나리오 S0~S4 스크립트 작성 (`scripts/load/`) — `docs/experiments/protocol.md` > 실험 E6 참조
 - [ ] **EV-4** TTFT 측정 위치 확정 — 클라이언트 측(curl) vs 서버 로그 중 primary로 사용할 기준 결정
 - [ ] **EV-5** Cohen's κ 계산 스크립트 (`scripts/eval/kappa.py`) 구현
 
