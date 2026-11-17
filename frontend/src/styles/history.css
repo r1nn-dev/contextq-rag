@@ -1,0 +1,66 @@
+/* History list (docs/ui/screenshots/14) */
+.history {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.search-input {
+  width: 200px;
+  padding: 6px 12px;
+  border-radius: var(--r);
+  border: 1px solid var(--border-2);
+  background: var(--surface);
+  font-size: 13px;
+}
+.search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.history-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.history-card {
+  display: block;
+  padding: 18px 20px;
+  border-radius: var(--r);
+  border: 1px solid var(--border-2);
+  background: var(--surface);
+  color: var(--text);
+  transition: border-color 0.15s;
+}
+.history-card:hover {
+  color: var(--text);
+  border-color: rgba(91, 108, 247, 0.5);
+}
+.history-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.history-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.history-meta .spacer {
+  flex: 1;
+}
+
+.history-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+  font-size: 13px;
+  color: var(--text-3);
+}

@@ -37,6 +37,8 @@ export interface QuerySelection {
 export interface SseQueryCallbacks {
   onMeta?: (meta: MetaEvent) => void
   onPreStreamError?: (error: ApiError) => void
+  /** called once a request settles (not when aborted), e.g. to refresh the conversation list */
+  onFinish?: () => void
 }
 
 let turnSeq = 0
@@ -149,6 +151,7 @@ export function useSseQuery(callbacks: SseQueryCallbacks = {}) {
         }))
       } finally {
         if (abortRef.current === controller) abortRef.current = null
+        if (!controller.signal.aborted) callbacksRef.current.onFinish?.()
       }
     },
     [patch],

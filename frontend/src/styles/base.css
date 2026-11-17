@@ -279,3 +279,21 @@ pre {
 .center-fill h2 {
   font-size: 17px;
 }
+
+/* inline alerts (auth, history, admin) */
+.form-alert {
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  border-radius: var(--r);
+  font-size: 13px;
+  background: var(--red-dim);
+  color: var(--red);
+}
+.form-alert.info {
+  background: var(--yellow-dim);
+  color: var(--yellow);
+}
+
+.btn-ghost:disabled {
+  opacity: 0.45;
+}

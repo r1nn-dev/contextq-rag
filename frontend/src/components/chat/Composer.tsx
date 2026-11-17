@@ -11,6 +11,7 @@ interface ComposerProps {
   onSubmit: (question: string) => void
   onStop?: () => void
   streaming?: boolean
+  autoFocus?: boolean
 }
 
 export function Composer({
@@ -22,6 +23,7 @@ export function Composer({
   onSubmit,
   onStop,
   streaming = false,
+  autoFocus = false,
 }: ComposerProps): JSX.Element {
   const [focused, setFocused] = useState(false)
   const trimmed = value.trim()
@@ -60,6 +62,7 @@ export function Composer({
           value={value}
           placeholder={placeholder}
           disabled={disabled}
+          autoFocus={autoFocus}
           aria-label="질문 입력"
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={onKeyDown}
