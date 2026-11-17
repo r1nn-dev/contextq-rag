@@ -323,7 +323,7 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 | 모델 | `LLM_MODEL` 환경 변수, 기본 `gpt-4o-mini`. 메시지에 실제 모델명 기록 |
 | 파라미터 | temperature 0, `max_tokens` 1,024 |
 | 프롬프트 규칙 | ① 컨텍스트 밖 지식으로 API·코드를 만들지 않는다 ② 주장마다 [n] 인용 ③ 선택 버전을 답변 첫 줄에 명시 ④ 코드 예시는 컨텍스트 코드에 근거 ⑤ 근거 부족 시 sentinel |
-| 프롬프트 버전 | `prompts/` 디렉터리의 파일명 = `prompt_version`(예: `single_v3`). 변경은 PR + 동일 질문셋 비교 결과 첨부 |
+| 프롬프트 버전 | `ai-server/configs/prompts/` 파일명(확장자 `.j2` 제외) = `prompt_version`(예: `single_v1`). 변경은 새 파일 추가(기존 버전 파일 수정 금지) + PR + 동일 질문셋 비교 결과 첨부 |
 | 인용 검증 | 스트림 종료 시 본문의 [n]을 파싱해 범위 밖 번호를 `done.invalidCitations`로 전송. UI는 해당 번호를 비활성 렌더 |
 
 ### 5.6 생성(비교 모드)
