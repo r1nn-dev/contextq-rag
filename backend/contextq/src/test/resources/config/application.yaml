@@ -1,0 +1,4 @@
+# Test-only overrides (classpath:/config/ wins over classpath:/application.yaml).
+# The secret below is a fixed test value, not used anywhere else.
+jwt:
+  secret: test-only-jwt-secret-0123456789abcdef-0123456789abcdef
