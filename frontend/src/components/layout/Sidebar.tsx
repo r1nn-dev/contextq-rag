@@ -33,6 +33,11 @@ export function UserFooter(): JSX.Element | null {
       <span className="email" title={user.email}>
         {user.email}
       </span>
+      {admin && (
+        <Link to="/admin/index" className="btn-ghost icon-btn" title="관리자 패널" aria-label="관리자 패널">
+          <Icon name="grid" size={16} />
+        </Link>
+      )}
       <button
         type="button"
         className="btn-ghost icon-btn"

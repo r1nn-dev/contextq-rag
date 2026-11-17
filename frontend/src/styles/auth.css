@@ -62,19 +62,6 @@
   border-color: var(--red);
 }
 
-.form-alert {
-  padding: 10px 12px;
-  margin-bottom: 16px;
-  border-radius: var(--r);
-  font-size: 13px;
-  background: var(--red-dim);
-  color: var(--red);
-}
-.form-alert.info {
-  background: var(--yellow-dim);
-  color: var(--yellow);
-}
-
 .divider {
   display: flex;
   align-items: center;
