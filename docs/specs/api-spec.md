@@ -663,6 +663,22 @@ data: {"event":"done", "status":"COMPLETED", ...}
 | `GUEST_SESSION_LIMIT` | 429 | IP당 신규 세션 초과 |
 | `CONCURRENT_STREAM_LIMIT` | 429 | 동시 스트림 초과 |
 | `INDEX_NOT_ACTIVE` | 503 | ACTIVE run 없음 |
+| `AI_UNAVAILABLE` | 503 | ai-server 연결 3초 실패, 또는 ai-server 스트림 전 오류 중 아래 그대로 전달하는 코드가 아닌 것(`INTERNAL_UNAUTHORIZED`·`INTERNAL_ERROR`·`INVALID_REQUEST` 등) |
+| `AI_BUSY` | 503 | ai-server 동시 생성 한도 초과 (ai-server 응답 그대로 전달) |
+| `EMBEDDING_MODEL_MISMATCH` | 500 | ai-server 응답 그대로 전달 |
+
+- backend는 ai-server 응답 헤더(HTTP 상태)를 받을 때까지 기다린 뒤 브라우저에 200을 보낸다. ai-server가 스트림 전 오류(6.1 표)를 주면 브라우저도 일반 JSON 오류를 받는다. 그대로 전달하는 코드: `SOURCE_NOT_FOUND`·`SOURCE_UNAVAILABLE`·`INDEX_NOT_ACTIVE`·`AI_BUSY`·`EMBEDDING_MODEL_MISMATCH`.
+- 기존 대화(`conversationId` 지정)의 버전 값이 대화 설정과 다르면 `INVALID_REQUEST`(400), 메시지 100개면 `CONVERSATION_FULL`, 대화의 소스가 비활성이면 `SOURCE_UNAVAILABLE`이다(정책서 §5.1·§2.3). 버전 값을 생략하면 대화 설정을 쓴다.
+- 비교 모드(`COMPARE`)는 비교 모드 구현 전까지 `INVALID_REQUEST`(400, `field: "mode"`)다.
+
+**스트림 후 `error` 이벤트 (backend가 보내는 코드)**
+
+| 상황 | `code` | `partial` | 저장 상태(`status_reason`) |
+| --- | --- | --- | --- |
+| ai-server `error` 이벤트 | ai-server 코드 그대로. 단 `INTERNAL_ERROR`·`INTERNAL_UNAUTHORIZED`는 `AI_UNAVAILABLE` | 브라우저에 보낸 토큰 ≥ 1 | 토큰 ≥ 1: PARTIAL, 0: FAILED (ai-server 코드) |
+| 첫 이벤트 15초 초과 | `UPSTREAM_TIMEOUT` | false | FAILED (`UPSTREAM_TIMEOUT`) |
+| 이벤트 간격 30초 초과 | `UPSTREAM_TIMEOUT` | 토큰 ≥ 1 | PARTIAL·FAILED (`UPSTREAM_IDLE_TIMEOUT`) |
+| ai-server 연결이 종결 이벤트 없이 끊김 | `AI_UNAVAILABLE` | 토큰 ≥ 1 | PARTIAL·FAILED (`AI_UNAVAILABLE`) |
 
 **처리 흐름 (backend)**
 
