@@ -55,6 +55,20 @@ openssl rand -hex 32
 
 > Access Token 만료 시간(`expiration-ms`)은 `application.yml`에 `86400000` (24시간)으로 고정 관리된다. `.env` 오버라이드 불필요.
 
+### 1.3.1 관리자 시드
+
+| 변수명 | 설명 | 예시 / 기본값 | 필수 |
+|---|---|---|---|
+| `ADMIN_EMAIL` | 기동 시 1회 만드는 관리자 계정 이메일. 비우면 시드를 건너뛴다 | `admin@example.com` | 선택 |
+| `ADMIN_PASSWORD_BCRYPT` | 관리자 비밀번호의 BCrypt 해시(`$2a$10$…`). 평문을 넣으면 시드를 거부하고 오류 로그만 남긴다 | `<placeholder>` | 선택 |
+
+```bash
+# BCrypt 해시 생성 (cost 10) — 비밀번호는 별도 터미널에서 입력
+htpasswd -bnBC 10 "" '<password>' | tr -d ':\n' | sed 's/^\$2y/\$2a/'
+```
+
+> 이미 같은 이메일 계정이 있으면 건너뛴다(정책서 §1.1). 가입 API로는 관리자를 만들 수 없다.
+
 ### 1.4 Chroma (임베디드)
 
 | 변수명 | 설명 | 예시 / 기본값 | 필수 |

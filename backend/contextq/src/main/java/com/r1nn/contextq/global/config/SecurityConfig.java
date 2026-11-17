@@ -32,6 +32,8 @@ public class SecurityConfig {
                     .permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/v1/sources")
                     .permitAll() // api-spec §0.6: guests may list sources
+                    .requestMatchers(HttpMethod.POST, "/api/v1/auth/signup")
+                    .permitAll()
                     .anyRequest()
                     .authenticated())
         // unauthenticated requests get 401 until JWT filter is added
