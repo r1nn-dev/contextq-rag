@@ -1,0 +1,49 @@
+[
+  {
+    "event": "meta",
+    "requestId": "a1b2c3d4-0000-4000-8000-000000000001",
+    "conversationId": null,
+    "messageId": null,
+    "sourceKey": "langchain_v03",
+    "ingestRunId": 7,
+    "commitSha": "0123456789abcdef0123456789abcdef01234567",
+    "ingestedAt": "2026-10-05",
+    "rewrittenQuery": "LangChain v0.3 Agent 생성 방법",
+    "noContext": false,
+    "sources": [
+      {
+        "rank": 1,
+        "headingPath": "Agents > Creating agents > Basic agent",
+        "permalink": "https://github.com/langchain-ai/langchain/blob/0123456789abcdef0123456789abcdef01234567/docs/agents.md?plain=1#L42-L89",
+        "siteUrl": "https://python.langchain.com/v0.3/docs/agents/",
+        "similarity": 0.8732
+      }
+    ]
+  },
+  {
+    "event": "token",
+    "t": "LangChain v0.3에서 "
+  },
+  {
+    "event": "token",
+    "t": "Agent를 생성하려면 [1]"
+  },
+  {
+    "event": "done",
+    "status": "COMPLETED",
+    "statusReason": null,
+    "finishReason": "stop",
+    "usage": {
+      "prompt": 1240,
+      "completion": 312
+    },
+    "latency": {
+      "rewriteMs": 450,
+      "embedMs": 80,
+      "retrieveMs": 120,
+      "ttftMs": 1850,
+      "totalMs": 5300
+    },
+    "invalidCitations": []
+  }
+]

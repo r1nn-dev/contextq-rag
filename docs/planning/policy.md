@@ -1,6 +1,6 @@
 # 서비스 정책 및 상태 정의
 
-> 최종 수정일: 2026-11-06
+> 최종 수정일: 2026-11-17
 
 ---
 
@@ -109,7 +109,7 @@ INV-05 permalink는 커밋 SHA를 포함한 URL만 허용한다. 브랜치명(ma
 [스트림]
 INV-06 한 응답의 이벤트 순서는 meta → token* → (done | error)이며, meta와 종결 이벤트는 각각 정확히 1회다.
 INV-07 NO_CONTEXT(reason=LOW_SIMILARITY)는 생성 LLM을 호출하지 않는다. (멀티턴 재작성 LLM 호출은 발생할 수 있다)
-INV-08 답변 본문의 인용 번호 [n]은 meta.sources의 rank 범위 안에 있어야 한다. 범위 밖 번호는 done.invalid_citations에 기록된다.
+INV-08 답변 본문의 인용 번호 [n]은 meta.sources의 rank 범위 안에 있어야 한다. 범위 밖 번호는 done.invalidCitations에 기록된다.
 INV-09 HTTP 200으로 스트림이 시작된 이후의 오류는 HTTP 상태가 아니라 error 이벤트로만 전달한다.
 
 [대화·메시지]
@@ -467,7 +467,7 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 ### 9.2 오류 응답 계약
 
 - 스트림 시작 전 오류: HTTP 상태 + `{"code", "message", "request_id", "timestamp"}`.
-- 스트림 시작 후 오류: `event: error` + `{"code", "message", "request_id", "partial": bool}` (INV-09).
+- 스트림 시작 후 오류: `event: error` + `{"code", "message", "requestId", "partial": bool}` (INV-09). 필드 표기는 9.3을 따른다.
 - `message`는 사용자 표시용 한국어. 스택 트레이스·내부 호스트명은 노출하지 않는다.
 
 | 코드 | HTTP | 발생 조건 | 클라이언트 처리 |
@@ -502,13 +502,13 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 
 | 이벤트 | 필드 |
 | --- | --- |
-| `meta` | request_id, conversation_id, message_id, source_key, ingest_run_id, commit_sha, ingested_at, rewritten_query, no_context, sources[{rank, heading_path, permalink, site_url, similarity}] |
+| `meta` | requestId, conversationId, messageId, sourceKey, ingestRunId, commitSha, ingestedAt, rewrittenQuery, noContext, sources[{rank, headingPath, permalink, siteUrl, similarity}] |
 | `token` | `t`(텍스트 조각) |
-| `done` | status(COMPLETED/PARTIAL/NO_CONTEXT), status_reason, finish_reason, usage{prompt, completion}, latency{rewrite_ms, embed_ms, retrieve_ms, ttft_ms, total_ms}, invalid_citations[] |
-| `error` | code, message, request_id, partial |
+| `done` | status(COMPLETED/PARTIAL/NO_CONTEXT/FAILED), statusReason, finishReason, usage{prompt, completion}, latency{rewriteMs, embedMs, retrieveMs, ttftMs, totalMs}, invalidCitations[], compareResult |
+| `error` | code, message, requestId, partial |
 | 주석 `: ping` | 10초 하트비트, 클라이언트는 무시 |
 
-계약은 `contracts/sse-events.schema.json`으로 두고 backend·ai-server 계약 테스트가 같은 파일을 읽는다.
+계약은 `contracts/sse-events.schema.json`으로 두고 backend·ai-server 계약 테스트가 같은 파일을 읽는다. 이벤트 필드는 API 명세 부록 B와 같이 camelCase로 표기한다. `compareResult` 내부 키는 5.6 출력 JSON(snake_case)을 그대로 쓴다.
 
 ### 9.4 관측·배포·백업
 

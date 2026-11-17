@@ -1,0 +1,29 @@
+[
+  {
+    "event": "meta",
+    "requestId": "a1b2c3d4-0000-4000-8000-000000000001",
+    "conversationId": 42,
+    "messageId": 305,
+    "sourceKey": "langchain_v03",
+    "ingestRunId": 7,
+    "commitSha": "0123456789abcdef0123456789abcdef01234567",
+    "ingestedAt": "2026-10-05",
+    "rewrittenQuery": "LangChain v0.3 Agent 생성 방법",
+    "noContext": true,
+    "sources": []
+  },
+  {
+    "event": "done",
+    "status": "NO_CONTEXT",
+    "statusReason": "LOW_SIMILARITY",
+    "finishReason": null,
+    "usage": null,
+    "latency": {
+      "rewriteMs": null,
+      "embedMs": 80,
+      "retrieveMs": 120,
+      "ttftMs": null,
+      "totalMs": 260
+    }
+  }
+]
