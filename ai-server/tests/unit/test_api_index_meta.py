@@ -50,6 +50,7 @@ def test_sources_lists_catalog_active_runs_and_pairs(
         "sources": [
             {
                 "sourceKey": V03,
+                "framework": "langchain",
                 "versionLabel": "v0.3",
                 "displayName": "LangChain v0.3",
                 "enabled": False,
@@ -60,6 +61,7 @@ def test_sources_lists_catalog_active_runs_and_pairs(
             },
             {
                 "sourceKey": V1X,
+                "framework": "langchain",
                 "versionLabel": "v1.x",
                 "displayName": "LangChain v1.x",
                 "enabled": True,

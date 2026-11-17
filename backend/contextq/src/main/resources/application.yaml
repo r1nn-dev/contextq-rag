@@ -32,6 +32,12 @@ spring:
 
 ai-server:
   base-url: ${AI_SERVER_INTERNAL_URL:http://localhost:8000}
+  internal-token: ${INTERNAL_TOKEN:}   # X-Internal-Token (ADR-012); never logged
+  connect-timeout: 3s                  # policy §2.1 WebClient 연결 타임아웃
+  request-timeout: 5s                  # plain JSON calls (source list)
+  first-event-timeout: 15s             # policy §2.1 첫 이벤트(meta) 타임아웃
+  idle-timeout: 30s                    # policy §2.1 유휴 타임아웃
+  sources-cache-ttl: 60s               # policy §2.1 메타 API 캐시
 
 jwt:
   secret: ${JWT_SECRET}       # required — set JWT_SECRET in .env
