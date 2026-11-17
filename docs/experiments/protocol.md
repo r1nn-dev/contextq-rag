@@ -1,6 +1,6 @@
 # 실험 수행 프로토콜
 
-> **최종 수정일:** 2026-11-05
+> **최종 수정일:** 2026-11-17
 
 ---
 
@@ -25,8 +25,9 @@ eval-scenarios.md 참조. `eval-v1` 태그 이후 질문셋을 수정하면 `con
 
 ```
 eval/
-  questions/           # 질문셋 YAML (git 커밋)
+  questions/           # 질문셋 YAML — {RET|OOS|SHR}/{ID}.yaml, 질문 1개 = 파일 1개 (git 커밋)
   decision_rules.md    # E2 사전 결정 규칙 (eval-v1 태그 이전 커밋, 불변)
+  rubric.md            # E3 블라인드 레이블링 루브릭
   cache/               # LLM 응답 캐시 (.gitignore)
   results/
     E1/                # 격리 실험 결과

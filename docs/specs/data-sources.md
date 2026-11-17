@@ -13,14 +13,14 @@
 | --- | --- | --- |
 | LangChain v0.3 공식 문서 | 공개 GitHub 저장소 (MIT) | v0.3 검색 코퍼스. run마다 `langchain_v03_run{id}` Chroma 컬렉션에 적재 |
 | LangChain v1.x 공식 문서 | 공개 GitHub 저장소 (MIT) | v1.x 검색 코퍼스. run마다 `langchain_v1x_run{id}` Chroma 컬렉션에 적재 |
-| 평가 질문셋 Q-ret | 직접 작성 (버전별 10문항) | Retriever 성능 측정 (E2 Hit@K / MRR@K / Precision@K) |
-| 평가 질문셋 Q-oos | 직접 작성 (버전별 10문항) | NO_CONTEXT 임계값 τ 결정 (E1) |
-| 평가 질문셋 Q-shared | 직접 작성 (공통 20문항) | 버전 간 답변 정확도 비교 (E3) |
+| 평가 질문셋 Q-ret | AI 초안 + 사람 검수 (40문항, 버전별 20) | 검색 품질·혼입 측정 (E1 혼입률, E2 Hit@K / MRR@K / Precision@K) |
+| 평가 질문셋 Q-oos | AI 초안 + 사람 검수 (10문항) | NO_CONTEXT 임계값 τ 결정 (E1) |
+| 평가 질문셋 Q-shared | AI 초안 + 사람 검수 (공통 20문항 × 2버전) | 버전 간 답변 정확도 비교 (E3) |
 
 - 공식 문서는 외부 ML 데이터셋이 아니라 **검색 코퍼스(retrieval corpus)** 역할을 한다. 모델 학습에는 쓰지 않는다.
 - 수집 대상(저장소·ref·문서 경로·포맷·Adapter)은 `ai.sources` 카탈로그가 소유한다. 이 문서는 카탈로그 값의 근거와 포함·제외 경로를 기록한다.
 - v0.3과 v1.x 코퍼스는 run 단위로 분리된 별개의 Chroma 컬렉션에 적재한다(ADR-004).
-- 평가 질문셋은 `eval/questions/` 에 버전으로 커밋한다. 실험 도중 질문을 수정하지 않는다.
+- 평가 질문셋은 `eval/questions/` 에 커밋하고 `eval-v1` 태그로 고정한다. 태그 이후에는 질문을 수정하지 않는다(`docs/experiments/protocol.md` §0.2).
 
 ---
 
@@ -143,17 +143,18 @@ ${INGEST_DATA_DIR}/            # 기본값 ./data (ai-server 기준). Git에 올
 
 ## 4. 평가 질문셋
 
-평가 질문셋은 **직접 작성**한다. LLM으로 생성하지 않는다 (편향 통제).
+평가 질문셋은 **AI가 초안을 쓰고 사람이 검수**한다. 검수하지 않은 문항은 실험에 쓰지 않는다.
 
 | 질문셋 | 파일 | 작성 기준 |
 | --- | --- | --- |
-| Q-ret (v0.3) | `eval/questions/q_ret_v03.jsonl` | v0.3 문서에 정답이 명확히 존재하는 질문 10개. 정답 위치(파일·heading_path) 기록 |
-| Q-ret (v1.x) | `eval/questions/q_ret_v1x.jsonl` | v1.x 문서에 정답이 명확히 존재하는 질문 10개. 정답 위치 기록 |
-| Q-oos (v0.3) | `eval/questions/q_oos_v03.jsonl` | v0.3 문서에 존재하지 않는 주제 (예: v1.x 전용 API). NO_CONTEXT 를 유도해야 한다 |
-| Q-oos (v1.x) | `eval/questions/q_oos_v1x.jsonl` | v1.x 문서에 존재하지 않는 주제 (예: 삭제된 v0.3 API) |
-| Q-shared | `eval/questions/q_shared.jsonl` | v0.3·v1.x 모두에서 답변 가능한 공통 개념 20개 (E3 비교 실험용). 버전별 정답 위치 기록 |
+| Q-ret | `eval/questions/RET/RET-{번호}.yaml` (40개) | 버전별 20개. 해당 버전 문서에 정답이 명확히 있는 질문. 디코이 10개(버전별 5개)는 버전을 명시하지 않아 양쪽 버전 청크가 경쟁하도록 쓴다 |
+| Q-oos | `eval/questions/OOS/OOS-{번호}.yaml` (10개) | 두 버전 문서 모두에 없는 주제. NO_CONTEXT를 유도해야 한다 |
+| Q-shared | `eval/questions/SHR/SHR-{번호}.yaml` (20개) | v0.3·v1.x 모두에서 답변 가능한 공통 주제. 버전별 정답 위치 기록 |
 
-> `chunk_id`는 청킹 전략·파라미터마다 달라지므로(정책서 §4.1) 정답은 청크 ID가 아니라 파일 경로·heading_path로 기록한다. 질문셋 스키마는 평가 질문셋 작업(R-3-1)에서 확정한다.
+- 스키마·ID 규칙·gold 기록 규칙은 `docs/experiments/eval-scenarios.md` §2·§3을 따른다. 질문 1개 = YAML 파일 1개.
+- `chunk_id`는 청킹 전략·파라미터마다 달라지므로(정책서 §4.1) 정답은 청크 ID가 아니라 `{file_path, heading_path}`로 기록한다. gold는 ACTIVE 인덱스(§5 표의 run)에 있는 섹션만 쓴다.
+- **검수 절차**: 사람이 문항마다 (1) 질문이 해당 버전 사용자가 실제로 물을 만한지, (2) gold 섹션에 답이 있는지, (3) 다른 섹션에 더 나은 답이 있지 않은지 확인하고 `metadata.reviewed_by`를 채운다. 모든 문항의 `reviewed_by`가 채워진 커밋에 `eval-v1` 태그를 단다.
+- **타당성 위협**: 질문을 LLM이 초안 작성하면 문서 표현과 비슷한 질문이 많아져 검색 지표가 높게 나올 수 있다(편향). 보고서 실험 절에 이 위협과 사람 검수로 완화한 방법을 적는다.
 
 ---
 
@@ -191,6 +192,7 @@ ${INGEST_DATA_DIR}/            # 기본값 ./data (ai-server 기준). Git에 올
 | v0.1 | 최초 작성 |
 | v0.2 | §3.1·§3.2 청크 메타데이터 `version` 필드 → `source_key` 로 통일 |
 | v0.3 | 수집을 `make ingest`(sparse checkout, run 단위)로 정리, 포함·제외 경로 확정, 수집 스크립트·JSONL 산출물 제거, 청크 필드는 정책서 §4.2로 일원화, 라이선스 확인(D-1), 파일 수·`.ipynb` 존재 확인(D-3·D-4·D-6은 각 Adapter 작업에서 측정) |
+| v0.4 | §4 평가 질문셋: 질문 1개 = YAML 1개, 문항 수(Q-ret 40·Q-oos 10·Q-shared 20), 작성 주체를 AI 초안 + 사람 검수로 변경, gold 기록 단위 |
 
 ---
 

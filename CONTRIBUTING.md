@@ -91,6 +91,7 @@ chore/3-ci-github-actions-setup
 | Spring Boot 비즈니스 로직·API | `backend` | `backend/src/main/java/` |
 | React 프론트엔드 | `frontend` | `frontend/src/` |
 | 오프라인 수집·실험 스크립트 | `scripts` | `scripts/` |
+| RAG 평가 질문셋·결정 규칙·평가 러너 | `eval` | `eval/`, `ai-server/src/eval/` |
 | 프롬프트·모델·검색 설정 파일 | `configs` | `configs/` |
 | 인프라 (Docker Compose) | `infra` | `infra/` |
 | CI 워크플로우 | `ci` | `.github/workflows/` |

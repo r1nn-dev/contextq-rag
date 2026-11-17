@@ -1,6 +1,6 @@
 # 평가 시나리오
 
-> **최종 수정**: 2026-11-04
+> **최종 수정**: 2026-11-17
 
 ---
 
@@ -10,6 +10,7 @@
 - **질문셋 수**: Q-ret (40개), Q-oos (10개), Q-shared (20개 × 2버전)
 - **사용 실험**: E1 (버전 격리 혼입 측정), E2 (청킹 전략 비교), E3 (답변 버전 정확도 비교)
 - **정답 라벨 기준**: `eval/decision_rules.md` 커밋 기준 (실험 `eval-v1` 태그 이전에 고정)
+- **작성 주체**: AI가 초안을 쓰고 사람이 검수한다(`docs/specs/data-sources.md` §4). 검수를 마친 질문셋만 `eval-v1` 태그로 고정한다.
 
 ---
 
@@ -22,7 +23,7 @@
 | 형식 | `{셋}-{3자리 숫자}` (예: `RET-001`) |
 | 셋 접두사 | `RET` (Q-ret), `OOS` (Q-oos), `SHR` (Q-shared) |
 | 채번 | 순차 부여. 폐기 시 결번 유지 (재사용 금지) |
-| 파일명 | `eval/questions/{셋}/{ID}.yaml` |
+| 파일명 | `eval/questions/{셋 접두사}/{ID}.yaml` (예: `eval/questions/RET/RET-001.yaml`). 질문 1개 = 파일 1개 |
 
 ### 2.2 버전 표기
 
@@ -59,6 +60,17 @@
 | `MEDIUM` | 여러 섹션 종합이 필요하거나 버전 간 차이가 있는 질문 |
 | `HARD` | 세부 구현 차이·버전 혼입이 쉬운 질문. 비격리 조건에서 혼입 발생 가능성 높음 |
 
+### 2.6 Gold 섹션 기록 규칙
+
+| 항목 | 규칙 |
+| --- | --- |
+| 단위 | `{file_path, heading_path}` 쌍. `chunk_id`는 청킹 전략마다 달라지므로 쓰지 않는다(정책서 §4.1) |
+| `file_path` | 소스 저장소 루트 기준 경로. 청크 메타데이터 `file_path`와 같은 값 (예: `src/oss/langchain/tools.mdx`) |
+| `heading_path` | 청크 메타데이터 `heading_path`와 같은 형식(`페이지 제목 > H2`). **깊이는 2 이하** — 전략 C가 H2 단위로 청크를 묶기 때문에 H3 이하를 gold로 쓰면 전략 간 비교가 불공정해진다 |
+| 적중 판정 | 청크의 `file_path`가 같고, `heading_path`가 gold와 같거나 gold의 하위 섹션(`gold + " > "`로 시작)이면 적중. 대소문자 무시, 앞뒤 공백 제거 후 비교(`evaluation.md` §2.1) |
+| 범위 | 현재 ACTIVE 인덱스에 있는 섹션만 쓴다. 정책서 §3.2 제외 범위(`integrations/**`·`langgraph`)는 gold로 쓰지 않는다 |
+| 버전 배분 | Q-ret 40개 = 버전별 20개(디코이 버전별 5개). 디코이도 `target_version`을 지정하고 그 버전 gold만 적는다 |
+
 ---
 
 ## 3. YAML 스키마
@@ -71,13 +83,14 @@ question_set: string       # "Q-ret" | "Q-oos". 필수.
 title: string              # 짧은 설명. 필수.
 type: string               # 2.4 유형 코드. 필수.
 difficulty: string         # EASY | MEDIUM | HARD. 필수.
-target_version: string     # v0.3 | v1.x | null (Q-oos는 null 허용)
+target_version: string     # Q-ret: v0.3 | v1.x (필수). Q-oos: null
 
 query: string              # 사용자가 입력할 질문 텍스트. 필수.
 
-gold:                      # Q-ret 필수. Q-oos는 비워둠.
-  sections:                # 정답 섹션 경로 목록 (heading_path 형식)
-    - string               # 예: "Agents > Tools > Defining tools"
+gold:                      # Q-ret 필수. Q-oos는 쓰지 않음.
+  sections:                # 정답 섹션 목록 (2.6 규칙). 1개 이상
+    - file_path: string    # 예: "src/oss/langchain/tools.mdx"
+      heading_path: string # 예: "Tools > Create tools" (깊이 2 이하)
   note: string             # 정답 판정 보조 설명. 선택.
 
 expected_behavior:         # Q-oos 필수.
@@ -87,6 +100,8 @@ expected_behavior:         # Q-oos 필수.
 metadata:
   created_by: string
   created_at: string       # ISO 8601
+  is_decoy: boolean        # Q-ret 디코이 여부 (4장). 기본 false
+  reviewed_by: string      # 사람 검수자. 검수 전 null (data-sources.md §4 검수 절차)
   source: string           # 질문 출처/참고 (선택)
 ```
 
@@ -101,13 +116,17 @@ difficulty: string
 
 query: string              # 두 버전 공통으로 사용하는 질문 텍스트
 
-versions:                  # 두 버전에 대한 정보
+versions:                  # 두 버전에 대한 정보. 컬렉션 이름(run id)은 실행마다 바뀌므로 소스 키만 적는다
   v0_3:
-    target_collection: string   # langchain_v03_run{id}
-    gold_sections: list[string] # v0.3 정답 섹션 경로
+    source_key: "langchain_v03"
+    gold_sections:              # v0.3 정답 섹션 (2.6 규칙)
+      - file_path: string
+        heading_path: string
   v1_x:
-    target_collection: string   # langchain_v1x_run{id}
-    gold_sections: list[string] # v1.x 정답 섹션 경로
+    source_key: "langchain_v1x"
+    gold_sections:              # v1.x 정답 섹션 (2.6 규칙)
+      - file_path: string
+        heading_path: string
 
 label_schema:              # E3 블라인드 레이블링 기준
   version_error: "0 = 버전 오류 없음 / 1 = 선택한 버전이 아닌 코드·API 포함"
@@ -117,6 +136,7 @@ label_schema:              # E3 블라인드 레이블링 기준
 metadata:
   created_by: string
   created_at: string
+  reviewed_by: string      # 사람 검수자. 검수 전 null
 ```
 
 ### 3.3 YAML 예시 — Q-ret
@@ -133,13 +153,14 @@ query: "LangChain v1.x에서 에이전트에 커스텀 함수 툴을 정의하�
 
 gold:
   sections:
-    - "Agents > Tools > Defining tools"
-    - "Agents > Tools > Toolkits"
-  note: "@tool 데코레이터와 StructuredTool.from_function 두 경로 모두 허용"
+    - file_path: "src/oss/langchain/tools.mdx"
+      heading_path: "Tools > Create tools"
+  note: "@tool 데코레이터 정의와 create_agent(tools=[...]) 전달"
 
 metadata:
   created_by: "r1nn-dev"
   created_at: "2026-11-04T00:00:00Z"
+  is_decoy: false
   source: "실제 학습자 질문 패턴 참조"
 ```
 
@@ -177,15 +198,15 @@ query: "LangChain에서 에이전트를 생성하는 방법을 알려줘."
 
 versions:
   v0_3:
-    target_collection: "langchain_v03_run{id}"
+    source_key: "langchain_v03"
     gold_sections:
-      - "Agents > AgentExecutor"
-      - "Agents > create_react_agent"
+      - file_path: "docs/docs/how_to/agent_executor.ipynb"
+        heading_path: "Build an Agent with AgentExecutor (Legacy)"
   v1_x:
-    target_collection: "langchain_v1x_run{id}"
+    source_key: "langchain_v1x"
     gold_sections:
-      - "Agents > create_agent"
-      - "LangGraph > Agent > Concepts"
+      - file_path: "src/oss/langchain/agents.mdx"
+        heading_path: "Agents > Core components"
 
 label_schema:
   version_error: "0 = 버전 오류 없음 / 1 = 선택한 버전이 아닌 코드·API 포함"
