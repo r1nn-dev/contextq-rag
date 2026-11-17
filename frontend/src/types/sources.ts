@@ -21,7 +21,16 @@ export interface ComparePair {
   sourceKeyB: string
 }
 
+/** Guest usage of the caller; null when logged in (api-spec 2.1 `guest`). */
+export interface GuestUsage {
+  limit: number
+  used: number
+  remaining: number
+  expiresAt: string | null
+}
+
 export interface SourcesResponse {
   sources: Source[]
   comparePairs: ComparePair[]
+  guest?: GuestUsage | null
 }
