@@ -54,8 +54,11 @@ app:
     password-bcrypt: ${ADMIN_PASSWORD_BCRYPT:}   # BCrypt hash, never the plain password
 
 jwt:
-  secret: ${JWT_SECRET}       # required — set JWT_SECRET in .env
-  expiration-ms: 86400000     # 24 hours in ms
+  secret: ${JWT_SECRET}                # required, >= 32 bytes (api-spec 부록 D.1)
+  access-token-ttl: ${JWT_ACCESS_TOKEN_EXPIRY_MINUTES:30}m   # policy §2.1
+  clock-skew: 30s                      # policy §2.1 JWT 시계 오차 허용
+  refresh-family-ttl: ${JWT_REFRESH_TOKEN_EXPIRY_DAYS:7}d    # policy §2.1 (absolute)
+  refresh-reuse-grace: 5s              # policy §2.1 회전 경합 유예
 
 management:
   endpoints:
