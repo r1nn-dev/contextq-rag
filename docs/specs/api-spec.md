@@ -1,6 +1,6 @@
 # API 명세서
 
-> 최종 수정일: 2026-11-01
+> 최종 수정일: 2026-11-17
 
 ---
 
@@ -1033,7 +1033,7 @@ data: {"event":"done", "status":"NO_CONTEXT", "statusReason":"LOW_SIMILARITY", "
 **에러 (스트림 후)**: `event: error` SSE 이벤트
 
 ```json
-{ "event": "error", "code": "LLM_ERROR", "message": "LLM 오류가 발생했습니다.", "request_id": "a1b2c3d4", "partial": false }
+{ "event": "error", "code": "LLM_ERROR", "message": "LLM 오류가 발생했습니다.", "requestId": "a1b2c3d4", "partial": false }
 ```
 
 **처리 파이프라인 (ai-server 내부)**
