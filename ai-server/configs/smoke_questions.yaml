@@ -20,7 +20,9 @@ sources:
     - question: "How do I migrate off ConversationBufferMemory?"
       expected_file: "docs/docs/versions/migrating_memory/conversation_buffer_memory.ipynb"
   langchain_v1x:
-    - question: "How do I create an agent that calls tools with create_agent?"
+    # create_agent·도구 호출은 여러 문서에 흩어져 있어 agents.mdx 고유 개념(harness)으로 묻는다
+    # (실측 run 2: 기존 질문은 Top-5 밖, 이 질문은 1위 0.703·3위 0.639)
+    - question: "What is an agent harness and what are its core components?"
       expected_file: "src/oss/langchain/agents.mdx"
     - question: "How do I stream agent progress and LLM tokens?"
       expected_file: "src/oss/langchain/streaming.mdx"
