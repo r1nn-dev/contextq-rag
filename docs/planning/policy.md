@@ -303,7 +303,7 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 | Top-K | 초기값 5. E2 결정 규칙으로 확정(K ∈ {3, 5, 8}) |
 | 임계값 τ | source_key별 값(ADR-008, `ai-server/configs/rag.yaml`, `TAU_{SOURCE_KEY}`로 덮어쓰기). 미결정(W2 E1 부속 실험). 확정 전 개발용 임시값 0.30(두 소스 공통) |
 | 컨텍스트 채택 | Top-K 중 similarity ≥ τ 인 청크만 컨텍스트에 넣음 |
-| 컨텍스트 예산 | 최대 3,000 토큰. 초과 시 낮은 rank부터 제외(청크 중간 절단 금지) |
+| 컨텍스트 예산 | 3,000 토큰 고정(성능 우선, `eval/decision_rules.md` §4). 초과 시 낮은 rank부터 제외(청크 중간 절단 금지) |
 | 지연 기록 | `rewrite_ms`, `embed_ms`, `retrieve_ms`를 done 이벤트와 DB에 기록 |
 
 ### 5.4 NO_CONTEXT 판정
@@ -313,7 +313,7 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 | `LOW_SIMILARITY` | top-1 similarity < τ | 호출 안 함 (INV-07) | `meta`(sources: [], no_context: true) → `done`(status: NO_CONTEXT) |
 | `LLM_ABSTAIN` | 컨텍스트는 통과했으나 모델이 근거 부족을 선언 | 호출함 | `meta`(sources 포함) → `done`(status: NO_CONTEXT) |
 - `LLM_ABSTAIN` 판정: 프롬프트가 근거 부족 시 첫 출력을 `[[NO_ANSWER]]`로 시작하도록 지시한다. ai-server는 첫 16자를 버퍼링해 sentinel이면 토큰을 내보내지 않고 NO_CONTEXT로 종결한다.
-- 기획서의 "Q-oos 10건 중 8건 이상 LLM 미호출" 지표는 `LOW_SIMILARITY`만 집계한다. `LLM_ABSTAIN`은 L3 완화 효과로 별도 집계한다.
+- 기획서의 NO_CONTEXT 처리율 지표(Q-oos τ 표본 9문항 기준 80% 이상, 소스별 9건 중 8건 이상 LLM 미호출)는 `LOW_SIMILARITY`만 집계한다. 모호한 질문(`tau_calibration: false`)은 표본에서 뺀다. `LLM_ABSTAIN`은 L3 완화 효과로 별도 집계한다.
 - 고정 안내문: "선택한 버전({label}, {commit_sha_7}) 문서에서 근거를 찾을 수 없습니다." + 다른 버전으로 질문하기 버튼(비교 가능한 경우).
 
 ### 5.5 생성(단일 모드)
@@ -638,10 +638,9 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 
 | 항목 | 현재 가정값 | 결정 시점 | 결정 방법 |
 | --- | --- | --- | --- |
-| NO_CONTEXT 임계값 τ | 0.30 (개발용) | **W2 (10/14)** | E1 부속: Q-oos·Q-ret similarity 분포에서 오탐(범위 내 질문이 NO_CONTEXT)·미탐(범위 외가 통과) 균형점. 결정 후 4.4 스모크 기준도 동일 τ로 재실행 |
-| 청킹 전략 | 전략 B (초기 개발용) | **W3 (10/21)** | E2 사전 결정 규칙(`eval/decision_rules.md`, eval-v1 태그 이전 커밋으로 확정): Hit@5 최고 전략. 1·2위 차이 < 3%p이면 평균 토큰 수 적은 전략 |
+| NO_CONTEXT 임계값 τ | 0.30 (개발용) | **W2 (10/14)** | E1 부속(`eval/decision_rules.md` §3): Q-ret(대상 버전)·Q-oos(τ 표본 9문항) 최대 유사도 분포에서 FPR_NC ≤ 0.05를 만족하는 τ 중 F1_NC 최대값(동점이면 구간 중간값), source_key별. 결정 후 4.4 스모크 기준도 동일 τ로 재실행 |
+| 청킹 전략 | 전략 B (초기 개발용) | **W3 (10/21)** | E2 사전 결정 규칙(`eval/decision_rules.md`, eval-v1 태그 이전 커밋으로 확정): Hit@5 최고 전략. 1·2위 차이 < 3%p이면 MRR@5가 높은 전략, 그래도 같으면 평균 토큰 수 적은 전략 |
 | Top-K | 5 (초기 개발용) | **W3 (10/21)** | E2 결정 규칙: Hit@K 증가폭 < 2%p인 최소 K |
-| 컨텍스트 토큰 예산 | 3,000 (최대 상한) | **W3 (10/21)** | E2 확정 후 공식 적용: `min(3000, K_final × avg_chunk_tokens × 1.15)`. 상한 3,000은 고정, 실제 예산은 하향 가능 |
 | 시스템 동시 생성 상한 | 20 | **W6 (11/11)** | E6 S2(ramp-up)·S3(sustained) 결과. 오류율 < 1% + `meta` p95 < 1초를 만족하는 최대 VU를 상한으로 설정 |
 | 1.x 스니펫 누락 허용 기준 | 누락 파일 비율 ≤ 5% | **W1 (10/7)** | 스파이크 측정으로 실제 누락 비율 확인. 5% 초과 시 허용 기준 상향하거나 해당 파일 제외 목록 작성. 제외된 파일은 VALIDATING 청크 수 기준 ±30% 판정에서 제외 |
 

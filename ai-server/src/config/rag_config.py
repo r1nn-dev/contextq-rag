@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 from src.config.ingest_config import CONFIG_DIR
 
-CONTEXT_BUDGET_CAP = 3000  # 정책서 미결정 사항 "컨텍스트 토큰 예산" — 상한 3,000은 고정
+CONTEXT_BUDGET_CAP = 3000  # 정책서 §5.3 컨텍스트 예산 3,000 고정 (eval/decision_rules.md §4)
 
 
 class RetrievalConfig(BaseModel):
