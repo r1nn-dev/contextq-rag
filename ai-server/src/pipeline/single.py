@@ -27,6 +27,7 @@ from src.domain.retrieval import RetrievedChunk
 from src.ingest.embedder import EmbeddingError
 from src.pipeline.citations import invalid_citations
 from src.pipeline.generator import LLMCallError
+from src.pipeline.prompts import version_header
 from src.pipeline.sentinel import SentinelGate
 from src.retrieval.context import select_context
 from src.retrieval.errors import RetrievalError
@@ -201,17 +202,18 @@ class SingleModePipeline:
         sources = [source_payload(rank, c) for rank, c in enumerate(selection.chunks, start=1)]
         yield replace(meta, sources=sources).to_dict()
 
+        display_name = req.index.display_name or req.source_key
         stream = self.generator.generate_stream(
             req.question,
             selection.chunks,
-            display_name=req.index.display_name or req.source_key,
+            display_name=display_name,
             prompt_version=req.prompt_version,
         )
         logger.info(
             "llm_stream_start",
             extra={"request_id": req.request_id, "context_tokens": selection.total_tokens},
         )
-        gate = SentinelGate()
+        gate = SentinelGate(header=version_header(display_name))
         try:
             try:
                 async for text in stream:

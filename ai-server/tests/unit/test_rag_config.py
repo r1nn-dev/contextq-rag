@@ -20,7 +20,7 @@ def test_repository_config_uses_confirmed_values() -> None:
 def test_repository_stream_and_generation_values_follow_policy() -> None:
     config = load_rag_config()
 
-    assert config.generation.prompt_version == "single_v1"
+    assert config.generation.prompt_version == "single_v2"
     stream = config.stream
     assert (stream.heartbeat_seconds, stream.max_duration_seconds) == (10, 120)
     assert stream.max_concurrency == 20

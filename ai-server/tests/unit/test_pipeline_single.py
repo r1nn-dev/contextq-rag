@@ -157,6 +157,16 @@ async def test_sentinel_ends_as_llm_abstain_without_tokens() -> None:
     assert stream.closed
 
 
+async def test_sentinel_after_version_header_is_llm_abstain() -> None:
+    """#108: 'LangChain v1.x 기준 [[NO_ANSWER]]'도 토큰 없이 NO_CONTEXT로 끝난다."""
+    stream = FakeStream(["LangChain v1.x 기준", "\n\n", "[[NO_ANSWER]]"])
+
+    meta, done = await run(FakeSearcher([chunk(1, 0.9)]), FakeGenerator(stream))
+
+    assert meta["event"] == "meta"
+    assert (done["status"], done["statusReason"]) == ("NO_CONTEXT", "LLM_ABSTAIN")
+
+
 async def test_length_finish_is_partial() -> None:
     stream = FakeStream(["잘린 답변"], finish="length")
 
