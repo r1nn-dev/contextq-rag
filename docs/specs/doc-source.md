@@ -62,7 +62,7 @@ class SourceAdapter(Protocol):
 | 4 | MDX `import … from '…'` / `export …` 줄 (펜스 밖, 줄 시작) | 줄 삭제 |
 | 5 | JSX 주석 `{/* … */}` (여러 줄 가능) | 삭제 |
 | 6 | 대문자로 시작하는 JSX 태그, HTML 태그(`img`·`br`·`div`·`table` 등) | 태그만 지우고 텍스트 자식은 남김. 여러 줄에 걸친 태그는 닫힐 때까지 지움 |
-| 7 | 태그의 `title="…"` 속성 (`Tab`·`Step`·`Accordion`·`Card` 등) | 속성 값을 텍스트 줄로 남김 |
+| 7 | 태그의 `title="…"`·`label="…"` 속성 (`Tab`·`Step`·`Accordion`·`Card`·`TabItem` 등) | 속성 값을 텍스트 줄로 남김 |
 | 8 | 빈 줄 (펜스 밖) | 연속 빈 줄은 1줄로 줄임 |
 
 ### 4.2 Mintlify (v1.x)
@@ -82,8 +82,8 @@ class SourceAdapter(Protocol):
 
 | 대상 | 처리 | 자동 검사 |
 | --- | --- | --- |
-| admonition `:::tip`·`:::note`·`:::warning`·`:::info`·`:::caution`·`:::danger` (`[제목]` 포함) | 마커 줄만 제거, 내용 보존 | — |
-| `.ipynb` | markdown 셀과 code 셀을 셀 순서대로 직렬화. 출력 셀 제거. code 셀은 ```` ```python ```` 펜스로 감쌈 | 출력 셀 잔존 0건 |
+| admonition `:::tip`·`:::note`·`:::info`·`:::important`·`:::warning`·`:::caution`·`:::danger` | 마커 줄만 제거, 내용 보존. 제목(`:::info 제목`·`:::tip[제목]`)은 텍스트 줄로 남김 | 마커 잔존 0건 |
+| `.ipynb` | markdown·code·raw 셀을 셀 순서대로 빈 줄로 이어 직렬화. 출력 셀 제거. code 셀은 ```` ```python ```` 펜스로 감쌈. 첫 raw 셀의 frontmatter는 문서 frontmatter로 처리하고, 그 밖의 raw 셀은 markdown과 같이 전처리 | 출력 셀 잔존 0건 |
 | `.ipynb` 라인 번호 | 직렬화한 텍스트 기준 줄 번호(1부터). permalink는 파일 단위(라인 앵커 없음, ADR-007) | — |
 
 - `site_url`: `https://python.langchain.com/v0.3/docs/{문서 루트 기준 경로, 확장자 제외}/`.
