@@ -108,6 +108,7 @@ INV-05 permalink는 커밋 SHA를 포함한 URL만 허용한다. 브랜치명(ma
 
 [스트림]
 INV-06 한 응답의 이벤트 순서는 meta → token* → (done | error)이며, meta와 종결 이벤트는 각각 정확히 1회다.
+       단, meta 전에 오류가 나면 error(partial=false) 하나로 끝난다(API 명세 부록 B.1 오류 경로).
 INV-07 NO_CONTEXT(reason=LOW_SIMILARITY)는 생성 LLM을 호출하지 않는다. (멀티턴 재작성 LLM 호출은 발생할 수 있다)
 INV-08 답변 본문의 인용 번호 [n]은 meta.sources의 rank 범위 안에 있어야 한다. 범위 밖 번호는 done.invalidCitations에 기록된다.
 INV-09 HTTP 200으로 스트림이 시작된 이후의 오류는 HTTP 상태가 아니라 error 이벤트로만 전달한다.
