@@ -12,5 +12,5 @@ expected_behavior:
 metadata:
   created_by: ai-draft
   created_at: '2026-11-17T00:00:00Z'
-  reviewed_by: null
+  reviewed_by: r1nn-dev
   source: '검수(#103) — 범위 밖이 아니라 모호한 질문이라 짧은 질의의 유사도가 예측되지 않음. τ 결정 표본에서 빼고 동작 확인용으로만 쓴다'

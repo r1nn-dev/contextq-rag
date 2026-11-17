@@ -11,5 +11,5 @@ expected_behavior:
 metadata:
   created_by: ai-draft
   created_at: '2026-11-18T00:00:00Z'
-  reviewed_by: null
+  reviewed_by: r1nn-dev
   source: '검수 교체(#103) — 이전 ''LangGraph StateGraph''는 인덱스에 StateGraph·add_edge 예제가 v0.3 27개·v1.x 9개 파일에 있어 답이 됨'

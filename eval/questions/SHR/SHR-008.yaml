@@ -24,5 +24,5 @@ label_schema:
 metadata:
   created_by: ai-draft
   created_at: '2026-11-18T00:00:00Z'
-  reviewed_by: null
+  reviewed_by: r1nn-dev
   source: '검수 교체(#103) — 이전 문서 로더 사용법은 두 버전 답이 같음. v0.3 ToolException·try/except / v1.x @wrap_tool_call'

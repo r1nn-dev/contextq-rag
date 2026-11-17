@@ -26,5 +26,5 @@ label_schema:
 metadata:
   created_by: ai-draft
   created_at: '2026-11-18T00:00:00Z'
-  reviewed_by: null
+  reviewed_by: r1nn-dev
   source: '검수 교체(#103) — 이전 임베딩 모델 연결은 두 버전 답이 같음. v0.3 configurable_alternatives / v1.x 동적 모델 선택(wrap_model_call). v1.x models.mdx Advanced topics는 넓은 절(41청크)'
