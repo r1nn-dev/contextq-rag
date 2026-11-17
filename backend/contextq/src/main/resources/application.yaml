@@ -44,6 +44,8 @@ ai-server:
   sources-cache-ttl: 60s               # policy §2.1 메타 API 캐시
 
 chat:
+  guest:
+    sessions-per-ip-per-hour: ${GUEST_SESSIONS_PER_IP_PER_HOUR:30}   # policy §8.1 (exhibition: 60)
   sweeper:
     interval: 60s                      # policy §2.1 스위퍼 주기
     stale-after: 150s                  # policy §2.1 STREAMING·PENDING 고착 판정
