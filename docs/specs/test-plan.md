@@ -1,6 +1,6 @@
 # 테스트 계획서
 
-> **최종 수정일:** 2026-11-06
+> **최종 수정일:** 2026-11-17
 
 ---
 
@@ -272,15 +272,15 @@ assert stub_gen.call_count == 0  # LLM 호출 없음
 
 | 항목 | 내용 |
 | --- | --- |
-| **목적** | 비교 모드 `POST /api/v1/chat/compare`가 sourceKeyA·sourceKeyB 각각 독립된 RAG 파이프라인을 호출하고 Structured Outputs로 결과를 반환하는지 확인 |
+| **목적** | 비교 모드 `POST /api/v1/chat/stream`(`mode=COMPARE`)이 sourceKeyA·sourceKeyB 각각 독립된 RAG 파이프라인을 호출하고 Structured Outputs로 결과를 반환하는지 확인 |
 | **관련** | DevDocs-RAG API v1.md §3.1, 기획서_v1.md 비교 모드 |
 
 **합격 조건**
 
-- 응답에 `answerA`·`answerB` 필드 각각 존재 (OpenAI Structured Outputs `CompareResult` 스키마)
+- `done.compareResult`에 `version_a`·`version_b`·`changes`가 존재하고 계약 스키마(`contracts/sse-events.schema.json`)를 통과
 - 각 필드 답변은 해당 sourceKey 컬렉션의 청크에 기반함
 - 한쪽 버전이 NO_CONTEXT이더라도 나머지 버전 응답은 정상 반환
-- 비교 모드는 Non-streaming (SSE 없음); `meta → done` 이벤트로 완료
+- 비교 모드는 token 이벤트 없이 `meta → done` 이벤트로 완료
 
 ### 8.2-10: NO_CONTEXT 경로 E2E
 
@@ -411,7 +411,7 @@ SDD.md 각 기능의 인수 기준을 SP1·SP2 발표 전 점검하는 목록이
 
 | ID | 항목 | 확인 방법 | 상태 |
 | --- | --- | --- | --- |
-| 8.5-10 | 비교 모드 — sourceKeyA·B 동시 응답 | 비교 모드 API 호출 → `answerA`·`answerB` 필드 수신 | ⬜ |
+| 8.5-10 | 비교 모드 — sourceKeyA·B 동시 응답 | 비교 모드 API 호출 → `compareResult.version_a`·`version_b` 수신 | ⬜ |
 | 8.5-11 | E3 버전 오류율 비교 결과 (L0/L1/R1/R2) | `eval/results/E3/` 버전 오류율 비교표, kappa 보고 | ⬜ |
 | 8.5-12 | R2 버전 오류율 ≤ 20% (E3 목표) | `eval/results/E3/decision.md` 에 R2 오류율 명시 | ⬜ |
 | 8.5-13 | TTFT p50 ≤ 3s, p95 ≤ 5s (E5) | `eval/results/E5/` 20회 측정 박스플롯 존재 | ⬜ |
