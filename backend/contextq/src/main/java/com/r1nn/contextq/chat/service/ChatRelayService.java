@@ -7,9 +7,11 @@ import com.r1nn.contextq.chat.dto.ChatStreamRequest;
 import com.r1nn.contextq.chat.service.ChatMessageService.AcceptCommand;
 import com.r1nn.contextq.chat.service.ChatMessageService.Accepted;
 import com.r1nn.contextq.chat.service.GuestSessionService.GuestTicket;
+import com.r1nn.contextq.chat.service.StreamSlots.Slot;
 import com.r1nn.contextq.common.error.BusinessException;
 import com.r1nn.contextq.common.error.ErrorCode;
 import com.r1nn.contextq.global.config.AiServerProperties;
+import com.r1nn.contextq.global.config.QuotaProperties;
 import com.r1nn.contextq.infra.aiserver.AiServerChatClient;
 import com.r1nn.contextq.infra.aiserver.AiServerChatClient.ChatCall;
 import com.r1nn.contextq.infra.aiserver.AiServerUnavailableException;
@@ -50,6 +52,8 @@ public class ChatRelayService {
   private final PersistFailureRegistry persistFailures;
   private final GuestSessionService guests;
   private final QuestionRateLimiter rateLimiter;
+  private final StreamSlots slots;
+  private final QuotaProperties quota;
 
   public ChatRelayService(
       SourceCatalog sourceCatalog,
@@ -58,7 +62,9 @@ public class ChatRelayService {
       AiServerProperties properties,
       PersistFailureRegistry persistFailures,
       GuestSessionService guests,
-      QuestionRateLimiter rateLimiter) {
+      QuestionRateLimiter rateLimiter,
+      StreamSlots slots,
+      QuotaProperties quota) {
     this.sourceCatalog = sourceCatalog;
     this.messages = messages;
     this.aiServer = aiServer;
@@ -66,6 +72,8 @@ public class ChatRelayService {
     this.persistFailures = persistFailures;
     this.guests = guests;
     this.rateLimiter = rateLimiter;
+    this.slots = slots;
+    this.quota = quota;
   }
 
   /** Guest stream plus the {@code Set-Cookie} value of a newly issued session (or null). */
@@ -81,29 +89,36 @@ public class ChatRelayService {
       Long userId, ChatStreamRequest request, String requestId) {
     request.requireSupportedMode();
     rateLimiter.acquire(userId); // 10 per minute (policy §8.1)
-    boolean followUp = request.conversationId() != null;
-    String sourceKey =
-        followUp
-            ? messages.conversationSource(userId, request.conversationId(), request.sourceKey())
-            : request.sourceKey();
-    sourceCatalog.requireAskable(sourceKey, followUp);
+    Slot slot = slots.acquire("u:" + userId, quota.concurrentUser());
+    try {
+      boolean followUp = request.conversationId() != null;
+      String sourceKey =
+          followUp
+              ? messages.conversationSource(userId, request.conversationId(), request.sourceKey())
+              : request.sourceKey();
+      sourceCatalog.requireAskable(sourceKey, followUp);
 
-    String question = request.trimmedQuestion();
-    Accepted accepted =
-        messages.accept(
-            new AcceptCommand(userId, request.conversationId(), question, sourceKey, requestId));
-    Flux<ServerSentEvent<String>> upstream =
-        open(
-            new ChatCall(requestId, sourceKey, question, List.of()),
-            reason ->
-                messages.finish(
-                    accepted.answerId(),
-                    MessageStatus.FAILED,
-                    AnswerOutcome.interrupted("", reason)));
-    AnswerRecorder recorder =
-        new MemberAnswerRecorder(
-            messages, persistFailures, accepted.conversationId(), accepted.answerId(), requestId);
-    return relay(upstream, new RelaySession(recorder, JSON, requestId, sourceKey));
+      String question = request.trimmedQuestion();
+      Accepted accepted =
+          messages.accept(
+              new AcceptCommand(userId, request.conversationId(), question, sourceKey, requestId));
+      Flux<ServerSentEvent<String>> upstream =
+          open(
+              new ChatCall(requestId, sourceKey, question, List.of()),
+              reason ->
+                  messages.finish(
+                      accepted.answerId(),
+                      MessageStatus.FAILED,
+                      AnswerOutcome.interrupted("", reason)));
+      AnswerRecorder recorder =
+          new MemberAnswerRecorder(
+              messages, persistFailures, accepted.conversationId(), accepted.answerId(), requestId);
+      return relay(upstream, new RelaySession(recorder, JSON, requestId, sourceKey))
+          .doFinally(signal -> slot.release());
+    } catch (RuntimeException e) {
+      slot.release(); // pre-stream failure: the stream never started
+      throw e;
+    }
   }
 
   /**
@@ -128,6 +143,13 @@ public class ChatRelayService {
     sourceCatalog.requireAskable(sourceKey, false);
 
     GuestTicket ticket = guests.charge(rawSid, ipAddress);
+    Slot slot;
+    try {
+      slot = slots.acquire("g:" + ticket.sidHash(), quota.concurrentGuest());
+    } catch (BusinessException e) {
+      guests.refund(ticket.sidHash()); // the question was charged but never asked
+      throw GuestSessionService.withCookie(e, ticket);
+    }
     AnswerRecorder recorder = new GuestAnswerRecorder(guests, ticket.sidHash(), requestId);
     Flux<ServerSentEvent<String>> upstream;
     try {
@@ -138,10 +160,12 @@ public class ChatRelayService {
                   recorder.finish(
                       MessageStatus.FAILED, AnswerOutcome.interrupted("", reason), true));
     } catch (BusinessException e) {
+      slot.release();
       throw GuestSessionService.withCookie(e, ticket);
     }
     return new GuestStream(
-        relay(upstream, new RelaySession(recorder, JSON, requestId, sourceKey)),
+        relay(upstream, new RelaySession(recorder, JSON, requestId, sourceKey))
+            .doFinally(signal -> slot.release()),
         ticket.setCookie());
   }
 
