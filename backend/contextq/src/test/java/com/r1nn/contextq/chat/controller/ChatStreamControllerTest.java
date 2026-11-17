@@ -308,13 +308,16 @@ class ChatStreamControllerTest {
   }
 
   @Test
-  void anonymousRequestIsUnauthorized() throws Exception {
+  void anonymousRequestIsAGuestAndCannotCompare() throws Exception {
     mockMvc
         .perform(
             post("/api/v1/chat/stream")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(singleBody(null, "q", "langchain_v03")))
-        .andExpect(status().isUnauthorized());
+                .content(
+                    "{\"question\":\"q\",\"mode\":\"COMPARE\",\"sourceKeyA\":\"langchain_v03\","
+                        + "\"sourceKeyB\":\"langchain_v1x\"}"))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.error.code").value("GUEST_MODE_NOT_ALLOWED"));
   }
 
   private void upstream(StubResponse response) {

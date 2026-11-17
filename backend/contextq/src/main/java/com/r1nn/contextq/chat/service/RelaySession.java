@@ -24,10 +24,11 @@ import tools.jackson.databind.node.ObjectNode;
  * <p>Methods are synchronized: events arrive on a worker thread while a client cancel arrives on
  * the servlet thread.
  *
- * <p>Turns each ai-server event into the event sent to the browser and persists the steps of policy
- * §6.3: {@code meta} → snapshot, {@code token} → memory only, {@code done}/{@code error}/
- * timeout/disconnect → one terminal UPDATE. After the terminal event nothing else is emitted
- * (INV-06).
+ * <p>Turns each ai-server event into the event sent to the browser and hands the steps of policy
+ * §6.3 to the {@link AnswerRecorder}: {@code meta} → snapshot, {@code token} → memory only, {@code
+ * done}/{@code error}/timeout/disconnect/cancel → one terminal record. A server-side failure before
+ * {@code meta} is marked refundable (guest refund, policy §1.3). After the terminal event nothing
+ * else is emitted (INV-06).
  */
 final class RelaySession {
 
@@ -35,32 +36,20 @@ final class RelaySession {
 
   private static final int REWRITTEN_QUERY_MAX = 200;
 
-  private final ChatMessageService messages;
-  private final PersistFailureRegistry persistFailures;
+  private final AnswerRecorder recorder;
   private final ObjectMapper json;
-  private final Long conversationId;
-  private final Long answerId;
   private final String requestId;
   private final String sourceKey;
 
   private final StringBuilder content = new StringBuilder();
   private int tokens;
+  private boolean metaSeen;
   private volatile boolean anyDataSeen;
   private volatile boolean ended;
 
-  RelaySession(
-      ChatMessageService messages,
-      PersistFailureRegistry persistFailures,
-      ObjectMapper json,
-      Long conversationId,
-      Long answerId,
-      String requestId,
-      String sourceKey) {
-    this.messages = messages;
-    this.persistFailures = persistFailures;
+  RelaySession(AnswerRecorder recorder, ObjectMapper json, String requestId, String sourceKey) {
+    this.recorder = recorder;
     this.json = json;
-    this.conversationId = conversationId;
-    this.answerId = answerId;
     this.requestId = requestId;
     this.sourceKey = sourceKey;
   }
@@ -111,10 +100,8 @@ final class RelaySession {
       return List.of();
     }
     if (error instanceof TimeoutException) {
-      if (!anyDataSeen) {
-        return List.of(terminate(ErrorCode.UPSTREAM_TIMEOUT.name(), "UPSTREAM_TIMEOUT", null));
-      }
-      return List.of(terminate(ErrorCode.UPSTREAM_TIMEOUT.name(), "UPSTREAM_IDLE_TIMEOUT", null));
+      String reason = anyDataSeen ? "UPSTREAM_IDLE_TIMEOUT" : "UPSTREAM_TIMEOUT";
+      return List.of(terminate(ErrorCode.UPSTREAM_TIMEOUT.name(), reason, null));
     }
     log.warn("upstream_stream_failed requestId={}", requestId, error);
     return List.of(terminate(ErrorCode.AI_UNAVAILABLE.name(), "AI_UNAVAILABLE", null));
@@ -122,7 +109,8 @@ final class RelaySession {
 
   /**
    * Browser went away (policy §2.3): the upstream subscription is already being cancelled, which
-   * closes the ai-server connection and its OpenAI stream. Store what was received.
+   * closes the ai-server connection and its OpenAI stream. Store what was received; a client-side
+   * cause is never refunded.
    */
   synchronized void onClientCancel() {
     if (ended) {
@@ -130,9 +118,10 @@ final class RelaySession {
     }
     ended = true;
     log.info("stream_aborted requestId={} reason=CLIENT_ABORTED tokens={}", requestId, tokens);
-    persist(
+    recorder.finish(
         tokens > 0 ? MessageStatus.PARTIAL : MessageStatus.FAILED,
-        AnswerOutcome.interrupted(content.toString(), "CLIENT_ABORTED"));
+        AnswerOutcome.interrupted(content.toString(), "CLIENT_ABORTED"),
+        false);
   }
 
   /** Upstream closed without {@code done}/{@code error}. */
@@ -145,6 +134,7 @@ final class RelaySession {
   }
 
   private String onMeta(ObjectNode meta) {
+    metaSeen = true;
     boolean noContext = meta.path("noContext").asBoolean(false);
     List<SourceValue> cited = new ArrayList<>();
     BigDecimal top1 = null;
@@ -170,10 +160,10 @@ final class RelaySession {
                 : null,
             top1,
             truncate(text(meta, "rewrittenQuery")));
-    messages.applyMeta(answerId, sourceKey, snapshot, noContext, cited);
-    // client leg adds the IDs of the stored conversation and answer (contracts/README.md)
-    meta.put("conversationId", conversationId);
-    meta.put("messageId", answerId);
+    recorder.meta(sourceKey, snapshot, noContext, cited);
+    // client leg adds the stored IDs; both are null for guests (contracts/README.md)
+    putId(meta, "conversationId", recorder.conversationId());
+    putId(meta, "messageId", recorder.messageId());
     return json.writeValueAsString(meta);
   }
 
@@ -197,7 +187,7 @@ final class RelaySession {
             integer(latency, "retrieveMs"),
             integer(latency, "ttftMs"),
             integer(latency, "totalMs"));
-    persist(status, outcome);
+    recorder.finish(status, outcome, false); // NO_CONTEXT and completed answers are not refunded
   }
 
   private String onError(JsonNode error) {
@@ -214,13 +204,17 @@ final class RelaySession {
     return data(terminateJson(code, reason, message));
   }
 
-  /** Stores PARTIAL (tokens ≥ 1) or FAILED and builds the browser {@code error} event. */
+  /**
+   * Records PARTIAL (tokens ≥ 1) or FAILED and builds the browser {@code error} event. Every caller
+   * is a server-side failure, so it is refundable while {@code meta} has not arrived.
+   */
   private String terminateJson(String code, String reason, String message) {
     ended = true;
     boolean partial = tokens > 0;
-    persist(
+    recorder.finish(
         partial ? MessageStatus.PARTIAL : MessageStatus.FAILED,
-        AnswerOutcome.interrupted(content.toString(), reason));
+        AnswerOutcome.interrupted(content.toString(), reason),
+        !metaSeen);
     ObjectNode error = json.createObjectNode();
     error.put("event", "error");
     error.put("code", code);
@@ -230,22 +224,11 @@ final class RelaySession {
     return json.writeValueAsString(error);
   }
 
-  /**
-   * Terminal UPDATE with one retry (policy §2.3). When both attempts fail the browser already has
-   * the answer; the sweeper stores it as {@code FAILED(PERSIST_ERROR)} after 150 s.
-   */
-  private void persist(MessageStatus status, AnswerOutcome outcome) {
-    try {
-      messages.finish(answerId, status, outcome);
-      return;
-    } catch (RuntimeException first) {
-      log.warn("answer_persist_retry requestId={} messageId={}", requestId, answerId, first);
-    }
-    try {
-      messages.finish(answerId, status, outcome);
-    } catch (RuntimeException second) {
-      log.error("answer_persist_failed requestId={} messageId={}", requestId, answerId, second);
-      persistFailures.record(answerId, outcome.content());
+  private static void putId(ObjectNode node, String field, Long id) {
+    if (id == null) {
+      node.putNull(field);
+    } else {
+      node.put(field, id);
     }
   }
 

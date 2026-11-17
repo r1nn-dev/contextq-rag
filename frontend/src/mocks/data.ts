@@ -32,6 +32,7 @@ export const MOCK_SOURCES: SourcesResponse = {
     },
   ],
   comparePairs: [{ compareEnabled: true, sourceKeyA: 'langchain_v03', sourceKeyB: 'langchain_v1x' }],
+  guest: { limit: 5, used: 0, remaining: 5, expiresAt: null },
 }
 
 export function findSource(sourceKey: string | null | undefined) {

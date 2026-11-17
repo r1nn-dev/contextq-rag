@@ -1,10 +1,12 @@
 package com.r1nn.contextq.chat.service;
 
 import com.r1nn.contextq.chat.domain.AnswerOutcome;
+import com.r1nn.contextq.chat.domain.ConversationMode;
 import com.r1nn.contextq.chat.domain.MessageStatus;
 import com.r1nn.contextq.chat.dto.ChatStreamRequest;
 import com.r1nn.contextq.chat.service.ChatMessageService.AcceptCommand;
 import com.r1nn.contextq.chat.service.ChatMessageService.Accepted;
+import com.r1nn.contextq.chat.service.GuestSessionService.GuestTicket;
 import com.r1nn.contextq.common.error.BusinessException;
 import com.r1nn.contextq.common.error.ErrorCode;
 import com.r1nn.contextq.global.config.AiServerProperties;
@@ -15,6 +17,8 @@ import com.r1nn.contextq.infra.aiserver.UpstreamRejectedException;
 import com.r1nn.contextq.infra.aiserver.UpstreamTimeoutException;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.codec.ServerSentEvent;
@@ -28,9 +32,10 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * Single-mode relay: browser ⇄ backend ⇄ ai-server SSE (ADR-003 방식 X, api-spec §3.1).
  *
- * <p>Pre-stream failures throw {@link BusinessException} (plain JSON). Once the stream starts every
- * failure becomes an {@code error} event (INV-09). Not transactional: persistence goes through
- * {@link ChatMessageService} in short transactions, the ai-server call runs outside them.
+ * <p>Members and guests share the relay; only the {@link AnswerRecorder} differs (stored messages
+ * vs. guest usage log and refund). Pre-stream failures throw {@link BusinessException} (plain
+ * JSON). Once the stream starts every failure becomes an {@code error} event (INV-09). Not
+ * transactional: persistence happens in short transactions, the ai-server call outside them.
  */
 @Service
 public class ChatRelayService {
@@ -43,22 +48,29 @@ public class ChatRelayService {
   private final AiServerChatClient aiServer;
   private final AiServerProperties properties;
   private final PersistFailureRegistry persistFailures;
+  private final GuestSessionService guests;
 
   public ChatRelayService(
       SourceCatalog sourceCatalog,
       ChatMessageService messages,
       AiServerChatClient aiServer,
       AiServerProperties properties,
-      PersistFailureRegistry persistFailures) {
+      PersistFailureRegistry persistFailures,
+      GuestSessionService guests) {
     this.sourceCatalog = sourceCatalog;
     this.messages = messages;
     this.aiServer = aiServer;
     this.properties = properties;
     this.persistFailures = persistFailures;
+    this.guests = guests;
   }
 
+  /** Guest stream plus the {@code Set-Cookie} value of a newly issued session (or null). */
+  public record GuestStream(Flux<ServerSentEvent<String>> events, String setCookie) {}
+
   /**
-   * Validates, stores the question and opens the upstream stream.
+   * Logged-in user: validates, stores the question and opens the upstream stream. A {@code history}
+   * sent by the client is ignored (policy §5.1).
    *
    * @throws BusinessException pre-stream errors of api-spec §3.1
    */
@@ -77,21 +89,63 @@ public class ChatRelayService {
         messages.accept(
             new AcceptCommand(userId, request.conversationId(), question, sourceKey, requestId));
     Flux<ServerSentEvent<String>> upstream =
-        open(accepted.answerId(), new ChatCall(requestId, sourceKey, question, List.of()));
-    RelaySession session =
-        new RelaySession(
-            messages,
-            persistFailures,
-            JSON,
-            accepted.conversationId(),
-            accepted.answerId(),
-            requestId,
-            sourceKey);
-    return relay(upstream, session);
+        open(
+            new ChatCall(requestId, sourceKey, question, List.of()),
+            reason ->
+                messages.finish(
+                    accepted.answerId(),
+                    MessageStatus.FAILED,
+                    AnswerOutcome.interrupted("", reason)));
+    AnswerRecorder recorder =
+        new MemberAnswerRecorder(
+            messages, persistFailures, accepted.conversationId(), accepted.answerId(), requestId);
+    return relay(upstream, new RelaySession(recorder, JSON, requestId, sourceKey));
   }
 
-  /** Opens ai-server; a failure here ends the answer as FAILED and becomes a JSON error. */
-  private Flux<ServerSentEvent<String>> open(Long answerId, ChatCall call) {
+  /**
+   * Guest (policy §1.3): single mode only, no stored conversation, one charged question per call.
+   *
+   * @param rawSid {@code devdocs_sid} cookie value, null on the first question
+   * @throws BusinessException {@code GUEST_MODE_NOT_ALLOWED}, guest limits and the pre-stream
+   *     errors of api-spec §3.1 (a new session cookie is attached when one was issued)
+   */
+  public GuestStream streamForGuest(
+      String rawSid, String ipAddress, ChatStreamRequest request, String requestId) {
+    if (request.mode() == ConversationMode.COMPARE) {
+      throw new BusinessException(ErrorCode.GUEST_MODE_NOT_ALLOWED);
+    }
+    if (request.conversationId() != null) {
+      throw BusinessException.invalidField(
+          "conversationId", "게스트 대화는 서버에 저장되지 않아 대화 ID를 쓸 수 없습니다.");
+    }
+    request.requireSupportedMode();
+    String sourceKey = request.sourceKey();
+    List<Map<String, String>> history = request.guestHistory();
+    sourceCatalog.requireAskable(sourceKey, false);
+
+    GuestTicket ticket = guests.charge(rawSid, ipAddress);
+    AnswerRecorder recorder = new GuestAnswerRecorder(guests, ticket.sidHash(), requestId);
+    Flux<ServerSentEvent<String>> upstream;
+    try {
+      upstream =
+          open(
+              new ChatCall(requestId, sourceKey, request.trimmedQuestion(), history),
+              reason ->
+                  recorder.finish(
+                      MessageStatus.FAILED, AnswerOutcome.interrupted("", reason), true));
+    } catch (BusinessException e) {
+      throw GuestSessionService.withCookie(e, ticket);
+    }
+    return new GuestStream(
+        relay(upstream, new RelaySession(recorder, JSON, requestId, sourceKey)),
+        ticket.setCookie());
+  }
+
+  /**
+   * Opens ai-server. A failure here ends the answer as FAILED through {@code onFailure} (with the
+   * ai-server code as reason) and becomes a JSON error.
+   */
+  private Flux<ServerSentEvent<String>> open(ChatCall call, Consumer<String> onFailure) {
     try {
       return aiServer.open(call);
     } catch (UpstreamRejectedException e) {
@@ -101,21 +155,17 @@ public class ChatRelayService {
           call.requestId(),
           e.getStatus(),
           reason);
-      failBeforeStream(answerId, reason);
+      onFailure.accept(reason);
       throw new BusinessException(UpstreamCodes.preStream(e.getCode()));
     } catch (UpstreamTimeoutException e) {
       log.warn("upstream_header_timeout requestId={}", call.requestId());
-      failBeforeStream(answerId, ErrorCode.UPSTREAM_TIMEOUT.name());
+      onFailure.accept(ErrorCode.UPSTREAM_TIMEOUT.name());
       throw new BusinessException(ErrorCode.UPSTREAM_TIMEOUT);
     } catch (AiServerUnavailableException e) {
       log.warn("upstream_unavailable requestId={}", call.requestId(), e);
-      failBeforeStream(answerId, ErrorCode.AI_UNAVAILABLE.name());
+      onFailure.accept(ErrorCode.AI_UNAVAILABLE.name());
       throw new BusinessException(ErrorCode.AI_UNAVAILABLE);
     }
-  }
-
-  private void failBeforeStream(Long answerId, String reason) {
-    messages.finish(answerId, MessageStatus.FAILED, AnswerOutcome.interrupted("", reason));
   }
 
   /**
