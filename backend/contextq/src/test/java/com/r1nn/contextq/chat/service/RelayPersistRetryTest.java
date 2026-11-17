@@ -50,6 +50,9 @@ class RelayPersistRetryTest {
 
   private RelaySession session() {
     return new RelaySession(
-        messages, registry, JsonMapper.builder().build(), 9L, 1L, "req", "langchain_v03");
+        new MemberAnswerRecorder(messages, registry, 9L, 1L, "req"),
+        JsonMapper.builder().build(),
+        "req",
+        "langchain_v03");
   }
 }

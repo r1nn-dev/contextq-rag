@@ -49,7 +49,8 @@ class RelayCancelTest {
               Duration.ofSeconds(15),
               Duration.ofSeconds(30),
               Duration.ofSeconds(60)),
-          new PersistFailureRegistry());
+          new PersistFailureRegistry(),
+          mock(GuestSessionService.class));
 
   @Test
   void cancelAfterTokenCancelsUpstreamAndStoresPartial() throws Exception {
@@ -101,11 +102,8 @@ class RelayCancelTest {
       throws InterruptedException {
     RelaySession session =
         new RelaySession(
-            messages,
-            new PersistFailureRegistry(),
+            new MemberAnswerRecorder(messages, new PersistFailureRegistry(), 42L, ANSWER_ID, "r"),
             JsonMapper.builder().build(),
-            42L,
-            ANSWER_ID,
             "r",
             "langchain_v03");
     CountDownLatch received = new CountDownLatch(receive);
