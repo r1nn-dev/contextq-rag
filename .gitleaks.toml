@@ -1,0 +1,14 @@
+# gitleaks settings for the CI secret-scan job (gitleaks-action reads this file).
+# Keep every default rule; allow only reviewed false positives, each with a reason.
+[extend]
+useDefault = true
+
+# generic-api-key read the guest cookie attribute assertion ("Path=/api", "Max-Age=86400")
+# as an API key. It is a test literal, not a secret. The test line was split later, but the
+# original commit stays in the PR range, so the line pattern is allowed for this rule only.
+[[rules]]
+id = "generic-api-key"
+[[rules.allowlists]]
+description = "guest cookie attribute assertion in GuestSessionServiceTest"
+regexTarget = "line"
+regexes = ['''"Path=/api", "Max-Age=86400"''']
