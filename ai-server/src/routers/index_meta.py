@@ -31,6 +31,7 @@ class _Camel(BaseModel):
 
 class SourceItem(_Camel):
     source_key: str
+    framework: str
     version_label: str
     display_name: str
     enabled: bool
@@ -57,6 +58,7 @@ def list_sources(session: Session) -> SourcesResponse:
         items.append(
             SourceItem(
                 source_key=source.source_key,
+                framework=source.framework,
                 version_label=source.version_label,
                 display_name=source.display_name,
                 enabled=source.enabled,
