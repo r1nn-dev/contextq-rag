@@ -31,6 +31,7 @@ Working rules for AI agents in `frontend/`. The root `AGENTS.md` also applies; t
 ```bash
 cd frontend
 npm run lint        # ESLint, warnings fail
+npm test            # Vitest unit tests (src/**/*.test.ts)
 npm run build       # type check + Vite build
 ```
 

@@ -318,7 +318,7 @@ cd frontend
 npm run lint      # ESLint
 npm run format    # Prettier
 npm run build     # 빌드 검사
-npm test          # 단위 테스트 (Vitest 또는 Jest)
+npm test          # 단위 테스트 (Vitest)
 ```
 
 > AI 페어프로그래밍으로 생성된 프론트엔드 코드는 `npm run lint && npm run build`를 반드시 통과해야 커밋 가능하다.
