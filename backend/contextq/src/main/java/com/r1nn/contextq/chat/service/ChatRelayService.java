@@ -42,16 +42,19 @@ public class ChatRelayService {
   private final ChatMessageService messages;
   private final AiServerChatClient aiServer;
   private final AiServerProperties properties;
+  private final PersistFailureRegistry persistFailures;
 
   public ChatRelayService(
       SourceCatalog sourceCatalog,
       ChatMessageService messages,
       AiServerChatClient aiServer,
-      AiServerProperties properties) {
+      AiServerProperties properties,
+      PersistFailureRegistry persistFailures) {
     this.sourceCatalog = sourceCatalog;
     this.messages = messages;
     this.aiServer = aiServer;
     this.properties = properties;
+    this.persistFailures = persistFailures;
   }
 
   /**
@@ -77,7 +80,13 @@ public class ChatRelayService {
         open(accepted.answerId(), new ChatCall(requestId, sourceKey, question, List.of()));
     RelaySession session =
         new RelaySession(
-            messages, JSON, accepted.conversationId(), accepted.answerId(), requestId, sourceKey);
+            messages,
+            persistFailures,
+            JSON,
+            accepted.conversationId(),
+            accepted.answerId(),
+            requestId,
+            sourceKey);
     return relay(upstream, session);
   }
 

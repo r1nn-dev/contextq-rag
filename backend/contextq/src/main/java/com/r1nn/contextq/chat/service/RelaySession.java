@@ -36,6 +36,7 @@ final class RelaySession {
   private static final int REWRITTEN_QUERY_MAX = 200;
 
   private final ChatMessageService messages;
+  private final PersistFailureRegistry persistFailures;
   private final ObjectMapper json;
   private final Long conversationId;
   private final Long answerId;
@@ -49,12 +50,14 @@ final class RelaySession {
 
   RelaySession(
       ChatMessageService messages,
+      PersistFailureRegistry persistFailures,
       ObjectMapper json,
       Long conversationId,
       Long answerId,
       String requestId,
       String sourceKey) {
     this.messages = messages;
+    this.persistFailures = persistFailures;
     this.json = json;
     this.conversationId = conversationId;
     this.answerId = answerId;
@@ -227,12 +230,22 @@ final class RelaySession {
     return json.writeValueAsString(error);
   }
 
+  /**
+   * Terminal UPDATE with one retry (policy §2.3). When both attempts fail the browser already has
+   * the answer; the sweeper stores it as {@code FAILED(PERSIST_ERROR)} after 150 s.
+   */
   private void persist(MessageStatus status, AnswerOutcome outcome) {
     try {
       messages.finish(answerId, status, outcome);
-    } catch (RuntimeException e) {
-      // the browser already has the answer; the sweeper ends a stuck STREAMING row later
-      log.error("answer_persist_failed requestId={} messageId={}", requestId, answerId, e);
+      return;
+    } catch (RuntimeException first) {
+      log.warn("answer_persist_retry requestId={} messageId={}", requestId, answerId, first);
+    }
+    try {
+      messages.finish(answerId, status, outcome);
+    } catch (RuntimeException second) {
+      log.error("answer_persist_failed requestId={} messageId={}", requestId, answerId, second);
+      persistFailures.record(answerId, outcome.content());
     }
   }
 
