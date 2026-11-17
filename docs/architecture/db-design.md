@@ -370,6 +370,7 @@
 | UPSTREAM_TIMEOUT | 첫 이벤트 15초 / 비교 30초 초과 |
 | LLM_ERROR | OpenAI 오류 |
 | COMPARE_PARSE_ERROR | 비교 JSON 파싱 2회 실패 |
+| 그 밖의 ai-server 오류 코드 | ai-server 스트림 전 오류(`AI_BUSY`·`INDEX_NOT_ACTIVE`·`SOURCE_UNAVAILABLE` 등)·스트림 중 `error` 이벤트 코드를 그대로 기록 (API 명세 §3.1) |
 
 **저장 시점 (정책 6.3)**
 

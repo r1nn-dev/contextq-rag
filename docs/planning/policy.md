@@ -570,10 +570,10 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 | PENDING | STREAMING | `meta` 수신(단일) | — |
 | PENDING | PROCESSING | ai-server 호출 시작(비교) | — |
 | PENDING | NO_CONTEXT | top-1 < τ | `LOW_SIMILARITY` |
-| PENDING | FAILED | 연결 실패·첫 이벤트 타임아웃·5xx·클라이언트 취소 | `AI_UNAVAILABLE` · `UPSTREAM_TIMEOUT` · `LLM_ERROR` · `CLIENT_ABORTED` |
+| PENDING | FAILED | 연결 실패·첫 이벤트 타임아웃·5xx·ai-server 스트림 전 오류·클라이언트 취소 | `AI_UNAVAILABLE` · `UPSTREAM_TIMEOUT` · `LLM_ERROR` · `CLIENT_ABORTED` · ai-server 스트림 전 오류 코드(`AI_BUSY`·`INDEX_NOT_ACTIVE` 등, API 명세 §3.1) |
 | STREAMING | COMPLETED | `done`, finishReason=stop | — |
 | STREAMING | NO_CONTEXT | sentinel 감지 | `LLM_ABSTAIN` |
-| STREAMING | PARTIAL | 토큰 ≥ 1 상태에서 중단 | `CLIENT_ABORTED` · `UPSTREAM_IDLE_TIMEOUT` · `LLM_ERROR` · `LENGTH` · `MAX_DURATION` |
+| STREAMING | PARTIAL | 토큰 ≥ 1 상태에서 중단 | `CLIENT_ABORTED` · `UPSTREAM_IDLE_TIMEOUT` · `LLM_ERROR` · `LENGTH` · `MAX_DURATION` · `AI_UNAVAILABLE`(종결 이벤트 없이 연결 끊김) · ai-server `error` 이벤트 코드 |
 | STREAMING | FAILED | 토큰 0 상태에서 중단, 또는 150초 고착 | 위와 동일 · `STALE` · `PERSIST_ERROR` |
 | PROCESSING | COMPLETED | 검증된 JSON 저장 | — |
 | PROCESSING | NO_CONTEXT | 양쪽 top-1 < τ | `LOW_SIMILARITY` |
