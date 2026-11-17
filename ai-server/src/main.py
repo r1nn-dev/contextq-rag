@@ -1,18 +1,26 @@
 from fastapi import FastAPI
 
-# FastAPI 앱 인스턴스 생성
-# title, description, version은 /docs Swagger UI에 표시됨
-app = FastAPI(
-    title="ContextQ RAG Server",
-    description="공식 기술 문서 연계 RAG Q&A API",
-    version="0.1.0",
-)
+from src.config.settings import Settings, settings
+from src.routers import health
 
 
-@app.get("/health")
-async def health() -> dict[str, str]:
-    """헬스 체크 엔드포인트.
+def create_app(app_settings: Settings) -> FastAPI:
+    """FastAPI 앱을 생성한다.
 
-    Docker Compose healthcheck, Kubernetes liveness probe가 이 경로를 호출.
+    prod 프로필에서는 /docs·/redoc·/openapi.json을 노출하지 않는다 (정책서 §9.1).
     """
-    return {"status": "ok"}
+    docs_enabled = app_settings.docs_enabled
+    app = FastAPI(
+        title="ContextQ RAG Server",
+        description="공식 기술 문서 연계 RAG Q&A API",
+        version="0.1.0",
+        docs_url="/docs" if docs_enabled else None,
+        redoc_url="/redoc" if docs_enabled else None,
+        openapi_url="/openapi.json" if docs_enabled else None,
+    )
+    app.include_router(health.router)
+    return app
+
+
+# uvicorn 엔트리포인트 (src.main:app) — 워커 수는 Dockerfile에서 1로 고정
+app = create_app(settings)
