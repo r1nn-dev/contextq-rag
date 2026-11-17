@@ -85,7 +85,7 @@
 | nginx `proxy_read_timeout` | 150초 | nginx가 backend 응답을 기다리는 한도 | 반드시 스트림 최대 시간(120초)보다 커야 함 |
 | STREAMING·PENDING 고착 판정 | 150초 | 스위퍼가 `FAILED(STALE)`로 전환하는 기준(마지막 갱신 시각 기준) | 스트림 최대 시간 + 30초. 프로세스 비정상 종료 대비. PENDING도 대상: 남으면 그 대화가 INV-11로 영구히 막힘 |
 | 스위퍼 주기 | 60초 | STREAMING·PENDING 고착 정리 배치 | backend `@Scheduled` |
-| 메타 API 캐시 | 60초 | `GET /api/v1/sources` 응답 캐시 | 인덱스 활성화 시 캐시 즉시 무효화 |
+| 메타 API 캐시 | 60초 | `GET /api/v1/sources` 응답 캐시 | 인덱스 활성화는 60초 만료로 반영(활성화 CLI는 ai-server만 reload하고 backend에는 알리지 않음). backend 즉시 무효화는 관리자 작업에서 추가 |
 | ai-server 활성 인덱스 포인터 캐시 | 30초 (+ reload 즉시 반영) | ai-server가 활성 run을 재조회하는 주기 | reload 호출 실패 시 안전망 |
 | 인덱스 VALIDATING 제한 시간 | 10분 | 검증 단계 최대 시간 | 초과 시 `FAILED(VALIDATION_TIMEOUT)`, 기존 인덱스 유지 |
 | FAILED 컬렉션 | 24시간 후 삭제 | 실패 인덱스 디버깅용 보관 | 디스크(20GiB) 보호 |
@@ -558,7 +558,7 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 | — | RESTORING | `make restore-index` (모든 프로필) | tar 해제, checksum 검증 |
 | RESTORING | VALIDATING | checksum 일치 | 복원 검증 포함 게이트 실행 |
 | VALIDATING | READY | 게이트 전 항목 통과 | 검증 리포트 저장 |
-| READY | ACTIVE | `make activate-index RUN=…` | 포인터 UPDATE, 기존 ACTIVE → SUPERSEDED, reload 호출, 메타 캐시 무효화 |
+| READY | ACTIVE | `make activate-index RUN=…` | 포인터 UPDATE, 기존 ACTIVE → SUPERSEDED, reload 호출(backend 메타 캐시는 60초 만료로 반영, 2.1) |
 | ACTIVE | SUPERSEDED | 다른 run 활성화 | 컬렉션 유지(롤백·in-flight 보호) |
 | SUPERSEDED | ACTIVE | `make rollback-index` | 현재 ACTIVE → SUPERSEDED |
 | SUPERSEDED | PURGED | 더 새로운 SUPERSEDED 발생 | 컬렉션 삭제, run 레코드는 보존 |

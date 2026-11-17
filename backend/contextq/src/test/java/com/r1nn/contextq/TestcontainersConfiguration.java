@@ -16,6 +16,8 @@ public class TestcontainersConfiguration {
   // relative to backend/contextq (Gradle test working directory)
   private static final String INIT_SQL = "../../infra/postgres/init.sql";
 
+  // the container is a Spring bean: the context stops and closes it on shutdown
+  @SuppressWarnings("resource")
   @Bean
   @ServiceConnection
   PostgreSQLContainer postgresContainer() {

@@ -168,7 +168,7 @@ Browser ──HTTPS──► React (Vite)  [frontend/]
 ```
 
 - Backend validates sessions and forwards RAG requests to ai-server with `X-Internal-Token`.
-- SSE streaming: backend relays ai-server SSE to the browser via Spring's `SseEmitter`. See ADR-003.
+- SSE streaming: backend reads ai-server SSE with WebClient and relays it by returning `Flux<ServerSentEvent<String>>` from a Spring MVC controller (`docs/specs/api-spec.md` §0.3). See ADR-003.
 - ChromaDB runs embedded (no separate process). See ADR-002.
 - Frontend is AI-delegated; do not modify `frontend/` without reading `frontend/AGENTS.md` if it exists.
 
@@ -176,19 +176,20 @@ Browser ──HTTPS──► React (Vite)  [frontend/]
 
 ```
 com.r1nn.contextq
-├── {domain}/
+├── {domain}/         ← auth, chat
 │   ├── controller/   ← ResponseEntity<ApiResponse<T>>
 │   ├── service/      ← @Transactional on public methods; readOnly for reads
 │   ├── repository/   ← Spring Data JPA
 │   ├── domain/       ← @Entity; protected no-args ctor; static factory; no @Setter/@Builder
-│   ├── dto/          ← record; static from(entity) for responses
-│   └── client/       ← outbound HTTP (outside any transaction)
+│   └── dto/          ← record; static from(entity) for responses
+├── domain/           ← shared JPA base entity (created_at, updated_at)
+├── infra/            ← outbound HTTP to ai-server (WebClient), called outside any transaction
+├── common/           ← ApiResponse, ErrorCode, BusinessException, GlobalExceptionHandler, web filters
 └── global/
-    ├── config/       ← app-wide config (@ConfigurationProperties, never @Value)
-    └── error/        ← GlobalExceptionHandler, AppErrorCode
+    └── config/       ← app-wide config (@ConfigurationProperties, never @Value), Spring Security
 ```
 
-See `docs/ops/code-convention.md` §4 for detailed conventions.
+The source of this layout is `docs/ops/package-structure.md` §1. Domains do not import each other's packages (§1.3).
 
 ### AI Server package layout (`ai-server/src/`)
 
