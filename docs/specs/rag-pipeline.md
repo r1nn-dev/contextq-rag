@@ -181,10 +181,11 @@ if max_similarity < τ:
 
 ### 3.5 단계 5 — 프롬프트 조립
 
-**시스템 프롬프트 템플릿** (`configs/prompts/{prompt_version}.j2`, 현재 `single_v1.j2`):
+**시스템 프롬프트 템플릿** (`configs/prompts/{prompt_version}.j2`, 현재 `single_v2.j2`):
 
 - 파일명(확장자 제외)이 `prompt_version`이다. 문구를 바꿀 때는 기존 파일을 고치지 않고 새 버전 파일을 추가한다 (정책서 §5.5).
-- 규칙은 정책서 §5.5 다섯 가지다: ① 컨텍스트 밖 지식으로 API·코드를 만들지 않는다 ② 주장마다 `[n]` 인용 ③ 선택 버전을 답변 첫 줄에 명시 ④ 코드 예시는 컨텍스트 코드에 근거 ⑤ 근거가 부족하면 `[[NO_ANSWER]]`만 출력.
+- 규칙은 정책서 §5.5 다섯 가지다: ① 컨텍스트 밖 지식으로 API·코드를 만들지 않는다 ② 주장마다 `[n]` 인용 ③ 선택 버전을 답변 첫 줄에 명시 ④ 코드 예시는 컨텍스트 코드에 근거 ⑤ 근거가 부족하면 기준 버전 줄 없이 `[[NO_ANSWER]]`만 출력(③보다 우선).
+- 버전 이력: `single_v1` → `single_v2`(#108) — v1은 ③과 ⑤의 우선순위가 없어 모델이 `LangChain v1.x 기준 [[NO_ANSWER]]`처럼 머리말 뒤에 sentinel을 써 판정을 빠져나갔다. v2는 ⑤가 ③보다 우선임을 명시한다. sentinel 판정 규칙은 정책서 §5.4.
 - 답변은 한국어, API명·코드·에러 메시지는 원문 유지 (정책서 §5.1).
 - 템플릿 변수: `display_name`(예: LangChain v1.x), `documents[]`(`rank`·`heading_path`·`file_path`·`content`). `rank`가 인용 번호이며 SSE meta.sources rank와 같다.
 - 메시지: system = 규칙 + 번호 붙은 [참고 문서], user = 질문 원문. 단일 모드 R-4 범위에서는 대화 이력을 생성 메시지에 넣지 않는다(멀티턴은 질의 재작성으로 처리, §3.1).
@@ -415,6 +416,7 @@ yield SseEvent(event="error", data={
 | v0.5 | §3.3·§6 검색 설정 파일 `configs/retriever.yaml` → `configs/rag.yaml`(ADR-008), 컨텍스트 예산 키 추가 |
 | v0.6 | §3.5 프롬프트 위치 `configs/prompts/{prompt_version}.j2`·정책서 §5.5 규칙, 컨텍스트 초과 처리 → 정책서 §5.3 토큰 예산, §3.6 첫 토큰 타임아웃·모델 선택, §6 `configs/models.yaml` |
 | v0.7 | §1 관련 문서 경로 정정, §2.1 진입점을 backend → `POST /internal/v1/chat/stream`으로, 4단계 Source Adapter → 컨텍스트 선택(§3.4, ADR-006), §3.2 임베딩 실패는 `error` 이벤트 |
+| v0.8 | §3.5 현재 프롬프트 `single_v2`(#108) — 규칙 ⑤(근거 부족 시 sentinel만)가 ③(첫 줄 기준 버전)보다 우선 |
 
 ---
 

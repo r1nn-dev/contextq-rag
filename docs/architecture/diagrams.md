@@ -295,7 +295,7 @@ sequenceDiagram
             BE-->>U: [SSE] meta
 
             AI->>LLM: chat completion stream [temperature=0, max_tokens=1024]
-            Note over AI: 첫 16자 버퍼링 → sentinel 감지 대기
+            Note over AI: 응답 앞부분 보류 → sentinel 감지 대기<br/>(맨 앞 또는 기준 버전 머리말 뒤, 정책서 §5.4)
 
             alt 첫 이벤트(meta) 15초 초과 or 첫 토큰 10초 초과
                 BE->>DB: UPDATE messages SET status=FAILED,<br/>status_reason=UPSTREAM_TIMEOUT
@@ -304,7 +304,7 @@ sequenceDiagram
                 end
                 BE-->>U: 504 UPSTREAM_TIMEOUT
             else LLM_ABSTAIN — sentinel 감지
-                LLM-->>AI: [[NO_ANSWER]] 첫 16자
+                LLM-->>AI: [[NO_ANSWER]] (머리말 뒤 포함)
                 AI->>AI: 토큰 차단 (클라이언트에 미전송)
                 AI-->>BE: [SSE] done(status=NO_CONTEXT, reason=LLM_ABSTAIN)
                 BE->>DB: UPDATE messages SET status=NO_CONTEXT,<br/>status_reason=LLM_ABSTAIN
