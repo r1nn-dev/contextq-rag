@@ -12,8 +12,11 @@ import com.r1nn.contextq.chat.repository.MessageRepository;
 import com.r1nn.contextq.chat.repository.MessageSourceRepository;
 import com.r1nn.contextq.common.error.BusinessException;
 import com.r1nn.contextq.common.error.ErrorCode;
+import com.r1nn.contextq.global.config.QuotaProperties;
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,8 +28,8 @@ import org.springframework.transaction.annotation.Transactional;
  * ai-server call happens between them, outside any transaction.
  *
  * <ol>
- *   <li>{@link #accept}: USER + ASSISTANT(PENDING) in one transaction, INV-11 under the
- *       conversation row lock
+ *   <li>{@link #accept}: daily quota under the user row lock, then USER + ASSISTANT(PENDING) in one
+ *       transaction, INV-11 under the conversation row lock
  *   <li>{@link #applyMeta}: STREAMING + sources + snapshot (INV-13)
  *   <li>tokens stay in memory (caller)
  *   <li>{@link #finish}: one terminal UPDATE + conversation list fields
@@ -47,16 +50,22 @@ public class ChatMessageService {
   private final MessageRepository messages;
   private final MessageSourceRepository sources;
   private final Clock clock;
+  private final QuotaProperties quota;
+
+  /** Daily quota resets at 00:00 KST (policy §8.1). */
+  static final ZoneId QUOTA_ZONE = ZoneId.of("Asia/Seoul");
 
   public ChatMessageService(
       ConversationRepository conversations,
       MessageRepository messages,
       MessageSourceRepository sources,
-      Clock clock) {
+      Clock clock,
+      QuotaProperties quota) {
     this.conversations = conversations;
     this.messages = messages;
     this.sources = sources;
     this.clock = clock;
+    this.quota = quota;
   }
 
   /**
@@ -96,6 +105,7 @@ public class ChatMessageService {
    */
   @Transactional
   public Accepted accept(AcceptCommand cmd) {
+    requireDailyQuota(cmd.userId(), SINGLE_QUOTA_COST);
     Conversation conversation;
     if (cmd.conversationId() == null) {
       conversation =
@@ -176,6 +186,22 @@ public class ChatMessageService {
     answer.finish(target, outcome);
     answer.getConversation().recordAnswerEnded(target, clock.instant());
     return target;
+  }
+
+  /**
+   * Daily limit under the user row lock (policy §8.1): today's USER {@code quota_cost} plus this
+   * question must stay within the limit. Runs inside {@link #accept}'s transaction so the insert
+   * that follows is covered by the same lock.
+   *
+   * @throws BusinessException {@code DAILY_QUOTA_EXCEEDED}
+   */
+  private void requireDailyQuota(Long userId, int cost) {
+    messages.lockUserForQuota(userId);
+    Instant startOfDay =
+        clock.instant().atZone(QUOTA_ZONE).toLocalDate().atStartOfDay(QUOTA_ZONE).toInstant();
+    if (messages.sumQuotaCostSince(userId, startOfDay) + cost > quota.daily()) {
+      throw new BusinessException(ErrorCode.DAILY_QUOTA_EXCEEDED);
+    }
   }
 
   private static Conversation owned(Conversation conversation, Long userId) {
