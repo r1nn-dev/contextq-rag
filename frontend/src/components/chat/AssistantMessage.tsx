@@ -4,6 +4,7 @@ import { useMemo, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon } from '@/components/common/Icon'
 import type { Turn } from '@/hooks/useSseQuery'
+import { CompareResultView, type CompareSideInfo } from './CompareResultView'
 import { Markdown, type CitationContext } from './Markdown'
 
 const LOGIN_CODES = new Set(['GUEST_QUOTA_EXCEEDED', 'GUEST_SESSION_LIMIT', 'GUEST_MODE_NOT_ALLOWED'])
@@ -24,15 +25,17 @@ export interface SnapshotInfo {
 
 interface AssistantMessageProps {
   turn: Turn
-  snapshot: SnapshotInfo | null
+  /** one snapshot for single mode, two (A, B) for compare mode */
+  snapshots: SnapshotInfo[]
   versionLabel: string
+  /** set for compare-mode turns */
+  compare?: { a: CompareSideInfo; b: CompareSideInfo }
   /** false for read-only conversations */
   canRetry?: boolean
   onRetry: () => void
   onCitation: (rank: string) => void
   onSuggest: (question: string) => void
   onFocus: () => void
-  children?: ReactNode
 }
 
 export function SnapshotLine({ snapshot }: { snapshot: SnapshotInfo }): JSX.Element {
@@ -105,14 +108,14 @@ function ErrorBox({ turn, onRetry, canRetry }: { turn: Turn; onRetry: () => void
 
 export function AssistantMessage({
   turn,
-  snapshot,
+  snapshots,
   versionLabel,
+  compare,
   canRetry = true,
   onRetry,
   onCitation,
   onSuggest,
   onFocus,
-  children,
 }: AssistantMessageProps): JSX.Element {
   const cite = useMemo<CitationContext>(
     () => ({
@@ -129,27 +132,39 @@ export function AssistantMessage({
   }
 
   const streaming = turn.phase === 'streaming'
-  const waiting = turn.phase === 'waiting' || (streaming && turn.text === '' && children === undefined)
+  // compare mode has no token events; the whole result arrives in done (api-spec 부록 B.2)
+  const waiting = turn.phase === 'waiting' || (streaming && turn.text === '')
   if (waiting && turn.error === null) {
     return (
       <div className="answer answer-loading">
         <span className="spinner" />
-        {turn.meta === null ? '참고 문서를 검색하고 있습니다…' : '참고 문서를 기반으로 답변을 생성하고 있습니다…'}
+        {turn.meta === null
+          ? '참고 문서를 검색하고 있습니다…'
+          : compare !== undefined
+            ? '두 버전 문서를 비교해 결과를 만들고 있습니다…'
+            : '참고 문서를 기반으로 답변을 생성하고 있습니다…'}
       </div>
     )
   }
 
-  const hasBody = turn.text !== '' || children !== undefined
+  const compareResult = compare !== undefined ? (turn.done?.compareResult ?? null) : null
+  const hasBody = turn.text !== '' || compareResult !== null
   return (
-    <div className="answer-group">
+    <div className={compare !== undefined ? 'answer-group wide' : 'answer-group'}>
       {hasBody && (
         <div className="answer" onClick={onFocus}>
-          {children ?? <Markdown text={turn.text} cite={cite} />}
+          {compareResult !== null && compare !== undefined ? (
+            <CompareResultView result={compareResult} a={compare.a} b={compare.b} cite={cite} />
+          ) : (
+            <Markdown text={turn.text} cite={cite} />
+          )}
           {streaming && <span className="stream-cursor" aria-hidden="true" />}
           {turn.phase === 'done' && (
             <div className="answer-foot">
               {turn.done?.status === 'PARTIAL' && <span className="tag tag-warn">중단됨</span>}
-              {snapshot !== null && <SnapshotLine snapshot={snapshot} />}
+              {snapshots.map((snapshot) => (
+                <SnapshotLine key={snapshot.label} snapshot={snapshot} />
+              ))}
               {turn.meta?.rewrittenQuery && (
                 <details className="rewritten">
                   <summary>검색에 사용된 질의</summary>
