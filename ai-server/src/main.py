@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 from src.config.settings import Settings, settings
 from src.routers import health
+from src.routers.errors import install_error_handlers
 
 
 def create_app(app_settings: Settings) -> FastAPI:
@@ -18,6 +19,8 @@ def create_app(app_settings: Settings) -> FastAPI:
         redoc_url="/redoc" if docs_enabled else None,
         openapi_url="/openapi.json" if docs_enabled else None,
     )
+    app.state.settings = app_settings
+    install_error_handlers(app)
     app.include_router(health.router)
     return app
 
