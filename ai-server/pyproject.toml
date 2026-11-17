@@ -16,6 +16,10 @@ dependencies = [
     "PyYAML>=6.0.2",               # required by pydantic-settings for YAML loading
     "jinja2>=3.1.4",               # prompt templates: configs/prompts/*.j2
     "httpx>=0.27.0",               # document ingestion: fetch external docs
+    "sqlalchemy>=2.0",             # ai schema access (ingest runs, index pointers)
+    "psycopg[binary]>=3.2",        # PostgreSQL driver for SQLAlchemy (postgresql+psycopg)
+    "alembic>=1.13",               # ai schema migrations (backend Flyway owns app schema)
+    "langchain-text-splitters>=0.3",  # chunking strategies A/B/C
 ]
 
 [dependency-groups]
