@@ -75,9 +75,11 @@ def test_streams_contract_valid_events() -> None:
     assert response.headers["cache-control"] == "no-cache"
     events = parse_sse(response.text)
     validate_stream(events, leg="upstream")
-    assert [e["event"] for e in events] == ["meta", "token", "token", "done"]
+    # 기준 버전 머리말은 sentinel 판정 동안 보류됐다가 본문과 함께 나간다 (정책서 §5.4)
+    assert [e["event"] for e in events] == ["meta", "token", "done"]
+    assert events[1]["t"] == "LangChain v1.x 기준 답 [1]"
     assert events[0]["requestId"] == "req-9"
-    assert events[-1]["promptVersion"] == "single_v1"  # 요청에 없으면 rag.yaml 기본값
+    assert events[-1]["promptVersion"] == "single_v2"  # 요청에 없으면 rag.yaml 기본값
 
 
 def test_request_id_falls_back_to_header() -> None:

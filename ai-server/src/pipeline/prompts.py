@@ -17,7 +17,12 @@ from src.domain.retrieval import RetrievedChunk
 
 PROMPTS_DIR = CONFIG_DIR / "prompts"
 NO_ANSWER_SENTINEL = "[[NO_ANSWER]]"  # 근거 부족 선언 (정책서 §5.4 LLM_ABSTAIN)
+VERSION_HEADER = "{display_name} 기준"  # 답변 첫 줄 기준 버전 (정책서 §5.5 ③). sentinel 판정도 쓴다
 _VERSION = re.compile(r"^[a-z][a-z0-9_]*$")  # 요청 값으로 경로를 만들므로 형식을 제한한다
+
+
+def version_header(display_name: str) -> str:
+    return VERSION_HEADER.format(display_name=display_name)
 
 
 class PromptNotFoundError(LookupError):
@@ -62,6 +67,9 @@ def build_messages(
         for rank, chunk in enumerate(chunks, start=1)
     ]
     system = load_template(prompt_version, prompts_dir).render(
-        display_name=display_name, documents=documents, sentinel=NO_ANSWER_SENTINEL
+        display_name=display_name,
+        header=version_header(display_name),
+        documents=documents,
+        sentinel=NO_ANSWER_SENTINEL,
     )
     return [{"role": "system", "content": system}, {"role": "user", "content": question}]

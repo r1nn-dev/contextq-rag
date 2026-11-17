@@ -12,6 +12,7 @@ from src.pipeline.prompts import (
     PROMPTS_DIR,
     PromptNotFoundError,
     build_messages,
+    version_header,
 )
 
 
@@ -61,6 +62,23 @@ def test_single_v1_carries_the_five_policy_rules() -> None:
     assert "한국어" in text  # 정책서 §5.1 답변 언어
 
 
+def test_single_v2_puts_sentinel_rule_above_version_header() -> None:
+    """#108: 근거 부족이면 기준 버전 줄 없이 sentinel만 (규칙 ⑤가 ③보다 우선)."""
+    [system, _] = build_messages(
+        "single_v2", display_name="LangChain v1.x", question="q", chunks=[]
+    )
+    text = system["content"]
+
+    assert '답할 수 있으면 답변 첫 줄에 "LangChain v1.x 기준"' in text  # ③ 조건부
+    assert f'"LangChain v1.x 기준" 줄도 쓰지 말고 다른 말 없이 {NO_ANSWER_SENTINEL} 만 출력' in text
+    assert "규칙 3보다 우선" in text
+    assert "[n] 형식" in text and "코드 예시는 [참고 문서]의 코드에 근거" in text
+
+
+def test_version_header_is_shared_by_prompt_and_gate() -> None:
+    assert version_header("LangChain v0.3") == "LangChain v0.3 기준"
+
+
 @pytest.mark.parametrize("version", ["single_v9", "../models", "Single_V1", ""])
 def test_unknown_or_unsafe_version_is_rejected(version: str) -> None:
     with pytest.raises(PromptNotFoundError):
@@ -75,7 +93,8 @@ def test_template_variables_are_strict(tmp_path: Path) -> None:
 
 
 def test_prompt_files_are_versioned_by_name() -> None:
-    assert (PROMPTS_DIR / "single_v1.j2").is_file()
+    assert (PROMPTS_DIR / "single_v1.j2").is_file()  # 이전 버전 파일은 지우지 않는다 (정책서 §5.5)
+    assert (PROMPTS_DIR / "single_v2.j2").is_file()
 
 
 def test_llm_config_matches_policy() -> None:
