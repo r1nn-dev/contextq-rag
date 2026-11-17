@@ -1,6 +1,6 @@
 # 환경 변수 레퍼런스
 
-> **최종 수정일:** 2026-11-15
+> **최종 수정일:** 2026-11-17
 
 `.env`의 모든 변수와 GitHub Actions Secrets에 대한 설명, 생성 방법, 기본값을 정리한다.
 
@@ -29,6 +29,7 @@ openssl rand -hex 16
 ```
 
 > **Docker Compose 주의:** `postgres` 서비스 컨테이너 이름을 `POSTGRES_HOST`로 사용할 때는 `postgres`로 설정한다.  
+> **ai-server**는 같은 `POSTGRES_*` 값으로 SQLAlchemy·Alembic 접속 URL을 만든다 (`ai` 스키마).  
 > **운영 환경**은 `POSTGRES_*` 대신 `DB_URL` · `DB_USERNAME` · `DB_PASSWORD`를 사용한다 (§2 GitHub Secrets 참고).
 
 ### 1.2 OpenAI
@@ -98,6 +99,17 @@ openssl rand -hex 32
 |---|---|---|---|
 | `SPRING_PROFILES_ACTIVE` | Spring Boot 활성 프로파일 | `local` / `production` | 선택 |
 
+### 1.9 ai-server 실행 프로필
+
+| 변수명 | 설명 | 예시 / 기본값 | 필수 |
+|---|---|---|---|
+| `APP_PROFILE` | ai-server 실행 프로필. `local` · `staging` · `loadtest` · `prod` 중 하나 | `local` | 선택 |
+| `INGEST_ENABLED` | 수집·임베딩 경로 활성화 | `false` | 선택 |
+| `LLM_MOCK` | 생성 단계를 고정 토큰으로 대체하는 mock LLM | `false` | 선택 |
+
+> `APP_PROFILE=prod`에서 `INGEST_ENABLED` 또는 `LLM_MOCK`이 `true`이면 ai-server가 기동하지 않는다 (`docs/planning/policy.md` > §2.2 불변식 > INV-17).  
+> `APP_PROFILE=prod`에서는 FastAPI `/docs`를 노출하지 않는다 (`docs/planning/policy.md` > §9.1).
+
 ---
 
 ## 2. GitHub Actions Secrets
@@ -165,6 +177,13 @@ VITE_API_BASE_URL=http://localhost:8080
 # 앱 환경 (선택)
 # ================================================
 # SPRING_PROFILES_ACTIVE=local
+
+# ================================================
+# ai-server 실행 프로필 (선택 — prod에서 INGEST_ENABLED·LLM_MOCK=true면 기동 실패)
+# ================================================
+# APP_PROFILE=local
+# INGEST_ENABLED=false
+# LLM_MOCK=false
 ```
 
 ---
