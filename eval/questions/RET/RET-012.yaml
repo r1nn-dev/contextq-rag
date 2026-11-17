@@ -9,6 +9,8 @@ gold:
   sections:
   - file_path: docs/docs/how_to/parallel.ipynb
     heading_path: How to invoke runnables in parallel
+  - file_path: docs/docs/concepts/lcel.mdx
+    heading_path: LangChain Expression Language (LCEL) > Composition Primitives
 metadata:
   created_by: ai-draft
   created_at: '2026-11-17T00:00:00Z'

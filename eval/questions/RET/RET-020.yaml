@@ -9,8 +9,8 @@ gold:
   sections:
   - file_path: docs/docs/how_to/streaming.ipynb
     heading_path: How to stream runnables > Using Stream Events
-  - file_path: docs/docs/versions/v0_2/migrating_astream_events.mdx
-    heading_path: Migrating to astream_events(..., version="v2")
+  - file_path: docs/docs/concepts/streaming.mdx
+    heading_path: Streaming > Streaming APIs
 metadata:
   created_by: ai-draft
   created_at: '2026-11-17T00:00:00Z'

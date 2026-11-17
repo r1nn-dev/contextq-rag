@@ -8,7 +8,7 @@ query: LangChain v0.3에서 RetrievalQA 체인을 LCEL 방식으로 바꾸는 �
 gold:
   sections:
   - file_path: docs/docs/versions/migrating_chains/retrieval_qa.ipynb
-    heading_path: Migrating from RetrievalQA
+    heading_path: Migrating from RetrievalQA > LCEL
 metadata:
   created_by: ai-draft
   created_at: '2026-11-17T00:00:00Z'

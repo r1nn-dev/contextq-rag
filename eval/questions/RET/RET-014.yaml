@@ -9,6 +9,10 @@ gold:
   sections:
   - file_path: docs/docs/how_to/message_history.ipynb
     heading_path: How to add message history
+  - file_path: docs/docs/how_to/agent_executor.ipynb
+    heading_path: Build an Agent with AgentExecutor (Legacy) > Adding in memory
+  - file_path: docs/docs/how_to/trim_messages.ipynb
+    heading_path: How to trim messages > Using with ChatMessageHistory
 metadata:
   created_by: ai-draft
   created_at: '2026-11-17T00:00:00Z'

@@ -8,7 +8,9 @@ query: '@tool 데코레이터로 도구를 만드는 방법을 알려줘.'
 gold:
   sections:
   - file_path: docs/docs/how_to/custom_tools.ipynb
-    heading_path: How to create tools
+    heading_path: How to create tools > Creating tools from functions
+  - file_path: docs/docs/concepts/tools.mdx
+    heading_path: Tools > Create tools using the @tool decorator
   note: 디코이 — v1.x tools.mdx 'Create tools'와 경쟁
 metadata:
   created_by: ai-draft

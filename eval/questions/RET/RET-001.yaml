@@ -9,6 +9,8 @@ gold:
   sections:
   - file_path: src/oss/langchain/tools.mdx
     heading_path: Tools > Create tools
+  - file_path: src/oss/langchain/agents.mdx
+    heading_path: Agents > Core components
   note: '@tool 데코레이터 정의와 create_agent(tools=[...]) 전달'
 metadata:
   created_by: ai-draft
