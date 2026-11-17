@@ -134,7 +134,7 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 | 질문 전송 직후, `meta` 도착 전 (탭 닫기·네트워크 단절) | 메시지 `FAILED(CLIENT_ABORTED)`. 업스트림 취소 전파 | backend가 클라이언트 취소를 감지해 WebClient 구독 해제 → ai-server가 OpenAI 호출 중단. 게스트는 환불하지 않음(클라이언트 원인) | 동일 질문 재전송. 로그인 사용자는 이력에 "전송 실패" 표시 |
 | 토큰 스트리밍 중 이탈 | 수신 토큰이 1개 이상이면 `PARTIAL(CLIENT_ABORTED)`, 0개면 `FAILED` | 취소 전파로 OpenAI 스트림 중단(비용 절감). 그때까지 누적된 본문과 출처를 저장 | 이력 상세에서 부분 답변 + "중단됨" 배지 + "다시 생성" 버튼(새 메시지로 생성, 기존 메시지 유지) |
 | 서버 측 유휴 타임아웃 (30초) | 토큰 ≥ 1이면 `PARTIAL(UPSTREAM_IDLE_TIMEOUT)`, 아니면 `FAILED` | 클라이언트에 `error` 이벤트(`partial: true/false`) 전송 후 종료 | 화면에 부분 답변 유지 + 재질문 버튼. 자동 재연결은 하지 않음(기획서 결정 5) |
-| `max_tokens` 도달 | `PARTIAL(LENGTH)` | done 이벤트 `finish_reason=length` | "답변이 길어 잘렸습니다" 안내 + "이어서 설명해줘" 후속 질문 유도 |
+| `max_tokens` 도달 | `PARTIAL(LENGTH)` | done 이벤트 `finishReason=length` | "답변이 길어 잘렸습니다" 안내 + "이어서 설명해줘" 후속 질문 유도 |
 | 스트림 완료 후 DB 저장 실패 | 사용자 응답은 이미 전달됨. 메시지는 STREAMING으로 남음 | 저장 1회 재시도 → 실패 시 `request_id`와 함께 ERROR 로그. 스위퍼가 150초 후 `FAILED(PERSIST_ERROR)`로 전환 | 이력에 "저장 실패" 표시. 재질문 가능 |
 | 비교 모드 대기 중 이탈 (로그인) | 취소를 전파하지 않고 끝까지 처리 | 완료 시 `COMPLETED`로 저장 | 이력에서 결과 확인 가능. 단일 호출이라 중단해도 절감 비용이 작고, 결과 보존 가치가 더 큼 |
 | Access 만료 상태에서 요청 | 스트림은 시작 시점에만 인증 검증. 진행 중 만료는 영향 없음 | 다음 요청이 401 `AUTH_TOKEN_EXPIRED` → 클라이언트 silent refresh → 원 요청 1회 재시도 | refresh 성공 |
@@ -324,7 +324,7 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 | 파라미터 | temperature 0, `max_tokens` 1,024 |
 | 프롬프트 규칙 | ① 컨텍스트 밖 지식으로 API·코드를 만들지 않는다 ② 주장마다 [n] 인용 ③ 선택 버전을 답변 첫 줄에 명시 ④ 코드 예시는 컨텍스트 코드에 근거 ⑤ 근거 부족 시 sentinel |
 | 프롬프트 버전 | `prompts/` 디렉터리의 파일명 = `prompt_version`(예: `single_v3`). 변경은 PR + 동일 질문셋 비교 결과 첨부 |
-| 인용 검증 | 스트림 종료 시 본문의 [n]을 파싱해 범위 밖 번호를 `done.invalid_citations`로 전송. UI는 해당 번호를 비활성 렌더 |
+| 인용 검증 | 스트림 종료 시 본문의 [n]을 파싱해 범위 밖 번호를 `done.invalidCitations`로 전송. UI는 해당 번호를 비활성 렌더 |
 
 ### 5.6 생성(비교 모드)
 
@@ -568,7 +568,7 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 | PENDING | PROCESSING | ai-server 호출 시작(비교) | — |
 | PENDING | NO_CONTEXT | top-1 < τ | `LOW_SIMILARITY` |
 | PENDING | FAILED | 연결 실패·첫 이벤트 타임아웃·5xx·클라이언트 취소 | `AI_UNAVAILABLE` · `UPSTREAM_TIMEOUT` · `LLM_ERROR` · `CLIENT_ABORTED` |
-| STREAMING | COMPLETED | `done`, finish_reason=stop | — |
+| STREAMING | COMPLETED | `done`, finishReason=stop | — |
 | STREAMING | NO_CONTEXT | sentinel 감지 | `LLM_ABSTAIN` |
 | STREAMING | PARTIAL | 토큰 ≥ 1 상태에서 중단 | `CLIENT_ABORTED` · `UPSTREAM_IDLE_TIMEOUT` · `LLM_ERROR` · `LENGTH` · `MAX_DURATION` |
 | STREAMING | FAILED | 토큰 0 상태에서 중단, 또는 150초 고착 | 위와 동일 · `STALE` · `PERSIST_ERROR` |
