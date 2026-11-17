@@ -489,7 +489,13 @@ Set-Cookie: `devdocs_rt=; Max-Age=0; Path=/api/v1/auth; HttpOnly; Secure; SameSi
         "sourceKeyA":     "langchain_v03",
         "sourceKeyB":     "langchain_v1x"
       }
-    ]
+    ],
+    "guest": {
+      "limit":     5,
+      "used":      2,
+      "remaining": 3,
+      "expiresAt": "2026-10-02T10:15:30Z"
+    }
   }
 }
 ```
@@ -497,6 +503,10 @@ Set-Cookie: `devdocs_rt=; Max-Age=0; Path=/api/v1/auth; HttpOnly; Secure; SameSi
 | 필드 | 설명 |
 | --- | --- |
 | `sources[]` | enabled=true AND ACTIVE run 존재 소스만 포함 |
+| `guest` | 로그인하지 않은 요청의 게스트 이용 현황. 유효한 Access Token이 있으면 `null` (정책서 §1.3) |
+| `guest.limit` | 세션당 질문 한도 (5) |
+| `guest.used` / `guest.remaining` | `devdocs_sid` 쿠키 세션의 사용 횟수 / `limit - used`. 쿠키가 없거나 세션이 만료·미존재면 `used` 0, `remaining` 5 |
+| `guest.expiresAt` | 세션 절대 만료 시각(ISO 8601 UTC). 쿠키가 없거나 만료면 `null`. 이 API는 게스트 쿠키를 발급하지 않는다(최초 질문 시 발급) |
 | `activeRun.ingestedAt` | YYYY-MM-DD (UTC 기준 수집 완료일) |
 | `comparePairs[].compareEnabled` | 양측 소스가 모두 enabled=true AND ACTIVE run 존재일 때 true |
 
@@ -511,6 +521,8 @@ Set-Cookie: `devdocs_rt=; Max-Age=0; Path=/api/v1/auth; HttpOnly; Secure; SameSi
 
 - 앱 시작 시 이 API 1회 호출 → `sources`로 버전 선택 드롭다운 구성, `comparePairs[0].compareEnabled`로 비교 탭 활성화/비활성화 결정.
 - 하드코딩 버전 목록 사용 금지 (UI-01).
+- 게스트 남은 횟수 표시는 `guest`로 초기화한다. 질문을 보낸 뒤에는 화면에서 1씩 줄이고, `GUEST_QUOTA_EXCEEDED`를 받으면 0으로 맞춘다.
+- `sources`·`comparePairs`는 60초 캐시 값이고 `guest`는 요청마다 계산한다.
 
 ## 3. 채팅 (Chat)
 
@@ -538,7 +550,8 @@ Set-Cookie: `devdocs_rt=; Max-Age=0; Path=/api/v1/auth; HttpOnly; Secure; SameSi
   "mode":           "SINGLE",
   "sourceKey":      "langchain_v03",
   "sourceKeyA":     null,
-  "sourceKeyB":     null
+  "sourceKeyB":     null,
+  "history":        []
 }
 ```
 
@@ -550,6 +563,14 @@ Set-Cookie: `devdocs_rt=; Max-Age=0; Path=/api/v1/auth; HttpOnly; Secure; SameSi
 | `sourceKey` | string \| null | SINGLE 필수 | 예: `"langchain_v03"` |
 | `sourceKeyA` | string \| null | COMPARE 필수 | 구버전 source\_key |
 | `sourceKeyB` | string \| null | COMPARE 필수 | 신버전 source\_key |
+| `history` | array \| null | 선택 (게스트만) | 같은 화면의 최근 대화. `[{ "role": "user" \| "assistant", "content": string }]`, 오래된 것부터. 아래 규칙 참고 |
+
+**`history` 규칙 (정책서 §5.1)**
+
+- 게스트만 보낸다. 로그인 사용자가 보내면 무시하고 서버 DB 이력을 쓴다(조작된 맥락 주입 차단).
+- 서버가 재검증·절단한다: 최근 6개(3턴)만 남기고 그보다 오래된 항목은 버린다. 메시지당 2,000자를 넘으면 앞 2,000자로 자른다.
+- `role`이 `user`·`assistant`가 아니거나 `content`가 문자열이 아니면 `INVALID_REQUEST`(400, `field: "history"`)다.
+- 절단 후 값을 ai-server 6.1 `history`로 그대로 넘긴다. 질의 재작성(멀티턴) 구현 전까지 ai-server는 형식만 검증하고 쓰지 않는다.
 
 **비교 모드 예시**
 
