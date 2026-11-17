@@ -46,6 +46,21 @@ class PointerSource(Protocol):
     def get(self, source_key: str) -> ActiveIndex: ...
 
 
+def find_active_run(session: Session, source_key: str) -> IngestRun | None:
+    """포인터가 가리키는 run이 ACTIVE면 그 run, 아니면 None (소스 enabled 여부는 보지 않는다)."""
+    pointer = session.get(IndexPointer, source_key)
+    if pointer is None:
+        return None
+    run = session.get(IngestRun, pointer.active_run_id)
+    return run if run is not None and run.status == IngestStatus.ACTIVE else None
+
+
+def ingested_on(run: IngestRun) -> date | None:
+    """수집일 = run 완료 시각(없으면 시작 시각)의 날짜."""
+    finished = run.completed_at or run.started_at
+    return finished.date() if finished else None
+
+
 def load_active_index(session: Session, source_key: str) -> ActiveIndex:
     """소스 카탈로그 → 포인터 → run 순서로 확인해 ACTIVE run 스냅샷을 만든다."""
     source = session.scalar(select(Source).where(Source.source_key == source_key))
@@ -63,13 +78,12 @@ def load_active_index(session: Session, source_key: str) -> ActiveIndex:
             f"{source_key} 포인터가 ACTIVE가 아닌 run을 가리킵니다: "
             f"run {pointer.active_run_id}({status})"
         )
-    finished = run.completed_at or run.started_at
     return ActiveIndex(
         source_key=source_key,
         version=source.version_label,
         run_id=run.id,
         commit_sha=run.commit_sha,
-        ingested_at=finished.date() if finished else None,
+        ingested_at=ingested_on(run),
         chunk_count=run.chunk_count,
         embedding_model=run.embedding_model,
         display_name=source.display_name,
