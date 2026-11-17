@@ -434,7 +434,7 @@ metadata:
 - [x] RET-011~040 질문 목록 초안 작성 (2026-11-17, AI 초안 — 사람 검수 대기)
 - [x] 70문항 검수(`metadata.reviewed_by`) — AI 사전 검토 + 사람 최종 판단, 기록 `eval/review_v1.md` (#103)
 - [ ] `eval/decision_rules.md` §6 확정 후 `eval-v1` 태그
-- [ ] NO_CONTEXT 임계값 τ 결정 (E1 부속 — Q-oos·Q-ret 유사도 분포 측정 후)
+- [x] NO_CONTEXT 임계값 τ 결정 (E1 부속, 2026-11-18) — v0.3 0.29 · v1.x 0.34 (`eval/results/E1/analysis.md`)
 - [x] Q-shared SHR-002~020 gold 섹션 초안 (2026-11-17, ACTIVE 인덱스 v0.3 run 1 · v1.x run 3과 대조 누락 0건)
 - [ ] E3 블라인드 레이블링 루브릭 외부 리뷰어와 사전 조율 (W4 이전)
 

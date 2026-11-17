@@ -1,10 +1,8 @@
 # 검증 게이트 스모크 질문 — 정책서 §4.4
 # 버전당 5문항: 기대 파일이 Top-K 안에 있고 top-1 similarity ≥ τ 이어야 통과 (5문항 중 5문항)
 # 기대 파일은 저장소 루트 기준 경로이며 data-sources.md §3 포함 경로 안에 있어야 한다.
-
-# 정책서 미결정 사항 "NO_CONTEXT 임계값 τ" 가정값 (개발용).
-# τ 확정(R-4-6, E1) 시 이 값도 같은 값으로 바꾸고 스모크를 다시 실행한다.
-tau: 0.30
+# τ는 여기 두지 않는다 — 서비스와 같은 configs/rag.yaml source_key별 τ(TAU_{SOURCE_KEY} 덮어쓰기 포함).
+# τ가 바뀌면 활성 인덱스에 스모크를 다시 돌린다: make smoke-index
 top_k: 5
 
 sources:

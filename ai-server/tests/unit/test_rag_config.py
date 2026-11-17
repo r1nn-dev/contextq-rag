@@ -9,12 +9,12 @@ from src.config.rag_config import load_rag_config
 from src.config.settings import Settings
 
 
-def test_repository_config_uses_policy_dev_values() -> None:
+def test_repository_config_uses_confirmed_values() -> None:
     retrieval = load_rag_config().retrieval
 
     assert retrieval.top_k == 5
     assert retrieval.context_budget_tokens == 3000
-    assert retrieval.thresholds == {"langchain_v03": 0.30, "langchain_v1x": 0.30}
+    assert retrieval.thresholds == {"langchain_v03": 0.29, "langchain_v1x": 0.34}  # E1 확정
 
 
 def test_repository_stream_and_generation_values_follow_policy() -> None:
@@ -29,9 +29,9 @@ def test_repository_stream_and_generation_values_follow_policy() -> None:
 def test_tau_prefers_env_override() -> None:
     retrieval = load_rag_config().retrieval
 
-    assert retrieval.tau("langchain_v1x") == 0.30
+    assert retrieval.tau("langchain_v1x") == 0.34
     assert retrieval.tau("langchain_v1x", {"langchain_v1x": 0.42}) == 0.42
-    assert retrieval.tau("langchain_v03", {"langchain_v1x": 0.42}) == 0.30
+    assert retrieval.tau("langchain_v03", {"langchain_v1x": 0.42}) == 0.29
 
 
 def test_unregistered_source_is_a_config_error() -> None:

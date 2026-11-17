@@ -3,9 +3,11 @@
     uv run python -m src.ingest.cli ingest --source langchain_v1x [--strategy B]
     uv run python -m src.ingest.cli activate --run 12
     uv run python -m src.ingest.cli rollback --source langchain_v1x
+    uv run python -m src.ingest.cli smoke [--source langchain_v1x]
 
 수집·임베딩 명령(`ingest`)은 prod 프로필이거나 `INGEST_ENABLED`가 꺼져 있으면 등록하지 않는다
 (정책서 §4.5 운영 수집 금지, INV-17). 활성화·롤백은 모든 프로필에서 쓸 수 있다.
+`smoke`는 ACTIVE run에 스모크 질문만 다시 돌리고 인덱스 상태는 바꾸지 않는다(정책서 §4.4).
 모든 명령은 시작할 때 24시간 지난 FAILED run을 정리한다(정책서 §4.5).
 """
 
@@ -17,6 +19,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.config.ingest_config import load_embedding_config, load_smoke_config
+from src.config.rag_config import load_rag_config
 from src.config.settings import Settings
 from src.ingest.activation import (
     ActivationError,
@@ -35,7 +38,9 @@ from src.ingest.pipeline import (
 )
 from src.ingest.reload import notify_reload
 from src.ingest.runs import InvalidTransitionError, SourceNotFoundError
+from src.ingest.smoke import format_outcome, run_smoke
 from src.ingest.store import ChromaVectorStore, VectorStore
+from src.retrieval.errors import RetrievalError
 
 FORBIDDEN_IN_PROFILE = "FORBIDDEN_IN_PROFILE"
 INGEST_COMMANDS = ("ingest",)
@@ -65,6 +70,12 @@ def build_parser(settings: Settings) -> argparse.ArgumentParser:
     activate_cmd.add_argument("--run", type=int, required=True, help="ai.ingest_runs.id")
     rollback_cmd = commands.add_parser("rollback", help="직전 SUPERSEDED run으로 되돌린다")
     rollback_cmd.add_argument("--source", required=True, help="ai.sources.source_key")
+    smoke_cmd = commands.add_parser(
+        "smoke", help="ACTIVE 인덱스에 스모크 질문을 다시 돌린다 (읽기 전용, τ 변경 후)"
+    )
+    smoke_cmd.add_argument(
+        "--source", help="ai.sources.source_key (생략하면 smoke_questions.yaml의 모든 소스)"
+    )
     return parser
 
 
@@ -84,6 +95,7 @@ def _ingest(
         price_per_1m_tokens_usd=embedding.price_per_1m_tokens_usd,
         permalink_checker=PermalinkChecker.create(settings.github_token),
         smoke=load_smoke_config(),
+        smoke_tau=lambda key: _tau(settings, key),
     )
     summary = run_ingest(session_factory, args.source, options, deps)
     print(
@@ -91,6 +103,34 @@ def _ingest(
         f"문서 {summary.documents}, 섹션 {summary.sections}, 청크 {summary.chunks}, "
         f"누락 스니펫 {summary.missing_snippets}"
     )
+
+
+def _tau(settings: Settings, source_key: str) -> float:
+    """서비스와 같은 τ — `configs/rag.yaml` + `TAU_{SOURCE_KEY}` 덮어쓰기."""
+    return load_rag_config().retrieval.tau(source_key, settings.tau_overrides())
+
+
+def _smoke(
+    args: argparse.Namespace,
+    settings: Settings,
+    session_factory: sessionmaker[Session],
+    store: VectorStore,
+) -> int:
+    smoke = load_smoke_config()
+    sources = [args.source] if args.source else list(smoke.sources)
+    embedding = load_embedding_config()
+    with session_factory() as session:
+        outcomes = run_smoke(
+            session,
+            store,
+            lambda: OpenAIEmbeddingClient(settings.openai_api_key, embedding),
+            smoke,
+            lambda key: _tau(settings, key),
+            sources,
+        )
+    for outcome in outcomes:
+        print(format_outcome(outcome))
+    return 0 if all(o.result.passed for o in outcomes) else 1
 
 
 def _print_activation(
@@ -147,11 +187,19 @@ def main(argv: Sequence[str] | None = None, settings: Settings | None = None) ->
         elif args.command == "activate":
             with session_factory() as session:
                 _print_activation("activate", activate(session, store, args.run), settings)
+        elif args.command == "smoke":
+            return _smoke(args, settings, session_factory, store)
         elif args.command == "rollback":
             with session_factory() as session:
                 _print_activation("rollback", rollback(session, store, args.source), settings)
         return 0
-    except (SourceNotFoundError, IngestFailedError, ActivationError, InvalidTransitionError) as exc:
+    except (
+        SourceNotFoundError,
+        IngestFailedError,
+        ActivationError,
+        InvalidTransitionError,
+        RetrievalError,
+    ) as exc:
         print(str(exc), file=sys.stderr)
         return 1
     finally:

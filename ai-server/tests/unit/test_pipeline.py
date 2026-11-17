@@ -71,7 +71,6 @@ class PassingPermalinks:
 
 
 SMOKE = SmokeConfig(
-    tau=0.3,
     top_k=5,
     sources={
         "langchain_v1x": [
@@ -87,6 +86,7 @@ def _deps(
     *,
     smoke: SmokeConfig = SMOKE,
     embedder_factory: Any = None,
+    smoke_tau: float = 0.3,
 ) -> IngestDependencies:
     fake = embedder or ConstantEmbedder()
     return IngestDependencies(
@@ -95,6 +95,7 @@ def _deps(
         price_per_1m_tokens_usd=0.02,
         permalink_checker=PassingPermalinks(),
         smoke=smoke,
+        smoke_tau=lambda _source_key: smoke_tau,
     )
 
 
@@ -326,9 +327,8 @@ def test_gate_failure_keeps_existing_active(
         active_id = active.id
 
     # 해시 벡터라 스모크 질문의 top-1 similarity가 τ(0.99)에 못 미친다
-    strict = SMOKE.model_copy(update={"tau": 0.99})
     run_id = _run(
-        session_factory, tmp_path, remote_base, _deps(store, FakeEmbedder(), smoke=strict)
+        session_factory, tmp_path, remote_base, _deps(store, FakeEmbedder(), smoke_tau=0.99)
     )
 
     with session_factory() as db:

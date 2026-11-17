@@ -2,7 +2,7 @@
 # Shortcut commands for local development.
 # Prerequisites: Docker Desktop, uv, node/npm, lefthook
 
-.PHONY: up down logs ingest activate-index rollback-index eval eval-check test hooks help
+.PHONY: up down logs ingest activate-index rollback-index smoke-index eval eval-check eval-tau eval-abstain test hooks help
 
 # --- Docker Compose -------------------------------------------------------
 
@@ -27,6 +27,9 @@ activate-index: ## Activate a READY run (READY -> ACTIVE, pointer swap). Usage: 
 rollback-index: ## Roll back to the previous SUPERSEDED run (1 generation). Usage: make rollback-index SOURCE=<key>
 	cd ai-server && uv run python -m src.ingest.cli rollback --source $(SOURCE)
 
+smoke-index: ## Re-run smoke questions on ACTIVE runs with configs/rag.yaml τ (read-only). Usage: make smoke-index [SOURCE=<key>]
+	cd ai-server && uv run python -m src.ingest.cli smoke $(if $(SOURCE),--source $(SOURCE),)
+
 # --- Evaluation (docs/experiments/evaluation.md §4) -----------------------
 # Needs DB (ACTIVE pointers), CHROMA_DATA_DIR index, OPENAI_API_KEY for query embeddings.
 # E1-C uses the service Retriever (ChromaRetriever). E2 needs per-strategy index runs (R-7-3).
@@ -36,6 +39,12 @@ eval: ## Run retrieval eval -> eval/results/{E1,E2}/. Usage: make eval [EXP="E1 
 
 eval-check: ## Validate eval question sets (schema, v1 composition, review status)
 	cd ai-server && uv run python -m src.eval.run --check
+
+eval-tau: ## Decide per-source NO_CONTEXT τ from E1 results (decision_rules §3)
+	cd ai-server && uv run python -m src.eval.tau
+
+eval-abstain: ## Two-stage NO_CONTEXT measurement: τ block + LLM_ABSTAIN (real LLM, ~50 calls)
+	cd ai-server && uv run python -m src.eval.abstain
 
 # --- Tests ----------------------------------------------------------------
 
