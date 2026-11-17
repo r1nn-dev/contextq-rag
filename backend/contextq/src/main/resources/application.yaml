@@ -9,8 +9,11 @@ spring:
   datasource:
     hikari:
       data-source-properties:
-        # every pooled connection resolves unqualified names in app and uses KST (db-design §4)
-        options: "-c search_path=app -c TimeZone=Asia/Seoul"
+        # every pooled connection resolves unqualified names in app
+        options: "-c search_path=app"
+      # KST session time zone (db-design §4). Set after connect: pgjdbc sends the JVM default
+      # time zone as a startup parameter, which overrides a TimeZone given in options.
+      connection-init-sql: "SET TIME ZONE 'Asia/Seoul'"
 
   jpa:
     open-in-view: false       # disables Open Session in View anti-pattern
