@@ -8,7 +8,7 @@
 
 - **목적**: E1~E6 실험에서 사용하는 평가 메트릭을 정의하고, 결과 기록 스키마 및 판정 기준을 명시한다.
 - **범위**: 검색 품질(E1·E2), 답변 정확도(E3), 성능(E5·E6)을 포함한다. 실험 절차 자체는 `claude/protocol.md`를, 질문셋 정의는 `claude/eval-scenarios.md`를 참조한다.
-- **공통 조건**: seed=42, temperature=0, 모든 실험 결과는 `eval/results/{실험ID}/` 에 저장.
+- **공통 조건**: seed=42, temperature=0, 모든 실험 결과는 `eval/results/{실험ID}/`(예: `eval/results/E1/`)에 저장.
 
 ---
 
@@ -170,7 +170,7 @@ EmbeddingLatency = t_embed_done - t_embed_start
 
 ### 3.1 E1 — 버전 격리 측정
 
-파일: `eval/results/e1/e1_results.jsonl` (한 행 = 한 질문 × 한 조건)
+파일: `eval/results/E1/e1_results.jsonl` (한 행 = 한 질문 × 한 조건 × 한 버전 × 한 K)
 
 ```json
 {
@@ -193,11 +193,13 @@ EmbeddingLatency = t_embed_done - t_embed_start
 }
 ```
 
+> **스키마 노트 (러너 출력)**: 평가 러너는 위 필드에 더해 `question_set`(`Q-ret`/`Q-oos`), `precision_at_k`, `context_tokens`(Top-K `token_count` 합)를 기록하고, `chunks_returned[]`에 `file_path`·`heading_path`·`token_count`를 함께 남긴다. Q-oos 행은 gold가 없으므로 `hit_at_k`·`rr_at_k`·`precision_at_k`가 `null`이다. τ가 확정되기 전(R-4-6)에는 `tau`·`no_context_triggered`도 `null`이다.
+>
 > **스키마 노트**: `chunks_returned[].source_key`는 Chroma 메타데이터 필드 (`"langchain_v03"` / `"langchain_v1x"`); `chunks_returned[].similarity`는 코사인 유사도 (0.0~1.0). 최상위 `version` 필드는 질문 타겟 버전 메타데이터 (`"v0.3"` / `"v1.x"`) — human-readable 분류용.
 
 ### 3.2 E2 — 청킹 전략 비교
 
-파일: `eval/results/e2/e2_results.jsonl`
+파일: `eval/results/E2/e2_results.jsonl`
 
 ```json
 {
@@ -219,7 +221,7 @@ EmbeddingLatency = t_embed_done - t_embed_start
 
 ### 3.3 E3 — 답변 정확도 비교
 
-파일: `eval/results/e3/e3_labels.jsonl` (레이블링 완료 후 최종본)
+파일: `eval/results/E3/e3_labels.jsonl` (레이블링 완료 후 최종본)
 
 ```json
 {
@@ -241,7 +243,7 @@ EmbeddingLatency = t_embed_done - t_embed_start
 
 ### 3.4 E5 — TTFT 성능
 
-파일: `eval/results/e5/e5_ttft.jsonl`
+파일: `eval/results/E5/e5_ttft.jsonl`
 
 ```json
 {
@@ -280,21 +282,22 @@ k6 내장 출력으로 JSON 요약 저장. 추가 필드:
 
 ---
 
-## 4. 집계 스크립트
+## 4. 집계
+
+E1·E2는 평가 러너가 행 단위 결과와 요약을 함께 만든다(`make eval`, 비기능 요구사항 "한 줄로 E1·E2 CSV 생성").
+
+| 실험 | 실행 | 출력 |
+| --- | --- | --- |
+| E1 | `make eval EXP=E1` (`uv run python -m src.eval.run --exp E1`) | `eval/results/E1/e1_results.jsonl`, `eval/results/E1/e1_summary.csv`, `eval/results/E1/env.txt` |
+| E2 | `make eval EXP=E2` | `eval/results/E2/e2_results.jsonl`, `eval/results/E2/e2_summary.csv`, `eval/results/E2/env.txt` |
+
+- 요약 CSV 한 행 = (조건 또는 전략, 질문셋, 버전, K). 버전 `all` 행은 두 버전을 합친 값이다. 열: `n`, `hit_at_k`, `mrr_at_k`, `precision_at_k`, `contamination_at_k`, `avg_context_tokens`, `max_score_mean`.
+- 러너는 서비스와 같은 `Retriever`(`docs/specs/interfaces.md` §4)를 호출한다. E1-N·E1-F는 실험용 병합 컬렉션을 쓰며 운영 경로에 넣지 않는다.
 
 | 스크립트 | 입력 | 출력 |
 | --- | --- | --- |
-| `scripts/eval/aggregate_e1.py` | `eval/results/e1/e1_results.jsonl` | `eval/results/e1/e1_summary.json` (조건별 Hit@K, MRR@K, ContamRate 평균) |
-| `scripts/eval/aggregate_e2.py` | `eval/results/e2/e2_results.jsonl` | `eval/results/e2/e2_summary.json` (전략별 메트릭 비교표) |
-| `scripts/eval/aggregate_e3.py` | `eval/results/e3/e3_labels.jsonl` | `eval/results/e3/e3_summary.json` (조건별 VER, κ, EvidenceScore) |
-| `scripts/eval/aggregate_e5.py` | `eval/results/e5/e5_ttft.jsonl` | `eval/results/e5/e5_summary.json` (mean, p50, p95, min, max) |
-
-**공통 옵션:**
-```bash
-python scripts/eval/aggregate_e1.py \
-    --input eval/results/e1/e1_results.jsonl \
-    --output eval/results/e1/e1_summary.json
-```
+| `scripts/eval/aggregate_e3.py` | `eval/results/E3/e3_labels.jsonl` | `eval/results/E3/e3_summary.json` (조건별 VER, κ, EvidenceScore) |
+| `scripts/eval/aggregate_e5.py` | `eval/results/E5/e5_ttft.jsonl` | `eval/results/E5/e5_summary.json` (mean, p50, p95, min, max) |
 
 ---
 
@@ -339,7 +342,7 @@ python scripts/eval/aggregate_e1.py \
 ## 미결 사항
 
 - [ ] **EV-1** E3 외부 레이블러 섭외 및 레이블링 가이드 작성 (W4 이전)
-- [ ] **EV-2** `scripts/eval/aggregate_*.py` 구현 (E1 실험 1주일 전까지)
+- [ ] **EV-2** `scripts/eval/aggregate_e3.py`·`aggregate_e5.py` 구현 (E1·E2 집계는 평가 러너가 수행)
 - [ ] **EV-3** E6 k6 시나리오 S0~S4 스크립트 작성 (`scripts/load/`) — `claude/protocol.md` §E6 참조
 - [ ] **EV-4** TTFT 측정 위치 확정 — 클라이언트 측(curl) vs 서버 로그 중 primary로 사용할 기준 결정
 - [ ] **EV-5** Cohen's κ 계산 스크립트 (`scripts/eval/kappa.py`) 구현
@@ -353,6 +356,7 @@ python scripts/eval/aggregate_e1.py \
 | v0.1 | 최초 작성 |
 | v0.2 | Precision@K / 버전 혼입률 수식의 `c.version` → `c.source_key` 통일; E1 결과 JSONL의 `chunks_returned.version` → `source_key` |
 | v0.3 | Hit@K gold 판정을 `{file_path, heading_path}` 쌍 + 하위 섹션 포함으로 확정 (질문셋 v1 형식 확정) |
+| v0.4 | 결과 경로를 `eval/results/{E1,E2,…}/`로 통일, E1·E2 집계를 평가 러너(`make eval`) 요약 CSV로 변경, 러너 출력 필드 노트 |
 
 ---
 
