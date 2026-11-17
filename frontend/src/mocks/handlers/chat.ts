@@ -6,6 +6,7 @@
 
 import { isRecord } from '@/types/api'
 import { QUESTION_MAX_LENGTH } from '@/types/chat'
+import { compareStream } from '../compare'
 import { appendTurn, conversations, createConversation, detailOf, type StoredConversation } from '../conversations'
 import { answerFixture, findSource, newRequestId, toTokens } from '../data'
 import { fail, route } from '../router'
@@ -41,15 +42,18 @@ route('POST', '/chat/stream', (req) => {
         : fail('SOURCE_UNAVAILABLE', '더 이상 질문할 수 없는 버전입니다.', 409)
     }
   }
+  if (question.includes('실패')) {
+    return fail('AI_UNAVAILABLE', 'AI 서버에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.', 503)
+  }
+  if (user !== null && (conv?.mode ?? body.mode) === 'COMPARE') {
+    return compareStream(user, conv, question, req.signal)
+  }
   const source = findSource(conv?.sourceKey ?? (typeof body.sourceKey === 'string' ? body.sourceKey : null))
   if (source === null) {
     return fail('SOURCE_NOT_FOUND', '존재하지 않는 버전입니다.', 404)
   }
   if (user === null && mockState.guestUsed >= GUEST_LIMIT) {
     return fail('GUEST_QUOTA_EXCEEDED', '게스트 질문 5회를 모두 사용했습니다.', 429)
-  }
-  if (question.includes('실패')) {
-    return fail('AI_UNAVAILABLE', 'AI 서버에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.', 503)
   }
   if (user === null) mockState.guestUsed += 1
 
