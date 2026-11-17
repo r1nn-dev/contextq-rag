@@ -29,7 +29,7 @@ openssl rand -hex 16
 ```
 
 > **Docker Compose 주의:** `postgres` 서비스 컨테이너 이름을 `POSTGRES_HOST`로 사용할 때는 `postgres`로 설정한다.  
-> **ai-server**는 같은 `POSTGRES_*` 값으로 SQLAlchemy·Alembic 접속 URL을 만든다 (`ai` 스키마).  
+> **ai-server**는 같은 `POSTGRES_*` 값으로 SQLAlchemy·Alembic 접속 URL을 만든다 (`ai` 스키마). `infra/docker-compose.yml`의 ai-server 서비스는 `POSTGRES_HOST=postgres`, `POSTGRES_PORT=5432`로 고정하고 DB 이름·사용자·비밀번호만 `.env`에서 받는다.  
 > **운영 환경**은 `POSTGRES_*` 대신 `DB_URL` · `DB_USERNAME` · `DB_PASSWORD`를 사용한다 (§2 GitHub Secrets 참고).
 
 ### 1.2 OpenAI
