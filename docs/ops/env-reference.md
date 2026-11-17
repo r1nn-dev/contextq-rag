@@ -37,8 +37,10 @@ openssl rand -hex 16
 | 변수명 | 설명 | 생성 방법 | 필수 |
 |---|---|---|---|
 | `OPENAI_API_KEY` | OpenAI API 키 | [platform.openai.com](https://platform.openai.com) | ✅ |
+| `LLM_MODEL` | 답변 생성 모델 덮어쓰기. 미설정 시 `ai-server/configs/models.yaml` `llm.model`(`gpt-4o-mini`) | `gpt-4o-mini` | 선택 |
 
-> `sk-` 로 시작하는 값. 절대 저장소에 커밋하지 않는다.
+> `sk-` 로 시작하는 값. 절대 저장소에 커밋하지 않는다.  
+> 생성 파라미터(temperature 0, `max_tokens` 1,024, 첫 토큰 10초, 재시도 없음)는 환경 변수가 아니라 `ai-server/configs/models.yaml` `llm`에서 바꾼다 (`docs/planning/policy.md` > §5.5).
 
 ### 1.3 JWT
 

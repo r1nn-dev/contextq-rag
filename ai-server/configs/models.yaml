@@ -1,7 +1,9 @@
 llm:
-  model: "gpt-4o-mini"
-  temperature: 0.1            # low = consistent answers; keep low for RAG
-  max_tokens: 1024
+  model: "gpt-4o-mini"              # 기본 생성 모델 — LLM_MODEL 환경 변수가 우선 (정책서 §5.5)
+  temperature: 0                    # 정책서 §5.5
+  max_tokens: 1024                  # 정책서 §5.5
+  first_token_timeout_seconds: 10   # 요청~첫 토큰 제한 (정책서 §2.1 OpenAI 생성 첫 토큰)
+  max_retries: 0                    # 스트림은 재시도하지 않는다 (중복·비용, 정책서 §2.1)
 
 embedding:
   model: "text-embedding-3-small"  # 1536 dims (default)

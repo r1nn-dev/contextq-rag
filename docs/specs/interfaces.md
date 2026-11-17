@@ -266,28 +266,54 @@ class AnswerGenerator(Protocol):
         """
         ...
 
-    async def generate_stream(
+    def generate_stream(
         self,
         query: str,
         chunks: list[RetrievedChunk],
-    ) -> AsyncIterator[str]:
+        *,
+        display_name: str,       # 선택 버전 표시명. 예: "LangChain v1.x" (답변 첫 줄 명시, 정책서 §5.5 ③)
+        prompt_version: str,     # configs/prompts/ 파일명(확장자 제외). 예: "single_v1"
+    ) -> GenerationStream:
         """
         SINGLE 모드 전용 스트리밍 답변 생성.
         라우터가 이 이터레이터를 소비하여 SSE token 이벤트로 감싸 클라이언트에 전송한다.
-        완료 시 StopAsyncIteration을 자연스럽게 발생시킨다.
+        chunks의 순서가 인용 번호 [1..n]이다 (meta.sources rank와 같다).
 
         SSE 이벤트 순서 (라우터 책임):
             meta → token* → done
 
         Returns:
-            답변 토큰 텍스트를 순차적으로 yield한다.
+            GenerationStream — 답변 토큰 텍스트를 순차적으로 yield한다.
+            스트림이 끝나면 model·finish_reason·usage가 채워진다.
+
+        Raises:
+            PromptNotFoundError: prompt_version 파일이 없음 (호출 즉시)
+            LLMCallError: OpenAI 호출 실패, 첫 토큰 10초 초과 (이터레이션 중)
         """
         ...
+
+
+class TokenUsage(TypedDict):
+    prompt: int
+    completion: int
+
+
+class GenerationStream(Protocol):
+    """토큰 스트림. 끝까지 소비하거나 aclose()로 닫는다 (클라이언트 취소 시 OpenAI 연결 해제)."""
+
+    model: str | None             # 실제 응답 모델명 (INV-13). 첫 조각을 받은 뒤 채워진다
+    finish_reason: str | None     # "stop" | "length" | ... 스트림 종료 후 채워진다
+    usage: TokenUsage | None      # 스트림 종료 후 채워진다. 중간에 닫으면 None
+
+    def __aiter__(self) -> AsyncIterator[str]: ...
+    async def aclose(self) -> None: ...
 ```
 
 **구현 노트**
 - `chunks`가 빈 리스트이면 `"검색된 문서가 없어 답변할 수 없습니다."` 형태의 안내를 담은 `AnswerResult`를 반환한다. 예외를 발생시키지 않는다.
-- 프롬프트 템플릿은 `configs/prompts/`에서 버전 관리한다. 하드코딩 금지.
+- 프롬프트 템플릿은 `configs/prompts/{prompt_version}.j2`(Jinja2)로 버전 관리한다. 하드코딩 금지.
+- `generate_stream` 파라미터: temperature 0, `max_tokens` 1,024, 첫 토큰 10초, 재시도 없음 (`configs/models.yaml` `llm`, 정책서 §5.5·§2.1). 모델은 `LLM_MODEL` 환경 변수가 우선한다.
+- sentinel(`[[NO_ANSWER]]`) 감지와 인용 번호 검증은 생성기가 아니라 라우터 조립 단계가 한다 (정책서 §5.4·§5.5).
 - COMPARE 모드는 `generate()`를 사용하며, OpenAI Structured Outputs JSON 스키마를 적용해 비스트리밍으로 호출한다. token 이벤트 없이 `done` 이벤트 1회만 발생한다.
 
 ---
@@ -435,7 +461,8 @@ class EmbeddingClient(Protocol):
 | `IndexNotActiveError` | `Retriever` | ACTIVE run 포인터 또는 컬렉션 없음 (INV-01 위반) | 503 | INDEX_NOT_ACTIVE 반환 |
 | `EmbeddingModelMismatchError` | `Retriever` | 인덱스 임베딩 모델 ≠ 질의 임베딩 모델 (INV-03) | 500 | EMBEDDING_MODEL_MISMATCH 반환 |
 | `EmbeddingError` | `Retriever`, `EmbeddingClient` | 임베딩 API 호출 실패 | 503 | 로그 후 503 반환 |
-| `LLMCallError` | `AnswerGenerator` | LLM API 호출 실패 | 503 | 로그 후 503 반환 |
+| `LLMCallError` | `AnswerGenerator` | LLM API 호출 실패, 첫 토큰 10초 초과 | 503 | 스트림 시작 후에는 `error` 이벤트 `LLM_ERROR` (INV-09) |
+| `PromptNotFoundError` | `AnswerGenerator` | `prompt_version`에 해당하는 프롬프트 파일 없음 | 400 | INVALID_REQUEST 반환 |
 | `ContextTooLongError` | `AnswerGenerator` | 컨텍스트 토큰 초과 | 422 | top_k 줄여 재시도 |
 | `ChunkingError` | `DocumentChunker` | 청킹 처리 실패 | - | 해당 문서 건너뜀 후 로그 |
 
@@ -461,7 +488,11 @@ class EmbeddingError(Exception):
     pass
 
 class LLMCallError(Exception):
-    """LLM API 호출 실패"""
+    """LLM API 호출 실패 또는 첫 토큰 타임아웃"""
+    pass
+
+class PromptNotFoundError(Exception):
+    """prompt_version에 해당하는 프롬프트 파일이 없음 (HTTP 400)"""
     pass
 
 class ContextTooLongError(Exception):
@@ -516,6 +547,7 @@ class ChunkingError(Exception):
 | v0.3 | `ParsedDocument` 제거, Source Adapter 출력 `NormalizedDocument`·`Section` 정의, `DocumentChunker` 입력을 `NormalizedDocument`로 변경, `Chunk`·`ChunkMetadata`를 policy.md §4.2 필수 필드 기준으로 분리, 청킹 설정 위치 `configs/ingest.yaml` |
 | v0.4 | `RetrievedChunk`에 `file_path`·`token_count` 추가 (평가 러너의 gold 판정·평균 컨텍스트 토큰, 정책서 §5.3 컨텍스트 예산). 기존 필드 변경 없음 |
 | v0.5 | `RetrievedChunk`에 `site_url` 추가 (SSE meta 출처 카드). `Retriever` 예외에 `IndexNotActiveError`·`EmbeddingModelMismatchError` 추가, `SourceNotFoundError`·`SourceUnavailableError` 조건 구체화. 구현 노트: `where` 필터 → ACTIVE 컬렉션 지정 + 2차 메타데이터 검증 (ADR-004) |
+| v0.6 | `AnswerGenerator.generate_stream`: 키워드 입력 `display_name`·`prompt_version` 추가, 반환을 `GenerationStream`(토큰 + 종료 후 `model`·`finish_reason`·`usage`)으로 구체화, `PromptNotFoundError` 추가 |
 
 ---
 *end.*

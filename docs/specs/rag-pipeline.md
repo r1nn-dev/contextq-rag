@@ -190,24 +190,13 @@ class NormalizedDocument(TypedDict):
 
 ### 3.5 단계 5 — 프롬프트 조립
 
-**시스템 프롬프트 템플릿** (`configs/prompts/qa_system.jinja2`):
+**시스템 프롬프트 템플릿** (`configs/prompts/{prompt_version}.j2`, 현재 `single_v1.j2`):
 
-```jinja
-당신은 LangChain {{ source_key }} 공식 문서 전문 Q&A 어시스턴트입니다.
-아래 [참고 문서] 내용만을 근거로 질문에 답하세요.
-
-규칙:
-1. [참고 문서]에 없는 내용은 "문서에서 찾을 수 없습니다"라고 명시하세요.
-2. {{ source_key }} 이외의 버전 코드·API를 답변에 포함하지 마세요.
-3. 코드 예시는 반드시 [참고 문서]의 코드를 기반으로 작성하세요.
-
-[참고 문서]
-{% for doc in documents %}
----
-출처: {{ doc.heading_path }}
-{{ doc.text }}
-{% endfor %}
-```
+- 파일명(확장자 제외)이 `prompt_version`이다. 문구를 바꿀 때는 기존 파일을 고치지 않고 새 버전 파일을 추가한다 (정책서 §5.5).
+- 규칙은 정책서 §5.5 다섯 가지다: ① 컨텍스트 밖 지식으로 API·코드를 만들지 않는다 ② 주장마다 `[n]` 인용 ③ 선택 버전을 답변 첫 줄에 명시 ④ 코드 예시는 컨텍스트 코드에 근거 ⑤ 근거가 부족하면 `[[NO_ANSWER]]`만 출력.
+- 답변은 한국어, API명·코드·에러 메시지는 원문 유지 (정책서 §5.1).
+- 템플릿 변수: `display_name`(예: LangChain v1.x), `documents[]`(`rank`·`heading_path`·`file_path`·`content`). `rank`가 인용 번호이며 SSE meta.sources rank와 같다.
+- 메시지: system = 규칙 + 번호 붙은 [참고 문서], user = 질문 원문. 단일 모드 R-4 범위에서는 대화 이력을 생성 메시지에 넣지 않는다(멀티턴은 질의 재작성으로 처리, §3.1).
 
 **멀티턴 메시지 조립:**
 
@@ -223,11 +212,7 @@ for turn in history[-N:]:
 messages.append({"role": "user", "content": current_question})
 ```
 
-**컨텍스트 토큰 초과 처리:**
-- 조립 전 tiktoken으로 총 토큰 수 계산
-- 모델 한도(GPT-4o-mini: 128K) 대비 50% 초과 시 k를 3으로 줄여 재조립
-- 재조립 후도 초과 시 대화 이력을 N-1로 줄임
-- `ContextTooLongError`는 최후 수단으로만 발생시킴
+**컨텍스트 토큰 예산:** 정책서 §5.3을 따른다 — similarity ≥ τ 청크만, 최대 3,000토큰(`configs/rag.yaml` `retrieval.context_budget_tokens`), 초과 시 낮은 rank부터 제외, 청크 중간 절단 금지. 토큰 수는 청크 메타데이터 `token_count`(tiktoken).
 
 ---
 
@@ -240,7 +225,9 @@ messages.append({"role": "user", "content": current_question})
 | **모델** | `gpt-4o-mini` |
 | **temperature** | `0` |
 | **stream** | `True` |
-| **max_tokens** | `1024` (설정: `configs/models/openai.yaml`) |
+| **max_tokens** | `1024` (설정: `configs/models.yaml` `llm`) |
+| **첫 토큰 타임아웃** | 10초, 재시도 없음 (정책서 §2.1) |
+| **모델 선택** | `LLM_MODEL` 환경 변수 → 없으면 `configs/models.yaml` `llm.model` |
 | **구현체** | `OpenAIAnswerGenerator.generate_stream()` |
 
 **SSE 이벤트 발행 순서 (SINGLE 모드):**
@@ -390,8 +377,8 @@ yield SseEvent(event="error", data={
 | `configs/pipeline.yaml` | `history_window` (멀티턴 N턴), `rewrite_model` |
 | `configs/ingest.yaml` | 청킹 전략 A·B·C 파라미터, 기본 전략 (인덱스 빌드 전용, `docs/specs/doc-source.md` §6) |
 | `configs/rag.yaml` | `retrieval.top_k`, `retrieval.thresholds.{source_key}`(τ, ADR-008), `retrieval.context_budget_tokens` |
-| `configs/models/openai.yaml` | `model`, `temperature`, `max_tokens` |
-| `configs/prompts/qa_system.jinja2` | 단일 모드 시스템 프롬프트 템플릿 |
+| `configs/models.yaml` | `llm.model`·`temperature`(0)·`max_tokens`·`first_token_timeout_seconds`·`max_retries`, `embedding.*` |
+| `configs/prompts/single_v{n}.j2` | 단일 모드 시스템 프롬프트 템플릿 (파일명 = `prompt_version`) |
 | `configs/prompts/compare_system.jinja2` | 비교 모드 Structured Outputs 프롬프트 |
 
 > 모든 설정값은 하드코딩 금지. 코드에서 직접 설정값을 사용하지 않는다.
@@ -435,6 +422,7 @@ yield SseEvent(event="error", data={
 | v0.3 | §2.1 다이어그램 엔드포인트 `/api/chat` → `/api/v1/chat` 수정, §2.2 다이어그램 엔드포인트 `/api/chat (mode="COMPARE")` → `/api/v1/chat/compare` + 파라미터 snake_case 통일(source_key_a·source_key_b), §5 compare_pipeline 파라미터 주석 source_key_a·source_key_b로 정렬 |
 | v0.4 | §2.1 다이어그램 컬렉션 이름을 `{source_key}_run{active_run_id}`로 수정, §3.3 버전 필터(`where`) → 1차 컬렉션 지정 + 2차 메타데이터 검증·임베딩 모델 검사 (ADR-004, 정책서 §5.3) |
 | v0.5 | §3.3·§6 검색 설정 파일 `configs/retriever.yaml` → `configs/rag.yaml`(ADR-008), 컨텍스트 예산 키 추가 |
+| v0.6 | §3.5 프롬프트 위치 `configs/prompts/{prompt_version}.j2`·정책서 §5.5 규칙, 컨텍스트 초과 처리 → 정책서 §5.3 토큰 예산, §3.6 첫 토큰 타임아웃·모델 선택, §6 `configs/models.yaml` |
 
 ---
 

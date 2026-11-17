@@ -1,4 +1,4 @@
-"""서비스 검색·생성 설정 로더 — `configs/rag.yaml` (ADR-008, 정책서 §5.3).
+"""서비스 검색·생성 설정 로더 — `configs/rag.yaml`(ADR-008, 정책서 §5.3)·`models.yaml` `llm`.
 
 τ는 source_key별 값이고 `Settings`의 `TAU_{SOURCE_KEY}` 덮어쓰기가 우선한다.
 """
@@ -37,10 +37,24 @@ class RagConfig(BaseModel):
     retrieval: RetrievalConfig
 
 
-def _load(config_dir: Path) -> dict[str, Any]:
-    data = yaml.safe_load((config_dir / "rag.yaml").read_text(encoding="utf-8"))
+class LlmConfig(BaseModel):
+    """`configs/models.yaml` `llm` — 단일 모드 생성 파라미터 (정책서 §5.5·§2.1)."""
+
+    model: str = Field(min_length=1)
+    temperature: float = Field(ge=0, le=2)
+    max_tokens: int = Field(gt=0)
+    first_token_timeout_seconds: float = Field(gt=0)
+    max_retries: int = Field(ge=0)
+
+    def resolve_model(self, override: str = "") -> str:
+        """`LLM_MODEL`이 있으면 그 값, 없으면 yaml 기본 모델."""
+        return override.strip() or self.model
+
+
+def _load(config_dir: Path, name: str = "rag.yaml") -> dict[str, Any]:
+    data = yaml.safe_load((config_dir / name).read_text(encoding="utf-8"))
     if not isinstance(data, dict):
-        raise ValueError("rag.yaml 형식이 올바르지 않습니다")
+        raise ValueError(f"{name} 형식이 올바르지 않습니다")
     return data
 
 
@@ -51,3 +65,8 @@ def load_rag_config(config_dir: Path = CONFIG_DIR) -> RagConfig:
         if not 0.0 <= tau <= 1.0:
             raise ValueError(f"τ는 0~1이어야 합니다: {source_key}={tau}")
     return config
+
+
+@lru_cache
+def load_llm_config(config_dir: Path = CONFIG_DIR) -> LlmConfig:
+    return LlmConfig.model_validate(_load(config_dir, "models.yaml")["llm"])
