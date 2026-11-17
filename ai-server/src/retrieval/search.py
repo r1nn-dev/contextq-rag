@@ -76,6 +76,15 @@ class ChromaRetriever:
         """요청 시작 시 검색할 run을 확정한다 (소스·포인터 오류는 여기서 난다)."""
         return self.pointers.get(source_key)
 
+    def prepare(self, source_key: str) -> ActiveIndex:
+        """스트림 시작 전 확인 — run 확정 + 컬렉션 존재·임베딩 모델(INV-03).
+
+        여기서 나는 오류는 HTTP 상태로 응답할 수 있다(200 전). 모두 캐시된 값이라 빠르다.
+        """
+        index = self.resolve(source_key)
+        self._check_collection(index)
+        return index
+
     def retrieve(self, query: str, source_key: str, top_k: int = 5) -> list[RetrievedChunk]:
         """`Retriever` 계약 — similarity 내림차순, 결과가 없으면 빈 리스트."""
         return self.search(query, source_key, top_k).chunks

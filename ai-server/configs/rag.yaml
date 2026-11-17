@@ -11,3 +11,13 @@ retrieval:
   thresholds:
     langchain_v03: 0.30
     langchain_v1x: 0.30
+
+generation:
+  # 요청에 promptVersion이 없을 때 쓰는 단일 모드 프롬프트 (configs/prompts/{prompt_version}.j2)
+  prompt_version: single_v1
+
+stream:
+  # 정책서 §2.1 SSE 하트비트 · 단일 스트림 최대 시간, §8.1 ai-server 동시 생성 (E6에서 확정)
+  heartbeat_seconds: 10
+  max_duration_seconds: 120
+  max_concurrency: 20

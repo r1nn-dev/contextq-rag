@@ -33,8 +33,22 @@ class RetrievalConfig(BaseModel):
             ) from None
 
 
+class GenerationConfig(BaseModel):
+    prompt_version: str = Field(min_length=1)  # 요청에 promptVersion이 없을 때
+
+
+class StreamConfig(BaseModel):
+    """정책서 §2.1 SSE 하트비트·단일 스트림 최대 시간, §8.1 동시 생성 상한."""
+
+    heartbeat_seconds: float = Field(gt=0)
+    max_duration_seconds: float = Field(gt=0)
+    max_concurrency: int = Field(ge=1)
+
+
 class RagConfig(BaseModel):
     retrieval: RetrievalConfig
+    generation: GenerationConfig
+    stream: StreamConfig
 
 
 class LlmConfig(BaseModel):

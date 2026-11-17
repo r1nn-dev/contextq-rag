@@ -17,6 +17,15 @@ def test_repository_config_uses_policy_dev_values() -> None:
     assert retrieval.thresholds == {"langchain_v03": 0.30, "langchain_v1x": 0.30}
 
 
+def test_repository_stream_and_generation_values_follow_policy() -> None:
+    config = load_rag_config()
+
+    assert config.generation.prompt_version == "single_v1"
+    stream = config.stream
+    assert (stream.heartbeat_seconds, stream.max_duration_seconds) == (10, 120)
+    assert stream.max_concurrency == 20
+
+
 def test_tau_prefers_env_override() -> None:
     retrieval = load_rag_config().retrieval
 
@@ -30,8 +39,14 @@ def test_unregistered_source_is_a_config_error() -> None:
         load_rag_config().retrieval.tau("react_v18")
 
 
+REST = """
+generation: {prompt_version: single_v1}
+stream: {heartbeat_seconds: 10, max_duration_seconds: 120, max_concurrency: 20}
+"""
+
+
 def _write(tmp_path: Path, body: str) -> Path:
-    (tmp_path / "rag.yaml").write_text(body, encoding="utf-8")
+    (tmp_path / "rag.yaml").write_text(body + REST, encoding="utf-8")
     return tmp_path
 
 
