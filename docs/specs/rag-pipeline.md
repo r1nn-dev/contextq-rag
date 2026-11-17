@@ -138,7 +138,7 @@ user:
 | **구현체** | `ChromaRetriever` |
 | **컬렉션** | `{source_key}_run{active_run_id}` (ADR-004) |
 | **검색 방식** | cosine similarity |
-| **반환 수 k** | 5 (설정: `configs/retriever.yaml → top_k`) |
+| **반환 수 k** | 5 (설정: `configs/rag.yaml → retrieval.top_k`) |
 | **버전 격리** | 1차: ACTIVE run 컬렉션 하나만 지정 (`where` 필터 미사용). 2차: 결과 청크의 `source_key`·`version`·`ingest_run_id`가 다르면 폐기 + ERROR 로그 (INV-02, ADR-004) |
 | **임베딩 모델 검사** | 컬렉션·청크의 `embedding_model` ≠ 질의 모델이면 검색 거부 (INV-03, `EMBEDDING_MODEL_MISMATCH`) |
 | **p95 목표** | 500ms (임베딩 포함, 8.3-1) |
@@ -157,7 +157,7 @@ collection_name = f"{source_key}_run{active_run_id}"
 ```python
 chunks = retriever.retrieve(query=rewritten_query, source_key=source_key, top_k=k)
 max_similarity = max((c.similarity for c in chunks), default=0.0)
-τ = load_tau(source_key)   # configs/retriever.yaml → tau_langchain_v03 / tau_langchain_v1x
+τ = load_tau(source_key)   # configs/rag.yaml → retrieval.thresholds.{source_key}, TAU_{SOURCE_KEY}로 덮어쓰기
 
 if max_similarity < τ:
     return NO_CONTEXT_RESPONSE   # SSE: meta(noContext=true) → done(NO_CONTEXT)
@@ -389,7 +389,7 @@ yield SseEvent(event="error", data={
 | --- | --- |
 | `configs/pipeline.yaml` | `history_window` (멀티턴 N턴), `rewrite_model` |
 | `configs/ingest.yaml` | 청킹 전략 A·B·C 파라미터, 기본 전략 (인덱스 빌드 전용, `docs/specs/doc-source.md` §6) |
-| `configs/retriever.yaml` | `top_k`, `tau_langchain_v03`, `tau_langchain_v1x` |
+| `configs/rag.yaml` | `retrieval.top_k`, `retrieval.thresholds.{source_key}`(τ, ADR-008), `retrieval.context_budget_tokens` |
 | `configs/models/openai.yaml` | `model`, `temperature`, `max_tokens` |
 | `configs/prompts/qa_system.jinja2` | 단일 모드 시스템 프롬프트 템플릿 |
 | `configs/prompts/compare_system.jinja2` | 비교 모드 Structured Outputs 프롬프트 |
@@ -434,6 +434,7 @@ yield SseEvent(event="error", data={
 | v0.2 | §2.2 비교 모드 Structured Outputs 비스트리밍으로 재작성, §3.3 source_key로 통합(version 제거), §3.4 NormalizedDocument score→similarity/version→source_key, §3.6 seed=42 제거·channel 필드 제거·SINGLE 모드 명시, §4 NO_CONTEXT SSE로 수정, §5 asyncio queue+SSE→Structured Outputs로 전면 재작성, §6 active_collection.json 제거·seed 제거 |
 | v0.3 | §2.1 다이어그램 엔드포인트 `/api/chat` → `/api/v1/chat` 수정, §2.2 다이어그램 엔드포인트 `/api/chat (mode="COMPARE")` → `/api/v1/chat/compare` + 파라미터 snake_case 통일(source_key_a·source_key_b), §5 compare_pipeline 파라미터 주석 source_key_a·source_key_b로 정렬 |
 | v0.4 | §2.1 다이어그램 컬렉션 이름을 `{source_key}_run{active_run_id}`로 수정, §3.3 버전 필터(`where`) → 1차 컬렉션 지정 + 2차 메타데이터 검증·임베딩 모델 검사 (ADR-004, 정책서 §5.3) |
+| v0.5 | §3.3·§6 검색 설정 파일 `configs/retriever.yaml` → `configs/rag.yaml`(ADR-008), 컨텍스트 예산 키 추가 |
 
 ---
 

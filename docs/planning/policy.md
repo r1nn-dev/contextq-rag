@@ -301,7 +301,7 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 | --- | --- |
 | 대상 | 요청 source의 ACTIVE run 컬렉션 1개만 직접 지정(1차 격리) + 결과 메타데이터 재검증(INV-02, 2차) |
 | Top-K | 초기값 5. E2 결정 규칙으로 확정(K ∈ {3, 5, 8}) |
-| 임계값 τ | 미결정(W2 E1 부속 실험). 확정 전 개발용 임시값 0.30 |
+| 임계값 τ | source_key별 값(ADR-008, `ai-server/configs/rag.yaml`, `TAU_{SOURCE_KEY}`로 덮어쓰기). 미결정(W2 E1 부속 실험). 확정 전 개발용 임시값 0.30(두 소스 공통) |
 | 컨텍스트 채택 | Top-K 중 similarity ≥ τ 인 청크만 컨텍스트에 넣음 |
 | 컨텍스트 예산 | 최대 3,000 토큰. 초과 시 낮은 rank부터 제외(청크 중간 절단 금지) |
 | 지연 기록 | `rewrite_ms`, `embed_ms`, `retrieve_ms`를 done 이벤트와 DB에 기록 |
