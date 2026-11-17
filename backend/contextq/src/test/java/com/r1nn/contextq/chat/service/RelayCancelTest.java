@@ -51,7 +51,9 @@ class RelayCancelTest {
               Duration.ofSeconds(60)),
           new PersistFailureRegistry(),
           mock(GuestSessionService.class),
-          mock(QuestionRateLimiter.class));
+          mock(QuestionRateLimiter.class),
+          new StreamSlots(),
+          new com.r1nn.contextq.global.config.QuotaProperties(10, 100, 2, 1));
 
   @Test
   void cancelAfterTokenCancelsUpstreamAndStoresPartial() throws Exception {
