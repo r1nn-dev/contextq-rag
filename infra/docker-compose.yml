@@ -48,8 +48,25 @@ services:
       INTERNAL_TOKEN: ${INTERNAL_TOKEN}
       # 컨테이너 안 경로는 고정한다. .env의 CHROMA_DATA_DIR은 로컬(호스트) 실행용 상대 경로다
       CHROMA_DATA_DIR: /app/chroma_db
+      # ai 스키마(활성 인덱스 포인터) 접속 — 컨테이너에서는 Compose 서비스 이름으로 접속한다
+      # (.env의 POSTGRES_HOST·POSTGRES_HOST_PORT는 호스트 실행용이므로 쓰지 않는다)
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-contextq_db}
+      POSTGRES_USER: ${POSTGRES_USER:-contextq}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - chroma_data:/app/chroma_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # 소스별 ACTIVE 인덱스까지 확인한다 (api-spec §6.2, 정책서 §9.4). 이미지에 curl이 없어 python으로 호출
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/internal/v1/health', timeout=4).status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     networks:
       - contextq-net
 
