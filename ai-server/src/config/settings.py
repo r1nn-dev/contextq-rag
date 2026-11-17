@@ -2,6 +2,7 @@ from typing import Literal, Self
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy import URL
 
 # 정책서 §9.1 프로필별 기능 매트릭스의 프로필 집합
 AppProfile = Literal["local", "staging", "loadtest", "prod"]
@@ -65,11 +66,15 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
-        """SQLAlchemy 접속 URL (psycopg 3 드라이버)."""
-        return (
-            f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}"
-            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
-        )
+        """SQLAlchemy 접속 URL (psycopg 3 드라이버). 비밀번호의 특수문자는 URL 인코딩된다."""
+        return URL.create(
+            drivername="postgresql+psycopg",
+            username=self.postgres_user,
+            password=self.postgres_password,
+            host=self.postgres_host,
+            port=self.postgres_port,
+            database=self.postgres_db,
+        ).render_as_string(hide_password=False)
 
 
 # 모듈 수준 싱글톤 — 다른 모듈에서 `from src.config.settings import settings`로 사용

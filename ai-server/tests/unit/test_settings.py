@@ -62,6 +62,7 @@ def test_database_url_uses_psycopg_driver() -> None:
         postgres_port=5433,
         postgres_db="contextq_db",
         postgres_user="u",
-        postgres_password="<placeholder>",
+        postgres_password="p@ss",
     )
-    assert settings.database_url == "postgresql+psycopg://u:<placeholder>@db:5433/contextq_db"
+    # 비밀번호의 '@'가 URL 구분자로 해석되지 않도록 인코딩된다
+    assert settings.database_url == "postgresql+psycopg://u:p%40ss@db:5433/contextq_db"
