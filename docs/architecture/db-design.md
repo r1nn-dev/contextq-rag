@@ -1,6 +1,6 @@
 # 데이터베이스 스키마 설계
 
-> 최종 수정일: 2026-10-01
+> 최종 수정일: 2026-11-17
 
 ---
 
@@ -30,7 +30,7 @@
 
 - `app` ← Flyway 마이그레이션, backend 독점 쓰기
 - `ai` ← Alembic 마이그레이션, ai-server 독점 쓰기
-- backend는 `ai.sources`, `ai.index_pointers` **읽기만** 허용. 나머지 ai 테이블 직접 접근 불가
+- backend는 ai 스키마 테이블을 직접 읽지 않는다(SELECT 권한 없음). 소스·활성 run 정보는 ai-server 내부 API(`GET /internal/v1/sources`)로 조회한다
 
 **서비스 간 참조 (ID·VARCHAR 저장, DB FK 없음):**
 
@@ -439,7 +439,7 @@
 | uq_sources_key | source_key | 고유 식별자 |
 | uq_sources_fw_ver | (framework, version_label) | 동일 버전 중복 방지 |
 
-> backend는 이 테이블을 **읽기만** 함 (쓰기 금지). 메타 API 캐시 60초.
+> backend는 이 테이블을 직접 읽지 않는다. ai-server `GET /internal/v1/sources` 응답을 60초 캐시한다.
 
 ---
 
@@ -562,7 +562,7 @@ UPDATE ai.index_pointers
   WHERE source_key = :source_key;
 ```
 
-> backend는 이 테이블을 **읽기만** 함 (ai 스키마 읽기 허용 예외 2개 중 하나). 30초 포인터 캐시 + reload API로 즉시 반영.
+> 이 테이블은 ai-server만 읽고 쓴다. ai-server는 30초 포인터 캐시를 두고 reload API로 즉시 반영한다. backend는 `GET /internal/v1/sources`로 활성 run을 받는다.
 
 ---
 

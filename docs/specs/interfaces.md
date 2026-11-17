@@ -1,6 +1,6 @@
 # 컴포넌트 인터페이스 명세
 
-> **최종 수정**: 2026-11-05
+> **최종 수정**: 2026-11-17
 
 ---
 
@@ -17,18 +17,50 @@
 ### 2.1 공유 데이터 타입
 
 ```python
+from dataclasses import dataclass
 from typing import TypedDict, AsyncIterator
 
-class ChunkMetadata(TypedDict):
-    permalink: str        # 원본 문서 URL (공식 문서 직접 링크)
-    source_key: str       # 소스 식별자. 예: "langchain_v03", "langchain_v1x"
-    heading_path: str     # 섹션 계층 경로. 예: "Agents > LCEL > Building chains"
-    line_start: int       # 원문 내 시작 라인 번호
-    line_end: int         # 원문 내 끝 라인 번호
+@dataclass(frozen=True)
+class Section:
+    heading_path: str              # 섹션 계층 경로. 예: "Agents > LCEL > Building chains"
+    text: str                      # 전처리 완료 본문
+    line_numbers: tuple[int, ...]  # text의 각 줄에 대응하는 원문 라인 번호(1부터). len == text 줄 수
 
-class Chunk(TypedDict):
+    # line_start / line_end = line_numbers[0] / line_numbers[-1]
+
+@dataclass(frozen=True)
+class NormalizedDocument:          # Source Adapter 출력 (ADR-006)
+    file_path: str                 # 저장소 루트 기준 경로. 예: "src/oss/langchain/agents.mdx"
+    title: str                     # 문서 제목 (heading_path 최상위)
+    doc_type: str                  # "md" | "mdx" | "ipynb"
+    site_url: str                  # 공식 문서 사이트 URL (보조 링크, 불변 보장 없음)
+    sections: tuple[Section, ...]  # 문서 순서대로. 본문 50자 미만 섹션은 상위 섹션에 병합된 상태
+
+class Chunk(TypedDict):            # DocumentChunker 출력
     content: str          # 청크 텍스트
-    metadata: ChunkMetadata
+    heading_path: str     # 청크가 속한 섹션의 heading_path
+    line_start: int       # 원문 내 시작 라인 번호
+    line_end: int         # 원문 내 끝 라인 번호 (line_start 이상)
+
+class ChunkMetadata(TypedDict):    # Chroma 저장 메타데이터. 필드 정의는 policy.md §4.2
+    chunk_id: str
+    source_key: str       # 소스 식별자. 예: "langchain_v03", "langchain_v1x"
+    framework: str
+    version: str
+    ingest_run_id: int
+    commit_sha: str       # 40자
+    file_path: str
+    heading_path: str
+    line_start: int
+    line_end: int
+    permalink: str        # SHA 고정 URL (ADR-007)
+    site_url: str
+    doc_type: str
+    chunk_strategy: str   # "A" | "B" | "C"
+    chunk_params_hash: str
+    embedding_model: str
+    token_count: int
+    has_code: bool
 
 class RetrievedChunk(TypedDict):
     chunk_id: str         # 벡터 DB 내 고유 ID
@@ -37,12 +69,6 @@ class RetrievedChunk(TypedDict):
     source_key: str       # 소스 식별자. 예: "langchain_v03"
     heading_path: str     # 섹션 계층 경로. 예: "Agents > LCEL > Building chains"
     similarity: float     # 유사도 점수. 범위: 0.0~1.0. 높을수록 관련성 높음
-
-class ParsedDocument(TypedDict):
-    url: str              # 원본 문서 URL
-    source_key: str       # 소스 식별자. 예: "langchain_v03"
-    title: str            # 문서 제목
-    content: str          # 파싱된 본문 (마크다운)
 
 class AnswerResult(TypedDict):
     answer: str                          # 생성된 답변 텍스트
@@ -265,7 +291,7 @@ class AnswerGenerator(Protocol):
 | **초안** | r1nn-dev |
 | **확정** | - |
 | **상태** | 설계 |
-| **구현체** | `FixedSizeChunker`, `RecursiveChunker` (실험 과제 A) |
+| **구현체** | 전략 A(`CharacterTextSplitter` 래핑) · B(`RecursiveCharacterTextSplitter` 래핑) · C(구조 인식, 코드 펜스 원자 단위) — E2 비교 대상 |
 | **소비자** | `ingest/pipeline.py` |
 
 #### 메서드 목록
@@ -282,13 +308,13 @@ class AnswerGenerator(Protocol):
 
 | 파라미터 | 타입 | 필수 | 설명 | 제약 |
 | --- | --- | --- | --- | --- |
-| `document` | `ParsedDocument` | Y | 파싱된 원본 문서 | `content`가 비어 있으면 안 됨 |
+| `document` | `NormalizedDocument` | Y | Source Adapter가 전처리한 문서 | `sections`가 비어 있으면 안 됨 |
 
 **반환값**
 
 | 타입 | 설명 |
 | --- | --- |
-| `list[Chunk]` | 분할된 청크 목록. 최소 1개 이상 반환 |
+| `list[Chunk]` | 분할된 청크 목록. 문서 순서대로, 최소 1개 이상 반환 |
 
 **예외**
 
@@ -302,14 +328,14 @@ class AnswerGenerator(Protocol):
 from typing import Protocol
 
 class DocumentChunker(Protocol):
-    def chunk(self, document: ParsedDocument) -> list[Chunk]:
+    def chunk(self, document: NormalizedDocument) -> list[Chunk]:
         """
         Args:
-            document: 파싱된 문서
+            document: Source Adapter가 전처리한 문서
 
         Returns:
             Chunk 목록. 최소 1개.
-            각 Chunk의 metadata.line_start/line_end는 document.content 기준 라인 번호.
+            각 Chunk의 line_start/line_end는 원문 파일 기준 라인 번호(Section.line_numbers에서 도출).
 
         Raises:
             ChunkingError: 분할 처리 실패
@@ -318,8 +344,10 @@ class DocumentChunker(Protocol):
 ```
 
 **구현 노트**
-- `line_start`·`line_end`는 `document.content` 기준 라인 번호이어야 한다.
-- 청크 크기와 오버랩은 `configs/retrieval/`에서 읽는다. 하드코딩 금지.
+- `line_start`·`line_end`는 원문 파일 기준 라인 번호이어야 한다(라인 앵커 permalink 근거, ADR-007).
+- 청크는 섹션 경계를 넘지 않는다. 한 청크의 `heading_path`는 하나다.
+- 청크 크기와 오버랩은 `configs/ingest.yaml`에서 읽는다. 하드코딩 금지.
+- `chunk_id`·`permalink` 등 `ChunkMetadata` 조립은 청커가 아니라 ingest 파이프라인이 한다(`policy.md` §4.1·§4.2).
 
 ---
 
@@ -454,7 +482,7 @@ class ChunkingError(Exception):
 [항상 참] Retriever.retrieve()의 반환 목록은 similarity 내림차순 정렬이다.
 [항상 참] RetrievedChunk.similarity는 0.0 ≤ similarity ≤ 1.0이다.
 [항상 참] len(EmbeddingClient.embed(texts)) == len(texts)이다.
-[항상 참] Chunk.metadata.line_end > Chunk.metadata.line_start이다.
+[항상 참] Chunk.line_end >= Chunk.line_start이다.
 [항상 참] AnswerResult.source_chunks는 generate()에 전달된 chunks의 부분집합이다.
 ```
 
@@ -466,6 +494,7 @@ class ChunkingError(Exception):
 | --- | --- |
 | v0.1 | 최초 작성 |
 | v0.2 | ChunkMetadata 필드 수정(source_url→permalink, section_title→heading_path, char→line 오프셋), Framework Enum → SourceKey Enum(REACT/NEXTJS 제거), Retriever.retrieve() source_key 단일 파라미터로 통합, 예외 타입 SourceNotFoundError/SourceUnavailableError로 교체, generate_stream() SINGLE 모드 SSE 계약 명시 |
+| v0.3 | `ParsedDocument` 제거, Source Adapter 출력 `NormalizedDocument`·`Section` 정의, `DocumentChunker` 입력을 `NormalizedDocument`로 변경, `Chunk`·`ChunkMetadata`를 policy.md §4.2 필수 필드 기준으로 분리, 청킹 설정 위치 `configs/ingest.yaml` |
 
 ---
 *end.*

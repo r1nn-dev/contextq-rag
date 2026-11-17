@@ -435,7 +435,7 @@ Set-Cookie: `devdocs_rt=; Max-Age=0; Path=/api/v1/auth; HttpOnly; Secure; SameSi
 ## 2. 소스 메타 (Sources)
 
 > **서비스**: backend (Spring Boot)\
-**대응 테이블**: `ai.sources` (읽기 전용), `ai.index_pointers` (읽기 전용), `ai.compare_pairs` (읽기 전용)\
+**데이터 출처**: ai-server `GET /internal/v1/sources` (6.3). backend는 ai 스키마 테이블을 직접 읽지 않는다\
 **캐시**: 60초 서버 캐시
 
 ---
@@ -849,7 +849,7 @@ data: {"event":"done", "status":"COMPLETED", ...}
 
 > **서비스**: backend (Spring Boot)\
 **인증**: JWT + `ROLE_ADMIN` 필수. 비관리자 → `FORBIDDEN`(403)\
-**대응 테이블**: `ai.sources`, `ai.ingest_runs`, `ai.index_pointers` (읽기), `app.messages` (집계)
+**데이터 출처**: 인덱스 정보는 ai-server 내부 API 경유(backend는 ai 스키마 테이블을 직접 읽지 않음. 필요한 내부 API는 관리자 대시보드 작업에서 이 문서 §6에 먼저 추가), `app.messages` (집계)
 
 ---
 
@@ -939,7 +939,7 @@ data: {"event":"done", "status":"COMPLETED", ...}
 
 | 필드 | 타입 | 기본값 | 설명 |
 | --- | --- | --- | --- |
-| `acceptDrift` | boolean | false | VALIDATING 게이트에서 청크 수 드리프트(>10%) 허용 시 true |
+| `acceptDrift` | boolean | false | VALIDATING 게이트에서 청크 수 드리프트(직전 ACTIVE 대비 ±30% 초과, `policy.md` §4.4) 허용 시 true |
 
 **응답 202**
 
@@ -1092,7 +1092,7 @@ data: {"event":"done", "status":"NO_CONTEXT", "statusReason":"LOW_SIMILARITY", "
 - **서비스**: ai-server (FastAPI)
 - **인증**: 내부망 전용
 - **설명**: backend의 `GET /api/v1/sources` 캐시 갱신 시 호출. ACTIVE run 포인터를 ai-server가 직접 조회해서 반환.\
-*(backend가 `ai.sources` + `ai.index_pointers`를 직접 읽기 가능한 경우 이 API를 생략할 수 있음. 스키마 분리 원칙상 ai-server를 통한 조회가 더 명확함.)*
+*(backend는 ai 스키마 테이블을 직접 읽지 않으므로 소스·활성 run 정보의 유일한 조회 경로다.)*
 
 **응답 200**
 
@@ -1138,7 +1138,7 @@ data: {"event":"done", "status":"NO_CONTEXT", "statusReason":"LOW_SIMILARITY", "
 | 필드 | 설명 |
 | --- | --- |
 | `runId` | `ai.ingest_runs`의 PK. backend가 INSERT 후 전달 |
-| `acceptDrift` | VALIDATING 게이트 청크 수 드리프트(>10%) 허용 여부 |
+| `acceptDrift` | VALIDATING 게이트 청크 수 드리프트(±30% 초과) 허용 여부 |
 
 **응답 202**
 

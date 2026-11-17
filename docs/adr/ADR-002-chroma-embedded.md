@@ -1,10 +1,10 @@
 # ADR-002: Chroma 임베디드 모드 채택
 
 ## Status
-Draft
+Accepted
 
 ## Date
-2026-11-14
+2026-11-14 (2026-11-17 개정: 저장 경로 환경 변수 이름 정리, Accepted)
 
 ## Context
 
@@ -26,12 +26,12 @@ Draft
 ```python
 import chromadb
 
-client = chromadb.PersistentClient(path=settings.CHROMA_PERSIST_DIR)
+client = chromadb.PersistentClient(path=settings.chroma_data_dir)
 ```
 
-- `CHROMA_PERSIST_DIR`: 환경 변수로 주입 (`./chroma_data` 기본값)
+- `CHROMA_DATA_DIR`: 환경 변수로 주입 (`./data/chroma` 기본값, `docs/ops/env-reference.md`)
 - 프로덕션: EBS 볼륨에 마운트
-- 로컬: `.gitignore` 등록된 `chroma_data/` 디렉토리
+- 로컬: `.gitignore` 등록된 `data/` 디렉토리 아래
 
 ## Consequences
 
