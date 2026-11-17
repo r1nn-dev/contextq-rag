@@ -114,6 +114,16 @@ openssl rand -hex 32
 > `APP_PROFILE=prod`에서 `INGEST_ENABLED` 또는 `LLM_MOCK`이 `true`이면 ai-server가 기동하지 않는다 (`docs/planning/policy.md` > §2.2 불변식 > INV-17).  
 > `APP_PROFILE=prod`에서는 FastAPI `/docs`를 노출하지 않는다 (`docs/planning/policy.md` > §9.1).
 
+### 1.10 ai-server 검색 설정 덮어쓰기
+
+| 변수명 | 설명 | 예시 / 기본값 | 필수 |
+|---|---|---|---|
+| `TAU_LANGCHAIN_V03` | v0.3 소스 NO_CONTEXT 임계값 τ 덮어쓰기 (0~1) | 미설정 → `ai-server/configs/rag.yaml` 값 | 선택 |
+| `TAU_LANGCHAIN_V1X` | v1.x 소스 NO_CONTEXT 임계값 τ 덮어쓰기 (0~1) | 미설정 → `ai-server/configs/rag.yaml` 값 | 선택 |
+
+> τ의 기본값은 `ai-server/configs/rag.yaml` `retrieval.thresholds`에 source_key별로 둔다 (ADR-008). 확정 전 개발용 값은 0.30이다 (`docs/planning/policy.md` > §5.3).  
+> Top-K와 컨텍스트 토큰 예산은 환경 변수가 없고 `ai-server/configs/rag.yaml`에서만 바꾼다.
+
 ---
 
 ## 2. GitHub Actions Secrets

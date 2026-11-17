@@ -1,0 +1,13 @@
+# 서비스 검색·생성 설정 — ADR-008, docs/planning/policy.md §5.3·§5.5
+# 값이 바뀌면 같은 평가셋으로 Before/After를 측정해 PR에 붙인다 (CONTRIBUTING.md §9.5).
+
+retrieval:
+  # Top-K 초기값 — E2 결정 규칙으로 확정 (K ∈ {3, 5, 8}, eval/decision_rules.md)
+  top_k: 5
+  # 컨텍스트 토큰 예산 상한 3,000 — E2 확정 후 min(3000, K × avg_chunk_tokens × 1.15)
+  context_budget_tokens: 3000
+  # NO_CONTEXT 임계값 τ (source_key별) — 개발용 0.30, E1 부속 실험(R-4-6)에서 확정.
+  # 환경 변수 TAU_{SOURCE_KEY}가 있으면 덮어쓴다. 소스를 추가하면 여기에도 등록한다.
+  thresholds:
+    langchain_v03: 0.30
+    langchain_v1x: 0.30
