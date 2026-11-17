@@ -32,3 +32,14 @@ eval/
 cd ai-server
 uv run pytest -q tests/unit/test_eval_questions.py
 ```
+
+## 실행
+
+```bash
+make eval-check                          # 질문셋 검증 (비밀값 불필요)
+make eval EXP=E1 CONDITIONS="N F"        # E1 비격리·필터 조건 → eval/results/E1/
+make eval                                # E1(N·F·C)·E2 — 서비스 Retriever(R-4-1)·전략별 인덱스(R-7-3) 연결 후
+```
+
+- DB(ACTIVE 포인터)·Chroma 인덱스·OpenAI 키(질의 임베딩)가 필요하므로 별도 터미널에서 실행한다.
+- 출력: `{실험}/e{n}_results.jsonl`(질문 × 조건 × 버전 × K 한 행), `{실험}/e{n}_summary.csv`, `{실험}/env.txt`.

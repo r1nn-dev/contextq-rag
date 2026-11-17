@@ -184,6 +184,7 @@ ai-server/
 | `rag` | `ruff check` → `mypy src` → `pytest -m "not llm and not eval"` |
 | `frontend` | ESLint → build |
 | `pr-lint` | PR 제목 `type(scope):` 형식 검사 |
+| `eval` | PR에 `eval` 라벨이 있을 때만: 질문셋 검증(`python -m src.eval.run --check`) → 평가 로직 테스트 |
 
 ---
 

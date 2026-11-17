@@ -67,7 +67,9 @@ class RetrievedChunk(TypedDict):
     content: str          # 청크 텍스트
     permalink: str        # 원본 문서 URL (공식 문서 직접 링크)
     source_key: str       # 소스 식별자. 예: "langchain_v03"
+    file_path: str        # 소스 저장소 루트 기준 파일 경로 (ChunkMetadata.file_path). 평가 gold 판정에 사용
     heading_path: str     # 섹션 계층 경로. 예: "Agents > LCEL > Building chains"
+    token_count: int      # 청크 토큰 수 (ChunkMetadata.token_count). 컨텍스트 예산·평균 컨텍스트 토큰 계산
     similarity: float     # 유사도 점수. 범위: 0.0~1.0. 높을수록 관련성 높음
 
 class AnswerResult(TypedDict):
@@ -495,6 +497,7 @@ class ChunkingError(Exception):
 | v0.1 | 최초 작성 |
 | v0.2 | ChunkMetadata 필드 수정(source_url→permalink, section_title→heading_path, char→line 오프셋), Framework Enum → SourceKey Enum(REACT/NEXTJS 제거), Retriever.retrieve() source_key 단일 파라미터로 통합, 예외 타입 SourceNotFoundError/SourceUnavailableError로 교체, generate_stream() SINGLE 모드 SSE 계약 명시 |
 | v0.3 | `ParsedDocument` 제거, Source Adapter 출력 `NormalizedDocument`·`Section` 정의, `DocumentChunker` 입력을 `NormalizedDocument`로 변경, `Chunk`·`ChunkMetadata`를 policy.md §4.2 필수 필드 기준으로 분리, 청킹 설정 위치 `configs/ingest.yaml` |
+| v0.4 | `RetrievedChunk`에 `file_path`·`token_count` 추가 (평가 러너의 gold 판정·평균 컨텍스트 토큰, 정책서 §5.3 컨텍스트 예산). 기존 필드 변경 없음 |
 
 ---
 *end.*

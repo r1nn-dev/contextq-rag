@@ -1,0 +1,45 @@
+name: RAG Eval
+
+# PR에 `eval` 라벨을 붙이면 실행한다 (CONTRIBUTING.md 라벨 표 · §9.5).
+# CI에는 Chroma 인덱스·DB가 없어 지금은 질문셋 검증과 평가 로직 테스트만 돈다.
+# 인덱스 기반 E1·E2 실행은 인덱스 스냅샷 복원(make restore-index)이 생긴 뒤 이 워크플로우에 추가한다.
+
+on:
+  pull_request:
+    branches: [develop, main]
+    types: [labeled, synchronize, reopened]
+
+concurrency:
+  group: eval-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  eval:
+    name: eval
+    if: contains(github.event.pull_request.labels.*.name, 'eval')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: uv 설치
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: ai-server/uv.lock
+
+      - name: 의존성 설치
+        working-directory: ai-server
+        run: uv sync --locked
+
+      - name: 질문셋 검증 (스키마·v1 구성·검수 상태)
+        working-directory: ai-server
+        run: uv run python -m src.eval.run --check
+
+      - name: 평가 로직 테스트
+        working-directory: ai-server
+        run: >-
+          uv run pytest -q
+          tests/unit/test_eval_questions.py
+          tests/unit/test_eval_metrics.py
+          tests/unit/test_eval_conditions.py
+          tests/unit/test_eval_run.py

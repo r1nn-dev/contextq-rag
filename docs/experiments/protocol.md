@@ -37,9 +37,8 @@ eval/
     E6/                # 부하 테스트 결과
   labels/              # E3 블라인드 레이블 (익명화 후 git 커밋)
   figures/             # 결과 그래프 (스크립트로 자동 생성)
+ai-server/src/eval/     # E1·E2 평가 러너 (make eval — 서비스와 같은 Retriever 호출)
 scripts/
-  eval_e1.py           # E1 실험 스크립트
-  eval_e2.py           # E2 실험 스크립트
   eval_e3_generate.py  # E3 답변 생성 스크립트
   eval_e3_analyze.py   # E3 레이블 분석 스크립트
   eval_e5.sh           # E5 TTFT 측정 스크립트
