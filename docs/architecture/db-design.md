@@ -520,7 +520,7 @@
 | — | RESTORING | make restore-index | tar 해제, checksum 검증 |
 | RESTORING | VALIDATING | checksum 일치 | 복원 검증 포함 게이트 실행 |
 | VALIDATING | READY | 게이트 전 항목 통과 | validation_report 저장 |
-| READY | ACTIVE | make activate-index RUN=... | index_pointers UPDATE, 기존 ACTIVE→SUPERSEDED, ai-server reload, 메타 캐시 무효화 |
+| READY | ACTIVE | make activate-index RUN=... | index_pointers UPDATE, 기존 ACTIVE→SUPERSEDED, ai-server reload (backend 메타 캐시는 60초 만료로 반영, 정책서 §2.1) |
 | ACTIVE | SUPERSEDED | 다른 run 활성화 | 컬렉션 유지 (롤백·in-flight 보호) |
 | SUPERSEDED | ACTIVE | make rollback-index | 현재 ACTIVE→SUPERSEDED (직전 1세대만 가능) |
 | SUPERSEDED | PURGED | 더 새로운 SUPERSEDED 발생 | 컬렉션 삭제, run 레코드 보존 |

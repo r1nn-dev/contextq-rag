@@ -45,7 +45,7 @@
 | B1 | 메서드·경로가 명세와 같은가 | Controller 매핑 ↔ 명세 | `docs/specs/api-spec.md` > 해당 엔드포인트 |
 | B2 | 요청 필드·필수 여부·검증 조건이 명세와 같은가 | 요청 DTO ↔ 명세 | `docs/specs/api-spec.md` > 해당 API |
 | B3 | 응답 필드·상태 코드가 명세와 같은가 | 응답 DTO ↔ 명세 | `docs/specs/api-spec.md` > 해당 API |
-| B4 | Backend → AI Server 인터페이스가 명세와 같은가 | `client/` 호출 코드 ↔ 명세 | `docs/specs/interfaces.md` > 해당 호출 |
+| B4 | Backend → AI Server 인터페이스가 명세와 같은가 | `infra/` 호출 코드 ↔ 명세 | `docs/specs/interfaces.md` > 해당 호출 |
 | B5 | 명세에 없는 필드·엔드포인트가 없는가 | diff | `docs/specs/api-spec.md` > 해당 섹션 |
 
 ---
@@ -157,7 +157,7 @@
 
 | # | 확인 | 방법 | 근거 |
 | --- | --- | --- | --- |
-| L1 | 패키지 위치가 기준과 같은가 (`com.r1nn.contextq.{domain}/controller, service, repository, domain, dto, client`) | 변경 파일 경로 | `docs/ops/package-structure.md` > §1.2 도메인별 레이어 구조 |
+| L1 | 패키지 위치가 기준과 같은가 (`com.r1nn.contextq.{domain}/controller, service, repository, domain, dto` · 공통은 `common/`, ai-server 호출은 `infra/`) | 변경 파일 경로 | `docs/ops/package-structure.md` > §1.2 도메인별 레이어 구조 |
 | L2 | Controller 반환 타입이 `ResponseEntity<ApiResponse<T>>`인가 | Controller 반환 타입 | `docs/ops/code-convention.md` > §4 |
 | L3 | Service: public 메서드에만 `@Transactional`, 조회는 `readOnly=true`인가 | 서비스 어노테이션 | `docs/ops/code-convention.md` > §4 |
 | L4 | Domain: `@Setter/@Builder` 없음, protected 기본 생성자, 정적 팩토리인가 | 엔티티 클래스 | `docs/ops/code-convention.md` > §4 |

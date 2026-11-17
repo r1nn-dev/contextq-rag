@@ -4,7 +4,7 @@
 Draft
 
 ## Date
-2026-11-14 (2026-11-18 개정: 중계 경로를 API 명세 경로로 정정)
+2026-11-14 (2026-11-18 개정: 중계 경로를 API 명세 경로로 정정 · 중계 구현 방식과 이벤트 표기를 API 명세 §0.3·부록 B로 정정)
 
 ## Context
 
@@ -32,14 +32,15 @@ Frontend (fetch + ReadableStream)
       → LLM API (토큰 스트리밍)
 ```
 
-Spring Boot는 FastAPI의 SSE를 받아 `SseEmitter`로 Frontend에 중계.
+Spring Boot는 FastAPI의 SSE를 WebClient로 받아, Spring MVC 컨트롤러에서 `Flux<ServerSentEvent<String>>`를 반환해 Frontend에 중계한다(API 명세 §0.3 응답 타입 규약). `SseEmitter`와 같은 MVC 비동기 경로이며, 업스트림 구독과 브라우저 연결 수명을 한 `Flux`로 묶을 수 있다.
 
-**이벤트 타입 정의**:
+**이벤트 타입 정의** (SSE `event:` 줄이 아니라 `data:` JSON의 `event` 필드로 구분 — API 명세 부록 B, `contracts/sse-events.schema.json`):
 ```
-event: meta   → 출처 목록 (sources[]) — 답변 생성 전 전송
-event: token  → LLM 토큰 조각
-event: done   → 스트림 종료
-event: error  → 오류 메시지
+data: {"event":"meta", ...}   → 출처 목록 (sources[]) — 답변 생성 전 전송
+data: {"event":"token", ...}  → LLM 토큰 조각
+data: {"event":"done", ...}   → 스트림 종료
+data: {"event":"error", ...}  → 오류 메시지
+: ping                        → 10초 하트비트 주석 (클라이언트는 무시)
 ```
 
 ## Consequences
@@ -50,7 +51,7 @@ event: error  → 오류 메시지
 - `meta` 이벤트로 출처를 답변 전에 먼저 렌더링 가능 (UI UX 개선)
 
 **단점 / 트레이드오프**
-- Spring Boot가 SSE를 중계하는 복잡성 추가 (`SseEmitter` + 비동기 처리)
+- Spring Boot가 SSE를 중계하는 복잡성 추가 (WebClient 구독 + MVC 비동기 반환 + 타임아웃 처리)
 - 연결 중단 시 Spring Boot ↔ FastAPI 양쪽 연결 모두 정리 필요
 
 **관련 ADR**
