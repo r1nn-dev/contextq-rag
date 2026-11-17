@@ -2,7 +2,7 @@
 # Shortcut commands for local development.
 # Prerequisites: Docker Desktop, uv, node/npm, lefthook
 
-.PHONY: up down logs ingest activate-index rollback-index smoke-index eval eval-check test hooks help
+.PHONY: up down logs ingest activate-index rollback-index smoke-index eval eval-check eval-tau eval-abstain test hooks help
 
 # --- Docker Compose -------------------------------------------------------
 
@@ -39,6 +39,12 @@ eval: ## Run retrieval eval -> eval/results/{E1,E2}/. Usage: make eval [EXP="E1 
 
 eval-check: ## Validate eval question sets (schema, v1 composition, review status)
 	cd ai-server && uv run python -m src.eval.run --check
+
+eval-tau: ## Decide per-source NO_CONTEXT τ from E1 results (decision_rules §3)
+	cd ai-server && uv run python -m src.eval.tau
+
+eval-abstain: ## Two-stage NO_CONTEXT measurement: τ block + LLM_ABSTAIN (real LLM, ~50 calls)
+	cd ai-server && uv run python -m src.eval.abstain
 
 # --- Tests ----------------------------------------------------------------
 
