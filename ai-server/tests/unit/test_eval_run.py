@@ -2,24 +2,25 @@
 
 import csv
 import json
-from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
+from sqlalchemy.orm import Session
 
 from src.domain.retrieval import RetrievedChunk, Retriever
 from src.eval.questions import Gold, GoldSection, Metadata, OosQuestion, RetQuestion
 from src.eval.run import (
     E1Inputs,
-    RetrieverUnavailableError,
+    active_indexes,
     e1_searchers,
     evaluate,
     main,
     summarize,
-    unavailable_service_retriever,
     write_results,
 )
 from src.ingest.store import ChromaVectorStore
+from src.retrieval.pointers import ActiveIndex
+from src.retrieval.search import ChromaRetriever
 
 V03, V1X = "langchain_v03", "langchain_v1x"
 META = Metadata(created_by="t", created_at="2026-11-17T00:00:00Z")
@@ -34,6 +35,7 @@ def _chunk(source_key: str, file_path: str, heading: str, sim: float) -> Retriev
         file_path=file_path,
         heading_path=heading,
         token_count=50,
+        site_url="",
         similarity=sim,
     )
 
@@ -134,31 +136,68 @@ def test_write_results_creates_jsonl_csv_and_env(tmp_path: Path) -> None:
     assert (tmp_path / "E1" / "env.txt").read_text(encoding="utf-8") == "experiment: E1\n"
 
 
-def test_e1_searchers_builds_n_and_f_and_uses_service_for_c(tmp_path: Path) -> None:
+MODEL = "text-embedding-3-small"
+
+
+def _indexed_store(tmp_path: Path) -> ChromaVectorStore:
     store = ChromaVectorStore(tmp_path / "chroma")
-    for key in (V03, V1X):
-        store.create_collection(f"{key}_run1", {})
+    for key, version in ((V03, "v0.3"), (V1X, "v1.x")):
+        store.create_collection(f"{key}_run1", {"embedding_model": MODEL})
         store.add(
             f"{key}_run1",
             ids=[key],
             embeddings=[[1.0, 0.0]],
             documents=[key],
-            metadatas=[{"source_key": key, "file_path": "f", "heading_path": "h"}],
+            metadatas=[
+                {
+                    "source_key": key,
+                    "version": version,
+                    "ingest_run_id": 1,
+                    "embedding_model": MODEL,
+                    "file_path": "f",
+                    "heading_path": "h",
+                }
+            ],
         )
-    service = FakeRetriever({})
-    inputs = E1Inputs(store, {V03: 1, V1X: 1}, {"q": [1.0, 0.0]}, lambda: service)
+    return store
 
-    searchers: dict[str, Retriever] = e1_searchers(inputs, ["N", "F", "C"])
+
+def _inputs(store: ChromaVectorStore) -> E1Inputs:
+    indexes = {
+        V03: ActiveIndex(V03, "v0.3", 1, "a" * 40, None, None, MODEL),
+        V1X: ActiveIndex(V1X, "v1.x", 1, "b" * 40, None, None, MODEL),
+    }
+    return E1Inputs(store, indexes, {"q": [1.0, 0.0]}, MODEL)
+
+
+def test_e1_searchers_builds_n_f_and_service_retriever_for_c(tmp_path: Path) -> None:
+    searchers: dict[str, Retriever] = e1_searchers(
+        _inputs(_indexed_store(tmp_path)), ["N", "F", "C"]
+    )
 
     assert set(searchers) == {"E1-N", "E1-F", "E1-C"}
-    assert searchers["E1-C"] is service
+    assert isinstance(searchers["E1-C"], ChromaRetriever)
     assert len(searchers["E1-N"].retrieve("q", V1X, 5)) == 2
     assert [c["source_key"] for c in searchers["E1-F"].retrieve("q", V1X, 5)] == [V1X]
+    assert [c["source_key"] for c in searchers["E1-C"].retrieve("q", V1X, 5)] == [V1X]
 
 
-def test_service_retriever_is_unavailable_until_connected() -> None:
-    with pytest.raises(RetrieverUnavailableError, match="R-4-1"):
-        unavailable_service_retriever()
+def test_e1_c_only_does_not_build_merged_collection(tmp_path: Path) -> None:
+    store = _indexed_store(tmp_path)
+
+    searchers = e1_searchers(_inputs(store), ["C"])
+
+    assert set(searchers) == {"E1-C"}
+    assert not any(name.startswith("eval_e1_merged") for name in _collections(store))
+
+
+def _collections(store: ChromaVectorStore) -> list[str]:
+    return [c.name for c in store.client.list_collections()]
+
+
+def test_active_indexes_reports_missing_sources(session: Session) -> None:
+    with pytest.raises(LookupError, match="langchain_v03"):
+        active_indexes(session)
 
 
 def test_cli_check_reports_repository_question_sets(capsys: pytest.CaptureFixture[str]) -> None:
@@ -166,12 +205,11 @@ def test_cli_check_reports_repository_question_sets(capsys: pytest.CaptureFixtur
     assert "Q-ret" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("argv", [["--exp", "E1"], ["--exp", "E2", "--conditions", "N"]])
-def test_cli_exits_2_when_service_retriever_is_needed(
-    argv: Sequence[str], capsys: pytest.CaptureFixture[str]
+def test_cli_exits_2_for_e2_until_strategy_indexes_exist(
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    assert main(argv) == 2
-    assert "R-4-1" in capsys.readouterr().err
+    assert main(["--exp", "E2"]) == 2
+    assert "R-7-3" in capsys.readouterr().err
 
 
 def test_cli_rejects_non_positive_k() -> None:

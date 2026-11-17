@@ -70,6 +70,7 @@ class RetrievedChunk(TypedDict):
     file_path: str        # 소스 저장소 루트 기준 파일 경로 (ChunkMetadata.file_path). 평가 gold 판정에 사용
     heading_path: str     # 섹션 계층 경로. 예: "Agents > LCEL > Building chains"
     token_count: int      # 청크 토큰 수 (ChunkMetadata.token_count). 컨텍스트 예산·평균 컨텍스트 토큰 계산
+    site_url: str         # 공식 문서 사이트 URL (ChunkMetadata.site_url). SSE meta.sources[].siteUrl
     similarity: float     # 유사도 점수. 범위: 0.0~1.0. 높을수록 관련성 높음
 
 class AnswerResult(TypedDict):
@@ -145,8 +146,10 @@ class SourceKey(str, Enum):
 
 | 예외 클래스 | 발생 조건 |
 | --- | --- |
-| `SourceNotFoundError` | 요청한 source_key가 벡터 DB에 존재하지 않는 경우 (HTTP 404) |
-| `SourceUnavailableError` | 해당 source_key 인덱스가 비활성 상태인 경우 (HTTP 409) |
+| `SourceNotFoundError` | 요청한 source_key가 소스 카탈로그(`ai.sources`)에 없는 경우 (HTTP 404) |
+| `SourceUnavailableError` | 해당 source_key가 비활성(`enabled = false`) 소스인 경우 (HTTP 409) |
+| `IndexNotActiveError` | 해당 source_key에 ACTIVE run 포인터가 없거나 그 컬렉션이 없는 경우 (HTTP 503) |
+| `EmbeddingModelMismatchError` | 컬렉션·청크의 임베딩 모델이 질의 임베딩 모델과 다른 경우 (INV-03, HTTP 500) |
 | `EmbeddingError` | 쿼리 임베딩 생성 실패 |
 
 **코드 예시**
@@ -174,8 +177,10 @@ class Retriever(Protocol):
             결과가 없으면 빈 리스트를 반환한다.
 
         Raises:
-            SourceNotFoundError: source_key가 벡터 DB에 없는 경우
-            SourceUnavailableError: 해당 source_key 인덱스가 비활성 상태인 경우
+            SourceNotFoundError: source_key가 소스 카탈로그에 없는 경우
+            SourceUnavailableError: 해당 source_key가 비활성 소스인 경우
+            IndexNotActiveError: ACTIVE run 포인터 또는 그 컬렉션이 없는 경우
+            EmbeddingModelMismatchError: 인덱스 임베딩 모델이 질의 모델과 다른 경우 (INV-03)
             EmbeddingError: 쿼리 임베딩 생성에 실패한 경우
         """
         ...
@@ -184,7 +189,9 @@ class Retriever(Protocol):
 **구현 노트**
 - 반환 목록은 항상 similarity 내림차순 정렬이어야 한다.
 - 결과가 없을 때 `None`이 아닌 빈 리스트를 반환한다.
-- source_key 필터는 Chroma `where` 절 메타데이터 필터로 구현한다.
+- 1차 격리: `ai.index_pointers`의 ACTIVE run 컬렉션(`{source_key}_run{active_run_id}`) 하나만 조회한다. Chroma `where` 메타데이터 필터는 쓰지 않는다 (ADR-004, `policy.md` §5.3).
+- 2차 검증: 결과 청크의 `source_key`·`version`·`ingest_run_id`가 요청 소스의 ACTIVE run과 다르면 폐기하고 ERROR 로그를 남긴다 (INV-02). 폐기된 청크는 반환 목록에서 빠지므로 반환 수가 `top_k`보다 적을 수 있다.
+- 요청 시작 시 확정한 ACTIVE run으로 끝까지 조회한다. 포인터는 30초 캐시하며 reload로 즉시 무효화한다 (`policy.md` §2.1).
 
 ---
 
@@ -423,8 +430,10 @@ class EmbeddingClient(Protocol):
 
 | 예외 클래스 | 발원 인터페이스 | 발생 조건 | HTTP 코드 | 호출자 대응 |
 | --- | --- | --- | --- | --- |
-| `SourceNotFoundError` | `Retriever` | 벡터 DB에 해당 source_key 없음 | 404 | SOURCE_NOT_FOUND 반환 |
-| `SourceUnavailableError` | `Retriever` | 해당 source_key 인덱스가 비활성 상태 | 409 | SOURCE_UNAVAILABLE 반환 |
+| `SourceNotFoundError` | `Retriever` | 소스 카탈로그에 해당 source_key 없음 | 404 | SOURCE_NOT_FOUND 반환 |
+| `SourceUnavailableError` | `Retriever` | 해당 source_key가 비활성 소스 | 409 | SOURCE_UNAVAILABLE 반환 |
+| `IndexNotActiveError` | `Retriever` | ACTIVE run 포인터 또는 컬렉션 없음 (INV-01 위반) | 503 | INDEX_NOT_ACTIVE 반환 |
+| `EmbeddingModelMismatchError` | `Retriever` | 인덱스 임베딩 모델 ≠ 질의 임베딩 모델 (INV-03) | 500 | EMBEDDING_MODEL_MISMATCH 반환 |
 | `EmbeddingError` | `Retriever`, `EmbeddingClient` | 임베딩 API 호출 실패 | 503 | 로그 후 503 반환 |
 | `LLMCallError` | `AnswerGenerator` | LLM API 호출 실패 | 503 | 로그 후 503 반환 |
 | `ContextTooLongError` | `AnswerGenerator` | 컨텍스트 토큰 초과 | 422 | top_k 줄여 재시도 |
@@ -432,11 +441,19 @@ class EmbeddingClient(Protocol):
 
 ```python
 class SourceNotFoundError(Exception):
-    """요청한 source_key가 벡터 DB에 존재하지 않는 경우 (HTTP 404)"""
+    """요청한 source_key가 소스 카탈로그에 없는 경우 (HTTP 404)"""
     pass
 
 class SourceUnavailableError(Exception):
-    """해당 source_key 인덱스가 비활성 상태인 경우 (HTTP 409)"""
+    """해당 source_key가 비활성 소스인 경우 (HTTP 409)"""
+    pass
+
+class IndexNotActiveError(Exception):
+    """ACTIVE run 포인터 또는 그 컬렉션이 없는 경우 (HTTP 503)"""
+    pass
+
+class EmbeddingModelMismatchError(Exception):
+    """인덱스 임베딩 모델이 질의 임베딩 모델과 다른 경우 — INV-03 (HTTP 500)"""
     pass
 
 class EmbeddingError(Exception):
@@ -498,6 +515,7 @@ class ChunkingError(Exception):
 | v0.2 | ChunkMetadata 필드 수정(source_url→permalink, section_title→heading_path, char→line 오프셋), Framework Enum → SourceKey Enum(REACT/NEXTJS 제거), Retriever.retrieve() source_key 단일 파라미터로 통합, 예외 타입 SourceNotFoundError/SourceUnavailableError로 교체, generate_stream() SINGLE 모드 SSE 계약 명시 |
 | v0.3 | `ParsedDocument` 제거, Source Adapter 출력 `NormalizedDocument`·`Section` 정의, `DocumentChunker` 입력을 `NormalizedDocument`로 변경, `Chunk`·`ChunkMetadata`를 policy.md §4.2 필수 필드 기준으로 분리, 청킹 설정 위치 `configs/ingest.yaml` |
 | v0.4 | `RetrievedChunk`에 `file_path`·`token_count` 추가 (평가 러너의 gold 판정·평균 컨텍스트 토큰, 정책서 §5.3 컨텍스트 예산). 기존 필드 변경 없음 |
+| v0.5 | `RetrievedChunk`에 `site_url` 추가 (SSE meta 출처 카드). `Retriever` 예외에 `IndexNotActiveError`·`EmbeddingModelMismatchError` 추가, `SourceNotFoundError`·`SourceUnavailableError` 조건 구체화. 구현 노트: `where` 필터 → ACTIVE 컬렉션 지정 + 2차 메타데이터 검증 (ADR-004) |
 
 ---
 *end.*

@@ -56,6 +56,9 @@ class EmbeddingConfig(BaseModel):
     timeout_seconds: float = Field(gt=0)
     max_retries: int = Field(ge=0)
     price_per_1m_tokens_usd: float = Field(ge=0)
+    # 서비스 질의 임베딩 — 인덱스 빌드(timeout_seconds·max_retries)와 따로 둔다 (정책서 §2.1)
+    query_timeout_seconds: float = Field(gt=0)
+    query_max_retries: int = Field(ge=0)
 
 
 @lru_cache

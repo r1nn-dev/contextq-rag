@@ -37,8 +37,8 @@ uv run pytest -q tests/unit/test_eval_questions.py
 
 ```bash
 make eval-check                          # 질문셋 검증 (비밀값 불필요)
-make eval EXP=E1 CONDITIONS="N F"        # E1 비격리·필터 조건 → eval/results/E1/
-make eval                                # E1(N·F·C)·E2 — 서비스 Retriever(R-4-1)·전략별 인덱스(R-7-3) 연결 후
+make eval EXP=E1                         # E1 비격리(N)·필터(F)·컬렉션 분리(C, 서비스 검색기) → eval/results/E1/
+make eval                                # E1 + E2 — E2는 전략별 인덱스(R-7-3) 연결 후
 ```
 
 - DB(ACTIVE 포인터)·Chroma 인덱스·OpenAI 키(질의 임베딩)가 필요하므로 별도 터미널에서 실행한다.
