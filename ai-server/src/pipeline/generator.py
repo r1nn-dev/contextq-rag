@@ -97,6 +97,10 @@ class OpenAIGenerationStream:
         return texts
 
     async def _close_stream(self) -> None:
+        # 중간에 닫을 때 내부 이터레이터를 먼저 닫는다. 남겨 두면 GC가 나중에 정리하면서
+        # "async generator already executing" 경고를 낸다 (#108).
+        if self._chunks is not None and hasattr(self._chunks, "aclose"):
+            await self._chunks.aclose()
         if self._stream is not None and hasattr(self._stream, "close"):
             await self._stream.close()
 
