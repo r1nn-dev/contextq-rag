@@ -1108,6 +1108,12 @@ data: {"event":"done", "status":"NO_CONTEXT", "statusReason":"LOW_SIMILARITY", "
 
 `langchain_v1x` 같이 ACTIVE run이 없는 소스가 있으면 503 반환. backend는 이 응답으로 `INDEX_NOT_ACTIVE` 사전 차단 가능.
 
+- 판정 대상은 `ai.sources.enabled = true`인 소스다. 비활성 소스는 응답에 넣지 않는다.
+- `activeRun = true`는 포인터가 ACTIVE run을 가리키고 그 Chroma 컬렉션(`{source_key}_run{id}`)이 있을 때만이다. 컬렉션이 없으면 질의가 `INDEX_NOT_ACTIVE`로 실패하므로 `false`다.
+- `chroma`: Chroma 클라이언트를 열 수 있으면 `loaded`, 아니면 `error`.
+- DB에 연결할 수 없으면 503 `{"status": "degraded", "chroma": ..., "database": "error", "sources": {}}`. 정상일 때 `database` 필드는 `ok`.
+- OpenAI 키·`X-Internal-Token` 없이 동작한다.
+
 ---
 
 ### 6.3 소스 목록 (ai-server 내부)
@@ -1117,6 +1123,10 @@ data: {"event":"done", "status":"NO_CONTEXT", "statusReason":"LOW_SIMILARITY", "
 - **인증**: `X-Internal-Token`
 - **설명**: backend의 `GET /api/v1/sources` 캐시 갱신 시 호출. ACTIVE run 포인터를 ai-server가 직접 조회해서 반환.\
 *(backend는 ai 스키마 테이블을 직접 읽지 않으므로 소스·활성 run 정보의 유일한 조회 경로다.)*
+
+- 비활성(`enabled: false`) 소스도 포함한다.
+- ACTIVE run이 없는(또는 포인터가 ACTIVE가 아닌 run을 가리키는) 소스는 `activeRunId`·`commitSha`·`ingestedAt`·`chunkCount`가 `null`이다.
+- `ingestedAt`은 ACTIVE run의 수집 완료일(UTC 날짜)이다. ai-server는 캐시하지 않는다(backend가 60초 캐시, 정책서 §2.1).
 
 **응답 200**
 
@@ -1208,8 +1218,14 @@ data: {"event":"done", "status":"NO_CONTEXT", "statusReason":"LOW_SIMILARITY", "
 
 | 코드 | HTTP | 조건 |
 | --- | --- | --- |
+| `INVALID_REQUEST` | 400 | `sourceKey` 누락 |
+| `INTERNAL_UNAUTHORIZED` | 401 | `X-Internal-Token` 누락·불일치 |
 | `SOURCE_NOT_FOUND` | 404 | sourceKey 미존재 |
+| `SOURCE_UNAVAILABLE` | 409 | 비활성 소스 |
 | `INDEX_NOT_ACTIVE` | 503 | ACTIVE run 없음 (reload 시점에 포인터 없음) |
+
+- 활성화·롤백 CLI(`make activate-index`·`make rollback-index`)도 성공 후 이 API를 호출한다(정책서 §4.5). 호출이 실패하면 경고만 남기고, 30초 포인터 캐시 만료로 반영된다.
+- `reloadedAt`은 UTC ISO-8601이다.
 
 ---
 
