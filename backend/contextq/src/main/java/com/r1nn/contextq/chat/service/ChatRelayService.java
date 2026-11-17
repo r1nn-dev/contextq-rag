@@ -130,6 +130,7 @@ public class ChatRelayService {
         .concatMapIterable(session::handle)
         .takeUntil(event -> session.isEnded())
         .onErrorResume(error -> Flux.fromIterable(session.fail(error)))
-        .concatWith(Flux.defer(() -> Flux.fromIterable(session.endIfOpen())));
+        .concatWith(Flux.defer(() -> Flux.fromIterable(session.endIfOpen())))
+        .doOnCancel(session::onClientCancel); // browser gone → upstream cancelled above
   }
 }

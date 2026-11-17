@@ -18,6 +18,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -116,6 +117,12 @@ public class GlobalExceptionHandler {
   @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
   ResponseEntity<ApiResponse<Void>> handleMethod(HttpRequestMethodNotSupportedException e) {
     return invalid(HttpStatus.METHOD_NOT_ALLOWED, List.of());
+  }
+
+  /** The client closed the stream; the response is unusable, so nothing is written. */
+  @ExceptionHandler(AsyncRequestNotUsableException.class)
+  void handleClientGone(AsyncRequestNotUsableException e) {
+    log.debug("client_disconnected {}", e.getMessage());
   }
 
   @ExceptionHandler(Exception.class)
