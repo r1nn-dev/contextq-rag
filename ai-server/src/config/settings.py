@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     # 수집 원본·리포트 저장 루트 (INGEST_DATA_DIR) — Git에 올리지 않는다 (data-sources.md §2)
     ingest_data_dir: Path = Path("data")
 
+    # Chroma 임베디드 저장 경로 (CHROMA_DATA_DIR) — ADR-002
+    chroma_data_dir: Path = Path("data/chroma")
+
     # 생성 단계를 고정 토큰으로 대체하는 mock LLM (LLM_MOCK) — local·loadtest 전용
     llm_mock: bool = False
 
