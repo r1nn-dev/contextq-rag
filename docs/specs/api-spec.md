@@ -503,7 +503,8 @@ Set-Cookie: `devdocs_rt=; Max-Age=0; Path=/api/v1/auth; HttpOnly; Secure; SameSi
 
 | 코드 | HTTP | 조건 |
 | --- | --- | --- |
-| `INDEX_NOT_ACTIVE` | 503 | enabled 소스가 존재하나 ACTIVE run 없음 (장애 상태) |
+| `INDEX_NOT_ACTIVE` | 503 | enabled 소스가 존재하나 ACTIVE run이 있는 소스가 하나도 없음 (장애 상태). 일부 소스만 ACTIVE run이 없으면 그 소스를 `sources`에서 빼고 200으로 응답 |
+| `AI_UNAVAILABLE` | 503 | 캐시가 없는 상태에서 ai-server 내부 소스 조회(6.3)가 실패함. 캐시가 있으면 만료됐어도 기존 캐시로 200 응답 |
 
 **프론트 계약**
 
@@ -1127,6 +1128,7 @@ data: {"event":"done", "status":"NO_CONTEXT", "statusReason":"LOW_SIMILARITY", "
 - 비활성(`enabled: false`) 소스도 포함한다.
 - ACTIVE run이 없는(또는 포인터가 ACTIVE가 아닌 run을 가리키는) 소스는 `activeRunId`·`commitSha`·`ingestedAt`·`chunkCount`가 `null`이다.
 - `ingestedAt`은 ACTIVE run의 수집 완료일(UTC 날짜)이다. ai-server는 캐시하지 않는다(backend가 60초 캐시, 정책서 §2.1).
+- `framework`는 `ai.sources.framework` 값이다. backend가 공개 응답(2.1)의 `framework`를 채운다.
 
 **응답 200**
 
@@ -1135,6 +1137,7 @@ data: {"event":"done", "status":"NO_CONTEXT", "statusReason":"LOW_SIMILARITY", "
   "sources": [
     {
       "sourceKey":    "langchain_v03",
+      "framework":    "langchain",
       "versionLabel": "v0.3",
       "displayName":  "LangChain v0.3",
       "enabled":      true,
