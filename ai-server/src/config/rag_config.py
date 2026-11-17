@@ -1,4 +1,6 @@
-"""서비스 검색·생성 설정 로더 — `configs/rag.yaml`(ADR-008, 정책서 §5.3)·`models.yaml` `llm`.
+"""서비스 검색·생성 설정 로더 — `configs/rag.yaml`(ADR-008, 정책서 §5.3)·`models.yaml`.
+
+`models.yaml`의 `llm`은 단일 모드 생성, `rewrite`는 멀티턴 질의 재작성(정책서 §5.2) 파라미터다.
 
 τ는 source_key별 값이고 `Settings`의 `TAU_{SOURCE_KEY}` 덮어쓰기가 우선한다.
 """
@@ -45,10 +47,25 @@ class StreamConfig(BaseModel):
     max_concurrency: int = Field(ge=1)
 
 
+class RewriteConfig(BaseModel):
+    """멀티턴 질의 재작성 규칙 (ADR-009, 정책서 §5.2)."""
+
+    prompt_version: str = Field(default="rewrite_v1", min_length=1)
+    history_turns: int = Field(default=3, ge=1)
+    assistant_max_chars: int = Field(default=500, gt=0)
+    max_output_chars: int = Field(default=200, gt=0, le=200)  # rewritten_query VARCHAR(200)
+
+    @property
+    def history_messages(self) -> int:
+        """참조할 메시지 수 — 한 턴은 질문·답변 2개."""
+        return self.history_turns * 2
+
+
 class RagConfig(BaseModel):
     retrieval: RetrievalConfig
     generation: GenerationConfig
     stream: StreamConfig
+    rewrite: RewriteConfig = Field(default_factory=RewriteConfig)
 
 
 class LlmConfig(BaseModel):
@@ -63,6 +80,16 @@ class LlmConfig(BaseModel):
     def resolve_model(self, override: str = "") -> str:
         """`LLM_MODEL`이 있으면 그 값, 없으면 yaml 기본 모델."""
         return override.strip() or self.model
+
+
+class RewriteModelConfig(BaseModel):
+    """`configs/models.yaml` `rewrite` — 재작성 호출 파라미터 (정책서 §2.1 질의 재작성 3초)."""
+
+    model: str = Field(min_length=1)
+    temperature: float = Field(ge=0, le=2)
+    max_tokens: int = Field(gt=0)
+    timeout_seconds: float = Field(gt=0)
+    max_retries: int = Field(ge=0)
 
 
 def _load(config_dir: Path, name: str = "rag.yaml") -> dict[str, Any]:
@@ -84,3 +111,8 @@ def load_rag_config(config_dir: Path = CONFIG_DIR) -> RagConfig:
 @lru_cache
 def load_llm_config(config_dir: Path = CONFIG_DIR) -> LlmConfig:
     return LlmConfig.model_validate(_load(config_dir, "models.yaml")["llm"])
+
+
+@lru_cache
+def load_rewrite_model_config(config_dir: Path = CONFIG_DIR) -> RewriteModelConfig:
+    return RewriteModelConfig.model_validate(_load(config_dir, "models.yaml")["rewrite"])

@@ -4,6 +4,8 @@
 - LOW_SIMILARITY(top-1 < τ)면 생성기를 부르지 않는다(INV-07).
 - sentinel을 감지하면 토큰 없이 NO_CONTEXT(LLM_ABSTAIN)로 끝내고 생성 스트림을 닫는다.
 - 이 단계의 오류는 HTTP 상태가 아니라 `error` 이벤트다(INV-09). 하트비트·최대 시간은 라우터.
+- 이력이 있으면 검색 전에 질의를 재작성한다(ADR-009). 재작성 질의는 검색에만 쓰고
+  생성에는 원래 질문을 쓴다.
 """
 
 import asyncio
@@ -17,6 +19,7 @@ from typing import Any, Protocol
 from src.config.rag_config import RetrievalConfig
 from src.domain.chat_stream import (
     DoneEvent,
+    HistoryMessage,
     Latency,
     MetaEvent,
     error_event,
@@ -28,6 +31,7 @@ from src.ingest.embedder import EmbeddingError
 from src.pipeline.citations import invalid_citations
 from src.pipeline.generator import LLMCallError
 from src.pipeline.prompts import version_header
+from src.pipeline.rewriter import QueryRewriter, SkippingRewriter
 from src.pipeline.sentinel import SentinelGate
 from src.retrieval.context import select_context
 from src.retrieval.errors import RetrievalError
@@ -74,6 +78,7 @@ class SingleRequest:
     question: str
     index: ActiveIndex  # 요청 시작 시 확정한 run (R-4-1)
     prompt_version: str
+    history: tuple[HistoryMessage, ...] = ()  # 오래된 것부터, 비면 재작성하지 않는다
 
     @property
     def source_key(self) -> str:
@@ -117,10 +122,12 @@ class SingleModePipeline:
         retrieval: RetrievalConfig,
         *,
         tau_overrides: Mapping[str, float] | None = None,
+        rewriter: QueryRewriter | None = None,
         clock: Callable[[], float] = time.perf_counter,
     ) -> None:
         self.retriever = retriever
         self.generator = generator
+        self.rewriter: QueryRewriter = rewriter or SkippingRewriter()
         self.retrieval = retrieval
         self.tau_overrides = dict(tau_overrides or {})
         self.clock = clock
@@ -148,9 +155,11 @@ class SingleModePipeline:
         self, req: SingleRequest, progress: StreamProgress
     ) -> AsyncGenerator[dict[str, Any]]:
         top_k = self.retrieval.top_k
+        rewrite = await self.rewriter.rewrite(req.question, req.history, request_id=req.request_id)
+        progress.latency.rewrite_ms = rewrite.elapsed_ms
         try:
             result = await asyncio.to_thread(
-                self.retriever.search, req.question, req.source_key, top_k, index=req.index
+                self.retriever.search, rewrite.query, req.source_key, top_k, index=req.index
             )
         except EmbeddingError:
             logger.error("embedding_failed", extra={"request_id": req.request_id}, exc_info=True)
@@ -182,6 +191,7 @@ class SingleModePipeline:
             commit_sha=req.index.commit_sha,
             ingested_at=req.index.ingested_at,
             no_context=not decision.passed,
+            rewritten_query=rewrite.rewritten,
         )
         if not decision.passed:  # INV-07: 생성기를 부르지 않는다
             logger.info(

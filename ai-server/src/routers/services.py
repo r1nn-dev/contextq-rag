@@ -15,10 +15,16 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.config.ingest_config import load_embedding_config
-from src.config.rag_config import RagConfig, load_llm_config, load_rag_config
+from src.config.rag_config import (
+    RagConfig,
+    load_llm_config,
+    load_rag_config,
+    load_rewrite_model_config,
+)
 from src.config.settings import Settings
 from src.ingest.store import ChromaVectorStore, VectorStore
 from src.pipeline.generator import OpenAIAnswerGenerator
+from src.pipeline.rewriter import OpenAIQueryRewriter
 from src.pipeline.single import SingleModePipeline
 from src.retrieval.embedding import OpenAIQueryEmbedder
 from src.retrieval.pointers import PointerCache
@@ -70,8 +76,15 @@ def build_services(settings: Settings, index: IndexServices) -> ChatServices:
     generator = OpenAIAnswerGenerator(
         settings.openai_api_key, load_llm_config(), model_override=settings.llm_model
     )
+    rewriter = OpenAIQueryRewriter(
+        settings.openai_api_key, load_rewrite_model_config(), config.rewrite
+    )
     pipeline = SingleModePipeline(
-        retriever, generator, config.retrieval, tau_overrides=settings.tau_overrides()
+        retriever,
+        generator,
+        config.retrieval,
+        tau_overrides=settings.tau_overrides(),
+        rewriter=rewriter,
     )
     return ChatServices(
         config, pointers, retriever, pipeline, asyncio.Semaphore(config.stream.max_concurrency)

@@ -98,7 +98,7 @@ async def chat_stream(
 
     clock = services.pipeline.clock
     progress = StreamProgress(started=clock())
-    req = SingleRequest(request_id, body.question, index, prompt_version)
+    req = SingleRequest(request_id, body.question, index, prompt_version, tuple(body.history))
     logger.info(
         "query_received",
         extra={
