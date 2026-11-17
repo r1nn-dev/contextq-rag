@@ -1,6 +1,6 @@
 # 서비스 정책 및 상태 정의
 
-> 최종 수정일: 2026-11-17
+> 최종 수정일: 2026-11-18
 
 ---
 
@@ -384,7 +384,7 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 | 공통 | `id`, `conversation_id`, `role`(USER/ASSISTANT), `content`, `created_at`, `request_id` |
 | 상태 | `status`, `status_reason`(10장 참조), `finish_reason` |
 | 검색 | `rewritten_query`, `rewrite_status`, `ingest_run_id`(비교 모드는 A·B 각각), `commit_sha`, `top1_similarity` |
-| 출처 | `message_sources`: rank(또는 A1·B1 라벨), chunk_id, heading_path, permalink, site_url, similarity |
+| 출처 | `message_sources`: rank(또는 A1·B1 라벨), chunk_id(SSE `meta`에 없으면 NULL), heading_path, permalink, site_url, similarity |
 | 생성 | `model`, `prompt_version`, `prompt_tokens`, `completion_tokens`, `invalid_citations` |
 | 지연 | `rewrite_ms`, `embed_ms`, `retrieve_ms`, `ttft_ms`, `total_ms` |
 | 비교 모드 | `compare_result`(5.6 JSON, 후처리 검증 후 값) |
