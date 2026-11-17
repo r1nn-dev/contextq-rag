@@ -232,9 +232,9 @@ agent = create_agent(model=..., tools=[...])
    ├─ 비로그인: 세션당 5회 제한, 단일 모드만, 이력 저장 없음 (브라우저 메모리 유지)
    └─ 로그인: 이력 저장·조회 가능
 
-2단계. 프레임워크·버전 선택  ← GET /api/v1/meta/sources 응답으로 드롭다운 구성
+2단계. 프레임워크·버전 선택  ← GET /api/v1/sources 응답으로 드롭다운 구성
    ├─ 단일 모드: 버전 1개 선택
-   └─ 비교 모드: 버전 2개 선택 (compare_enabled=true 인 경우만 탭 활성화)
+   └─ 비교 모드: 비교 쌍(comparePairs) 사용 (compareEnabled=true 인 경우만 탭 활성화)
 
 3단계. 질문 입력 및 답변
    ├─ 단일: meta 이벤트(출처 카드 먼저 표시) → token 스트리밍 → done
