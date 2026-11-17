@@ -132,6 +132,7 @@ record CursorResponse<T>(
 | `AI_BUSY` | 503 | AI | 동시 생성 20 초과 (즉시 거절) |
 | `INDEX_NOT_ACTIVE` | 503 | Index | ACTIVE run 없음 (INV-01 위반, 장애) |
 | `INTERNAL_UNAUTHORIZED` | 401 | AI | ai-server 내부 API `X-Internal-Token` 누락·불일치 (backend 설정 오류, 브라우저에는 `AI_UNAVAILABLE`로 전달) |
+| `INTERNAL_ERROR` | 500 | AI | ai-server 예기치 않은 오류. 스트림 후에는 `error` 이벤트 (브라우저에는 `AI_UNAVAILABLE`로 전달) |
 | `UPSTREAM_TIMEOUT` | 504 | AI | 첫 이벤트 15초·비교 30초 초과 |
 
 ---
@@ -1050,6 +1051,8 @@ data: {"event":"done", "status":"NO_CONTEXT", "statusReason":"LOW_SIMILARITY", "
 | sentinel `[[NO_ANSWER]]` | `meta`(sources 포함) → `done` NO_CONTEXT, `LLM_ABSTAIN` (토큰 없음) |
 | 단일 스트림 120초 초과 | 토큰 ≥ 1: `done` PARTIAL, 0개: `done` FAILED — 둘 다 `statusReason=MAX_DURATION` |
 | 질의 임베딩·OpenAI 생성 실패 | `error` `LLM_ERROR` (`partial` = 토큰 수신 여부) |
+| 스트림 중 인덱스 오류(컬렉션 삭제 등) | `error` + 해당 코드(`INDEX_NOT_ACTIVE` 등) |
+| 그 밖의 예기치 않은 서버 오류 | `error` `INTERNAL_ERROR` (종결 이벤트 1회 보장, INV-06) |
 
 **에러 (스트림 후)**: `event: error` SSE 이벤트
 

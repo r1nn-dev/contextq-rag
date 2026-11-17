@@ -498,6 +498,7 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 | `AI_BUSY` | 503 | 시스템 동시 생성 20 초과 | 잠시 후 재시도 |
 | `INDEX_NOT_ACTIVE` | 503 | ACTIVE run 없음(INV-01 위반, 장애) | 관리자 알림 |
 | `INTERNAL_UNAUTHORIZED` | 401 | ai-server 내부 API 토큰 누락·불일치(ADR-012, backend 설정 오류) | backend가 `AI_UNAVAILABLE`로 바꿔 전달 |
+| `INTERNAL_ERROR` | 500 | ai-server 예기치 않은 오류(스트림 후에는 `error` 이벤트) | backend가 `AI_UNAVAILABLE`로 바꿔 전달 |
 | `UPSTREAM_TIMEOUT` | 504 | 첫 이벤트 15초·비교 30초 초과 | 재질문 버튼 |
 | `EMBEDDING_MODEL_MISMATCH` | 500 | INV-03 위반 | 관리자 알림 |
 
