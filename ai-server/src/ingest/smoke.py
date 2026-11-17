@@ -1,6 +1,8 @@
 """활성 인덱스 스모크 재실행 — 정책서 §4.4 · `eval/decision_rules.md` §3-7 (τ가 바뀌면 다시 실행).
 
 검증 게이트와 같은 `check_smoke`를 ACTIVE run 컬렉션에 다시 돌린다. 상태는 바꾸지 않는다.
+`check_smoke`는 호출마다 이벤트 루프를 새로 만들므로, 임베딩 클라이언트도 소스마다 새로 만든다
+(이전 루프에 묶인 연결을 재사용하면 `Event loop is closed`로 실패한다).
 """
 
 from collections.abc import Callable, Iterable
@@ -26,7 +28,7 @@ class SmokeOutcome:
 def run_smoke(
     session: Session,
     store: VectorStore,
-    embedder: EmbeddingClient,
+    embedder_factory: Callable[[], EmbeddingClient],
     smoke: SmokeConfig,
     tau_for: Callable[[str], float],
     sources: Iterable[str],
@@ -38,7 +40,7 @@ def run_smoke(
         result = check_smoke(
             store,
             index.collection,
-            embedder,
+            embedder_factory(),
             smoke.sources.get(source_key, []),
             tau=tau,
             top_k=smoke.top_k,

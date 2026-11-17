@@ -118,10 +118,15 @@ def _smoke(
 ) -> int:
     smoke = load_smoke_config()
     sources = [args.source] if args.source else list(smoke.sources)
-    embedder = OpenAIEmbeddingClient(settings.openai_api_key, load_embedding_config())
+    embedding = load_embedding_config()
     with session_factory() as session:
         outcomes = run_smoke(
-            session, store, embedder, smoke, lambda key: _tau(settings, key), sources
+            session,
+            store,
+            lambda: OpenAIEmbeddingClient(settings.openai_api_key, embedding),
+            smoke,
+            lambda key: _tau(settings, key),
+            sources,
         )
     for outcome in outcomes:
         print(format_outcome(outcome))

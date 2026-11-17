@@ -52,7 +52,7 @@ def test_smoke_uses_source_tau_on_active_run(
         seen.append(source_key)
         return tau
 
-    [outcome] = run_smoke(session, store, _KeywordEmbedder(), SMOKE, tau_for, [KEY])
+    [outcome] = run_smoke(session, store, _KeywordEmbedder, SMOKE, tau_for, [KEY])
 
     assert seen == [KEY]
     assert (outcome.run_id, outcome.tau, outcome.result.passed) == (run_id, tau, passed)
@@ -61,5 +61,20 @@ def test_smoke_uses_source_tau_on_active_run(
 
 def test_smoke_without_active_index_raises(session: Session, tmp_path: Path) -> None:
     with pytest.raises(IndexNotActiveError):
-        run_smoke(session, ChromaVectorStore(tmp_path / "c"), _KeywordEmbedder(), SMOKE,
+        run_smoke(session, ChromaVectorStore(tmp_path / "c"), _KeywordEmbedder, SMOKE,
                   lambda _k: 0.3, [KEY])  # fmt: skip
+
+
+def test_smoke_creates_embedder_per_source(session: Session, tmp_path: Path) -> None:
+    """소스마다 이벤트 루프가 새로 생기므로 클라이언트도 새로 만든다 (Event loop is closed 회귀)."""
+    store = ChromaVectorStore(tmp_path / "chroma")
+    _activate(session, store)
+    created: list[_KeywordEmbedder] = []
+
+    def factory() -> _KeywordEmbedder:
+        created.append(_KeywordEmbedder())
+        return created[-1]
+
+    outcomes = run_smoke(session, store, factory, SMOKE, lambda _k: 0.34, [KEY, KEY])
+
+    assert len(outcomes) == 2 and len(created) == 2 and created[0] is not created[1]
