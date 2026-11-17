@@ -87,6 +87,14 @@ docker compose up -d postgres
 docker compose ps    # postgres Up 확인
 ```
 
+ai 스키마 테이블과 소스 카탈로그는 ai-server Alembic이 만든다 (`app` 스키마는 backend Flyway):
+
+```bash
+cd ai-server
+uv run alembic upgrade head   # ai.sources · compare_pairs · ingest_runs · index_pointers + 카탈로그 시드
+cd ..
+```
+
 인덱스 빌드는 `make build-index` (소스 수집 ~ Chroma 적재, 최초 1회):
 
 ```bash
