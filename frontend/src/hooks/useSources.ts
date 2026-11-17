@@ -36,6 +36,14 @@ export function findSource(sources: Source[], sourceKey: string | null | undefin
   return sources.find((s) => s.sourceKey === sourceKey) ?? null
 }
 
+/** Framework display name derived from the catalog ("LangChain v0.3" → "LangChain"). */
+export function frameworkName(sources: Source[]): string | null {
+  const first = sources[0]
+  if (first === undefined) return null
+  const name = first.displayName.replace(first.versionLabel, '').trim()
+  return name !== '' ? name : first.framework
+}
+
 /** Policy §3.2: show the version with the first 7 SHA characters and the ingest date. */
 export function shortSha(sha: string | null | undefined): string {
   return sha ? sha.slice(0, 7) : '-------'

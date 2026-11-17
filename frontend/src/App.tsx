@@ -1,10 +1,23 @@
-// Root component stub — React Router routes will be wired here
+import { Route, Routes } from 'react-router-dom'
+import { AppLayout } from '@/components/layout/AppLayout'
+import { GuestUsageProvider } from '@/components/providers/GuestUsageProvider'
+import { SourcesProvider } from '@/components/providers/SourcesProvider'
+import { LandingPage } from '@/pages/LandingPage'
+import { NotFoundPage } from '@/pages/NotFoundPage'
+
 function App(): JSX.Element {
   return (
-    <div>
-      <h1>ContextQ-RAG</h1>
-      <p>공식 기술 문서 연계 LLM 기반 개발 학습 Q&A 플랫폼</p>
-    </div>
+    <SourcesProvider>
+      <GuestUsageProvider>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route element={<AppLayout />}>
+            <Route path="/chat" element={<div className="center-fill">채팅 화면</div>} />
+          </Route>
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </GuestUsageProvider>
+    </SourcesProvider>
   )
 }
 
