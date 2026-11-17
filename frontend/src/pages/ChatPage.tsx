@@ -1,11 +1,12 @@
-// Chat screen: new conversation, live stream, and reopened conversations
-// (docs/ui/screenshots/03, 06~10, 15).
+// Chat screen: new conversation, live stream, compare mode and reopened conversations
+// (docs/ui/screenshots/03, 06~10, 12, 13, 15).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { fetchConversation } from '@/api/conversations'
 import { ApiError } from '@/api/http'
 import { AssistantMessage, type SnapshotInfo } from '@/components/chat/AssistantMessage'
+import type { CompareSideInfo } from '@/components/chat/CompareResultView'
 import { Composer } from '@/components/chat/Composer'
 import { GuestLimitModal } from '@/components/chat/GuestLimitModal'
 import { SourcePanel, type PanelSource } from '@/components/chat/SourcePanel'
@@ -18,10 +19,12 @@ import { useGuestUsage } from '@/hooks/useGuestUsage'
 import { findSource, frameworkName, useSources, versionTone } from '@/hooks/useSources'
 import { useSseQuery, type Turn } from '@/hooks/useSseQuery'
 import { isRecord } from '@/types/api'
+import type { ChatMode } from '@/types/chat'
 import type { ConversationDetail } from '@/types/conversation'
 import type { Source } from '@/types/sources'
 import { formatDate } from '@/utils/format'
 import '@/styles/chat.css'
+import '@/styles/compare.css'
 
 const READ_ONLY_CODES = new Set(['CONVERSATION_FULL', 'SOURCE_UNAVAILABLE'])
 
@@ -29,14 +32,33 @@ function freshToken(state: unknown): number {
   return isRecord(state) && typeof state.fresh === 'number' ? state.fresh : 0
 }
 
-function snapshotOf(turn: Turn, sources: Source[]): SnapshotInfo | null {
+const COMPARE_SUGGESTIONS = ['invoke() 사용법', '메모리 구성 방법', 'Retriever 설정']
+
+function labelOf(sources: Source[], key: string | null | undefined): string {
+  return findSource(sources, key)?.versionLabel ?? key ?? ''
+}
+
+function snapshotsOf(turn: Turn, sources: Source[]): SnapshotInfo[] {
   const meta = turn.meta
-  if (meta === null || meta.commitSha === undefined || meta.ingestedAt === undefined) return null
-  return {
-    label: findSource(sources, meta.sourceKey)?.versionLabel ?? meta.sourceKey ?? '',
-    commitSha: meta.commitSha,
-    ingestedAt: meta.ingestedAt,
+  if (meta === null) return []
+  if (meta.commitShaA !== undefined && meta.commitShaB !== undefined) {
+    return [
+      { label: labelOf(sources, meta.sourceKeyA), commitSha: meta.commitShaA, ingestedAt: meta.ingestedAtA ?? '' },
+      { label: labelOf(sources, meta.sourceKeyB), commitSha: meta.commitShaB, ingestedAt: meta.ingestedAtB ?? '' },
+    ]
   }
+  if (meta.commitSha === undefined || meta.ingestedAt === undefined) return []
+  return [{ label: labelOf(sources, meta.sourceKey), commitSha: meta.commitSha, ingestedAt: meta.ingestedAt }]
+}
+
+function compareSides(sources: Source[], turn: Turn): { a: CompareSideInfo; b: CompareSideInfo } {
+  const ranks = (turn.meta?.sources ?? []).map((s) => String(s.rank))
+  const side = (key: string | null, prefix: string): CompareSideInfo => ({
+    label: labelOf(sources, key),
+    tone: versionTone(sources, key),
+    sourceCount: ranks.filter((r) => r.startsWith(prefix)).length,
+  })
+  return { a: side(turn.request.sourceKeyA, 'A'), b: side(turn.request.sourceKeyB, 'B') }
 }
 
 export function ChatPage(): JSX.Element {
@@ -45,7 +67,7 @@ export function ChatPage(): JSX.Element {
   const params = useParams()
   const routeId = params.conversationId !== undefined ? Number(params.conversationId) : null
 
-  const { status, sources, errorMessage, reload } = useSources()
+  const { status, sources, comparePairs, errorMessage, reload } = useSources()
   const guest = useGuestUsage()
   const { user } = useAuth()
   const conversationList = useConversationList()
@@ -53,6 +75,7 @@ export function ChatPage(): JSX.Element {
 
   const [limitCode, setLimitCode] = useState<string | null>(null)
   const [pickedKey, setPickedKey] = useState<string | null>(null)
+  const [pickedMode, setPickedMode] = useState<ChatMode>('SINGLE')
   const [draft, setDraft] = useState('')
   const [focusKey, setFocusKey] = useState<string | null>(null)
   const [activeRank, setActiveRank] = useState<string | null>(null)
@@ -98,6 +121,7 @@ export function ChatPage(): JSX.Element {
     setLoaded(null)
     setReadOnly(false)
     setContinuing(false)
+    setPickedMode('SINGLE')
   }, [fresh, reset])
 
   // open a saved conversation unless it is the one being streamed in this view
@@ -151,10 +175,20 @@ export function ChatPage(): JSX.Element {
     if (el !== null) el.scrollTop = el.scrollHeight
   }, [turns])
 
-  // version is fixed once the conversation starts (INV-10)
-  const sourceKey = loaded?.sourceKey ?? turns[0]?.request.sourceKey ?? pickedKey ?? sources[0]?.sourceKey ?? null
+  // mode and version are fixed once the conversation starts (INV-10)
+  const comparePair = comparePairs.find((p) => p.compareEnabled) ?? null
+  const compareAllowed = !isGuest && comparePair !== null
+  const first = turns[0]?.request
+  const mode: ChatMode = loaded?.mode ?? first?.mode ?? (compareAllowed ? pickedMode : 'SINGLE')
+  const isCompare = mode === 'COMPARE'
+  const sourceKey = loaded?.sourceKey ?? first?.sourceKey ?? pickedKey ?? sources[0]?.sourceKey ?? null
+  // the pair order is always old = A, new = B (policy §3.2)
+  const keyA = loaded?.sourceKeyA ?? first?.sourceKeyA ?? comparePair?.sourceKeyA ?? null
+  const keyB = loaded?.sourceKeyB ?? first?.sourceKeyB ?? comparePair?.sourceKeyB ?? null
   const source = findSource(sources, sourceKey)
   const tone = versionTone(sources, sourceKey)
+  const labelA = labelOf(sources, keyA)
+  const labelB = labelOf(sources, keyB)
   const framework = frameworkName(sources) ?? '공식 문서'
   // the tab-local count is approximate; the input stays enabled so the server's
   // GUEST_QUOTA_EXCEEDED response decides and opens the login modal
@@ -168,25 +202,30 @@ export function ChatPage(): JSX.Element {
     return latest !== undefined && (latest.meta?.sources?.length ?? 0) > 0 ? latest : null
   }, [turns, focusKey])
 
-  const panelSources = useMemo<PanelSource[]>(
-    () =>
-      (panelTurn?.meta?.sources ?? []).map((s) => ({
-        ...s,
-        versionLabel: findSource(sources, panelTurn?.meta?.sourceKey)?.versionLabel ?? '',
-        tone: versionTone(sources, panelTurn?.meta?.sourceKey),
-      })),
-    [panelTurn, sources],
-  )
+  const panelSources = useMemo<PanelSource[]>(() => {
+    const meta = panelTurn?.meta
+    return (meta?.sources ?? []).map((s) => {
+      // compare ranks carry their side: A1 → version A, B2 → version B (policy §5.6)
+      const rank = String(s.rank)
+      const key = rank.startsWith('A') ? meta?.sourceKeyA : rank.startsWith('B') ? meta?.sourceKeyB : meta?.sourceKey
+      return { ...s, versionLabel: labelOf(sources, key), tone: versionTone(sources, key) }
+    })
+  }, [panelTurn, sources])
 
   const submit = useCallback(
     (question: string) => {
-      if (sourceKey === null) return
       setDraft('')
       setFocusKey(null)
       setActiveRank(null)
+      if (isCompare) {
+        if (keyA === null || keyB === null) return
+        void ask(question, { mode: 'COMPARE', sourceKey: null, sourceKeyA: keyA, sourceKeyB: keyB })
+        return
+      }
+      if (sourceKey === null) return
       void ask(question, { mode: 'SINGLE', sourceKey, sourceKeyA: null, sourceKeyB: null })
     },
-    [ask, sourceKey],
+    [ask, isCompare, keyA, keyB, sourceKey],
   )
 
   const startNew = (): void => navigate('/chat', { state: { fresh: Date.now() } })
@@ -233,13 +272,28 @@ export function ChatPage(): JSX.Element {
   const lastNoContext = last?.done?.status === 'NO_CONTEXT'
   const placeholder = exhausted
     ? `게스트 질문 ${guest.limit}회를 모두 사용했습니다. 로그인하면 계속 질문할 수 있습니다.`
-    : turns.length === 0
-      ? `${framework}에 대해 무엇이든 질문하세요… (Ctrl+Enter로 전송)`
-      : lastNoContext
-        ? '다시 질문해보세요…'
-        : '추가 질문을 입력하세요… (Ctrl+Enter)'
+    : isCompare && turns.length === 0
+      ? `${labelA}·${labelB} 모두에 질문합니다… (Ctrl+Enter)`
+      : turns.length === 0
+        ? `${framework}에 대해 무엇이든 질문하세요… (Ctrl+Enter로 전송)`
+        : lastNoContext
+          ? '다시 질문해보세요…'
+          : '추가 질문을 입력하세요… (Ctrl+Enter)'
   const showPanel = panelSources.length > 0
-  const versionLabel = source?.versionLabel ?? findSource(sources, loaded?.sourceKey)?.versionLabel ?? ''
+  const versionLabel = isCompare ? `${labelA} · ${labelB}` : (source?.versionLabel ?? '')
+  const modeTags = isCompare ? (
+    <>
+      <span className="tag tone-c">비교 모드</span>
+      <span className="tag tag-plain">
+        {labelA} ↔ {labelB}
+      </span>
+    </>
+  ) : (
+    <>
+      <span className={`tag ${tone}`}>{versionLabel}</span>
+      <span className="tag tag-plain">단일 모드</span>
+    </>
+  )
 
   const status_ = busy ? (
     <span className="header-status">
@@ -253,7 +307,7 @@ export function ChatPage(): JSX.Element {
   ) : (
     showPanel && (
       <span className="faint header-status">
-        <Icon name="clip" size={13} /> 참고 {panelSources.length}개
+        <Icon name="clip" size={13} /> {isCompare ? '각 버전 참고 문서 포함' : `참고 ${panelSources.length}개`}
       </span>
     )
   )
@@ -263,16 +317,19 @@ export function ChatPage(): JSX.Element {
     header = (
       <header className="page-header">
         <h1 className="conv-heading">{loaded.title}</h1>
-        <span className={`tag ${tone}`}>{versionLabel}</span>
+        {isCompare ? (
+          <span className="tag tone-c">비교 · {versionLabel}</span>
+        ) : (
+          <span className={`tag ${tone}`}>{versionLabel}</span>
+        )}
         <span className="spacer" />
         {status_}
       </header>
     )
-  } else if (turns.length > 0) {
+  } else if (turns.length > 0 || isCompare) {
     header = (
       <header className="page-header">
-        <span className={`tag ${tone}`}>{versionLabel}</span>
-        <span className="tag tag-plain">단일 모드</span>
+        {modeTags}
         <span className="spacer" />
         {status_}
       </header>
@@ -335,7 +392,13 @@ export function ChatPage(): JSX.Element {
     footer = (
       <Composer
         placeholder={placeholder}
-        hint={source !== null ? `${source.versionLabel} — ${source.displayName} 공식 문서 검색 · Ctrl+Enter로 전송` : null}
+        hint={
+          isCompare
+            ? `${labelA} ↔ ${labelB} 비교 · Ctrl+Enter로 전송`
+            : source !== null
+              ? `${source.versionLabel} — ${source.displayName} 공식 문서 검색 · Ctrl+Enter로 전송`
+              : null
+        }
         disabled={busy}
         value={draft}
         onChange={setDraft}
@@ -357,15 +420,44 @@ export function ChatPage(): JSX.Element {
           </div>
         )}
         {header}
+        {isCompare && turns.length === 0 && (
+          <div className="banner banner-info">
+            <Icon name="info" size={15} />
+            동일한 질문을 {labelA}·{labelB} 양쪽에 동시에 질문합니다. 나란히 비교할 수 있습니다.
+          </div>
+        )}
 
         <div className="chat-scroll" ref={listRef}>
-          {turns.length === 0 && !isGuest ? (
+          {turns.length === 0 && isCompare ? (
+            <div className="center-fill">
+              <div className="emoji">⚖️</div>
+              <h2>버전 간 차이를 비교해보세요</h2>
+              <p className="muted">
+                마이그레이션 작업 시 동일 API의 {labelA} · {labelB} 사용법을 한눈에 비교할 수 있습니다.
+              </p>
+              <div className="suggestions">
+                {COMPARE_SUGGESTIONS.map((q) => (
+                  <button key={q} type="button" className="chip" onClick={() => setDraft(q)}>
+                    {q}
+                  </button>
+                ))}
+              </div>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPickedMode('SINGLE')}>
+                단일 모드로 돌아가기
+              </button>
+            </div>
+          ) : turns.length === 0 && !isGuest ? (
             <StartPanel
               sources={sources}
               sourceKey={sourceKey}
               onSource={setPickedKey}
               mode="SINGLE"
-              compareHint="비교 모드: 두 버전 답변을 나란히 확인"
+              onMode={compareAllowed ? setPickedMode : undefined}
+              compareHint={
+                comparePair !== null
+                  ? `비교 모드: ${labelA}·${labelB} 답변을 나란히 확인`
+                  : '지금은 비교할 수 있는 버전 쌍이 없습니다'
+              }
             />
           ) : turns.length === 0 ? (
             <div className="center-fill">
@@ -388,8 +480,13 @@ export function ChatPage(): JSX.Element {
                   <div className="user-bubble">{turn.question}</div>
                   <AssistantMessage
                     turn={turn}
-                    snapshot={snapshotOf(turn, sources)}
-                    versionLabel={findSource(sources, turn.request.sourceKey)?.versionLabel ?? ''}
+                    snapshots={snapshotsOf(turn, sources)}
+                    versionLabel={
+                      turn.request.mode === 'COMPARE'
+                        ? `${labelOf(sources, turn.request.sourceKeyA)} · ${labelOf(sources, turn.request.sourceKeyB)}`
+                        : labelOf(sources, turn.request.sourceKey)
+                    }
+                    compare={turn.request.mode === 'COMPARE' ? compareSides(sources, turn) : undefined}
                     canRetry={!readOnly}
                     onRetry={() => submit(turn.question)}
                     onCitation={(rank) => {
