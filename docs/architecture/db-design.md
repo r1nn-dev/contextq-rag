@@ -1,6 +1,6 @@
 # 데이터베이스 스키마 설계
 
-> 최종 수정일: 2026-11-17
+> 최종 수정일: 2026-11-18
 
 ---
 
@@ -392,7 +392,7 @@
 | message_id | BIGINT | NOT NULL, FK(messages.id) | NO CASCADE |
 | source_key | VARCHAR(50) | NOT NULL | 어느 버전 인덱스에서 왔는지. 값 스냅샷 (FK 없음, 서비스 간) |
 | rank_label | VARCHAR(5) | NOT NULL | SINGLE: "1","2",... / COMPARE: "A1","B2",... (최대 "A10") |
-| chunk_id | CHAR(32) | NOT NULL | SHA-256 결정적 식별자 앞 32자 |
+| chunk_id | CHAR(32) | NULL | SHA-256 결정적 식별자 앞 32자. SSE `meta.sources`(API 명세 부록 B)에 없는 값이라 backend 중계 저장 시 NULL. 출처 표시·재현은 heading_path·permalink·similarity 값 스냅샷으로 한다(INV-13) |
 | heading_path | TEXT | NOT NULL | e.g., "Agents > Tools > Defining tools" |
 | permalink | TEXT | NOT NULL | commit SHA 고정 GitHub URL. 불변 출처 (INV-05) |
 | site_url | TEXT | NULL | 문서 사이트 URL. 구조 개편 시 무효화 가능 (보조 링크) |
@@ -597,7 +597,7 @@ UPDATE ai.index_pointers
 | INV-04 | ai-server 코드 | chunk_id = SHA-256(source_key, commit_sha, file_path, heading_path, chunk_index, chunk_strategy, chunk_params_hash) 앞 32자. 동일 입력 → 동일 ID |
 | INV-05 | ai-server 코드 | permalink는 commit SHA를 포함한 URL만 허용. 브랜치명(main, v0.3) URL은 저장 단계에서 거부 |
 | INV-10 | backend 코드 | conversations.mode, source_key(s) 생성 후 UPDATE 금지. JPA 엔티티 setter 봉인 |
-| INV-11 | backend 코드 + SELECT FOR UPDATE | PENDING·STREAMING·PROCESSING ASSISTANT 메시지 대화당 최대 1개. INSERT 직전 SELECT COUNT FOR UPDATE |
+| INV-11 | backend 코드 + SELECT FOR UPDATE | PENDING·STREAMING·PROCESSING ASSISTANT 메시지 대화당 최대 1개. INSERT 직전 대화 행을 `SELECT ... FOR UPDATE`로 잠근 뒤 진행 중 메시지를 COUNT (PostgreSQL은 집계 쿼리에 `FOR UPDATE`를 허용하지 않으므로 부모 행 잠금으로 직렬화) |
 | INV-12 | backend 코드 | COMPLETED·PARTIAL·NO_CONTEXT·FAILED → 다른 상태로 전이 불가. canTransition()에서 거부 |
 | INV-13 | backend 코드 | ASSISTANT 메시지 저장 시 ingest_run_id, commit_sha, ingested_at, model, prompt_version을 값으로 복사 저장. 청크 참조 아님. 인덱스 교체·삭제 후에도 이력 유지 |
 | INV-14 | backend 코드 | 대화·메시지 조회는 소유자만. 타인 요청 → 존재 여부 무관 404 |
@@ -611,7 +611,7 @@ UPDATE ai.index_pointers
 | DB 제약 | INV-16 | CHECK 제약 (유일하게 DB 레벨 강제 가능) |
 | DB 트랜잭션 | INV-01, INV-15 | 단일 트랜잭션 내 다중 UPDATE. 낙관적 잠금 불가, 비관적 잠금 적용 |
 | 애플리케이션 | INV-05, INV-10, INV-12, INV-13, INV-14 | JPA 엔티티 설계·canTransition()·서비스 레이어 검증 |
-| 애플리케이션 + DB 잠금 | INV-11 | SELECT COUNT ... FOR UPDATE 후 INSERT. 동시 요청 직렬화 |
+| 애플리케이션 + DB 잠금 | INV-11 | 대화 행 SELECT ... FOR UPDATE → 진행 중 COUNT → INSERT. 동시 요청 직렬화 |
 | 단위 테스트 필수 | INV-01, INV-11, INV-12, INV-15 | 전이 테이블 기반 테스트. 허용되지 않은 전이 경로 100% 커버 |
 | ai-server 코드 | INV-02, INV-03, INV-04, INV-05 | 검색·임베딩·저장 단계 검증 |
 
