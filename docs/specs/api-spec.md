@@ -367,7 +367,7 @@ Set-Cookie: 신규 `devdocs_rt` 발급 (기존과 동일 속성).
 | 코드 | HTTP | 조건 | 클라이언트 처리 |
 | --- | --- | --- | --- |
 | `AUTH_REFRESH_MISSING` | 401 | 쿠키 없음 | 로그인 화면 |
-| `AUTH_REFRESH_INVALID` | 401 | DB 미존재 | 로그인 화면 |
+| `AUTH_REFRESH_INVALID` | 401 | DB 미존재, 또는 로그아웃·초과 정리로 이미 폐기(REVOKED)된 토큰·패밀리 | 로그인 화면 |
 | `AUTH_REFRESH_EXPIRED` | 401 | 패밀리 7일 만료 | 로그인 화면 |
 | `AUTH_REFRESH_REUSED` | 401 | 5초 유예 이후 USED 재제출 → 패밀리 전체 REVOKED | "보안을 위해 로그아웃되었습니다" |
 | `AUTH_REFRESH_CONFLICT` | 409 | 5초 유예 내 재제출 (다중 탭 경합) | 1회 재시도 (단일 Promise 직렬화) |
@@ -376,6 +376,7 @@ Set-Cookie: 신규 `devdocs_rt` 발급 (기존과 동일 속성).
 
 - 유예 5초 이내 USED 토큰 재제출 → `AUTH_REFRESH_CONFLICT`(409). 브라우저 쿠키는 이미 새 토큰이므로 1회 재시도하면 성공.
 - 5초 초과 USED 재제출 → 탈취로 간주, 패밀리 전체 REVOKED, 쿠키 `Max-Age=0` 삭제.
+- `AUTH_REFRESH_INVALID`·`AUTH_REFRESH_EXPIRED`·`AUTH_REFRESH_REUSED` 응답은 쓸 수 없는 쿠키를 지우도록 `Set-Cookie: devdocs_rt=; Max-Age=0`을 함께 보낸다. `AUTH_REFRESH_CONFLICT`는 쿠키를 건드리지 않는다(브라우저 쿠키가 이미 새 토큰).
 
 ---
 
@@ -1408,7 +1409,7 @@ PURGED → (종결)
 | 이름 | `devdocs_rt` |
 | 값 | 256비트 불투명 난수 Base64URL. DB에는 SHA-256 해시만 저장 |
 | 속성 | `HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth` |
-| `Max-Age` | 604800 (7일) — 패밀리 절대 만료와 동일 |
+| `Max-Age` | 로그인 시 604800 (7일) — 패밀리 절대 만료와 동일. 회전 시에는 패밀리 남은 시간(초)으로 줄어든다(회전해도 연장 없음) |
 | 로그아웃 | `Max-Age=0`으로 삭제 |
 
 ### D.3 게스트 세션 쿠키
