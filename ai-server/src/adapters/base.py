@@ -26,6 +26,7 @@ class AdapterReport:
     files_by_type: dict[str, int] = field(default_factory=dict)
     snippet_references: int = 0
     missing_snippets: list[MissingSnippet] = field(default_factory=list)
+    empty_documents: list[str] = field(default_factory=list)  # 전처리 후 섹션이 없는 문서
 
     def count_file(self, doc_type: str) -> None:
         self.files_read += 1
