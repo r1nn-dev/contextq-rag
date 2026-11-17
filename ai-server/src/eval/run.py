@@ -5,8 +5,9 @@
 
 - 검색은 `Retriever` 계약(interfaces.md §4)으로만 한다. E1-C·E2는 서비스 Retriever를 쓰고,
   E1-N·E1-F는 실험용 병합 컬렉션 검색기를 쓴다(conditions.py).
-- 서비스 Retriever(`ChromaRetriever`)는 버전 격리 검색 작업(R-4-1)에서 연결한다.
-  그 전에는 E1-C·E2 요청이 `RetrieverUnavailableError`로 끝난다.
+- E1-C는 서비스 검색기(`ChromaRetriever`)를 그대로 쓴다. 실행 시작 때 확정한 ACTIVE run으로
+  고정하고, 질의 임베딩은 N·F와 같은 값을 넣는다(조건 간 임베딩 차이 제거).
+- E2는 전략별 인덱스(R-7-3)가 생기기 전까지 `RetrieverUnavailableError`로 끝난다.
 - Q-ret는 질문의 target_version 컬렉션에서, Q-oos는 두 버전 컬렉션에서 각각 검색한다.
 """
 
@@ -18,23 +19,23 @@ import platform
 import subprocess
 import sys
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from src.config.ingest_config import load_embedding_config
 from src.config.settings import Settings
 from src.domain.retrieval import RetrievedChunk, Retriever
-from src.domain.tables import IndexPointer
 from src.eval.conditions import (
     E1_CONDITIONS,
     Condition,
     MergedCollectionSearcher,
+    PrecomputedQueryEmbedder,
     build_merged_collection,
     embed_queries,
     merged_collection_name,
@@ -59,7 +60,10 @@ from src.eval.questions import (
     v1_composition_errors,
 )
 from src.ingest.embedder import OpenAIEmbeddingClient
-from src.ingest.store import ChromaVectorStore, VectorStore, collection_name
+from src.ingest.store import ChromaVectorStore, VectorStore
+from src.retrieval.errors import RetrievalError
+from src.retrieval.pointers import ActiveIndex, StaticPointers, load_active_index
+from src.retrieval.search import ChromaRetriever
 
 RESULTS_DIR = Path(__file__).resolve().parents[3] / "eval" / "results"
 DEFAULT_KS = (3, 5, 8)
@@ -82,14 +86,7 @@ _SUMMARY_FIELDS = (
 
 
 class RetrieverUnavailableError(RuntimeError):
-    """서비스 Retriever가 아직 연결되지 않음 (R-4-1)."""
-
-
-def unavailable_service_retriever() -> Retriever:
-    raise RetrieverUnavailableError(
-        "서비스 Retriever는 버전 격리 검색 작업(R-4-1)에서 연결한다. "
-        "지금은 E1을 --conditions N F 로만 실행할 수 있다."
-    )
+    """실험에 필요한 인덱스·검색기가 아직 없음 (E2: 전략별 인덱스, R-7-3)."""
 
 
 # --- 행 단위 평가 -----------------------------------------------------------
@@ -242,24 +239,36 @@ def _git_commit() -> str:
 # --- E1 -----------------------------------------------------------------------
 
 
-def active_runs(session: Session) -> dict[str, int]:
-    """평가 대상 소스의 ACTIVE run id (ai.index_pointers)."""
-    pointers = session.scalars(
-        select(IndexPointer).where(IndexPointer.source_key.in_(list(VERSION_SOURCE_KEYS.values())))
-    ).all()
-    found = {p.source_key: p.active_run_id for p in pointers}
-    missing = sorted(set(VERSION_SOURCE_KEYS.values()) - set(found))
-    if missing:
-        raise LookupError(f"ACTIVE run이 없는 소스: {missing}")
+def active_indexes(session: Session) -> dict[str, ActiveIndex]:
+    """평가 대상 소스의 ACTIVE run 스냅샷 — 서비스와 같은 포인터 조회 함수를 쓴다."""
+    found: dict[str, ActiveIndex] = {}
+    errors: list[str] = []
+    for source_key in VERSION_SOURCE_KEYS.values():
+        try:
+            found[source_key] = load_active_index(session, source_key)
+        except RetrievalError as exc:
+            errors.append(f"{source_key}: {exc}")
+    if errors:
+        raise LookupError(f"ACTIVE run을 확인할 수 없는 소스: {errors}")
     return found
 
 
 @dataclass(frozen=True)
 class E1Inputs:
     store: VectorStore
-    runs: Mapping[str, int]
+    indexes: Mapping[str, ActiveIndex]
     embeddings: Mapping[str, Sequence[float]]
-    service_retriever: Callable[[], Retriever]
+    embedding_model: str
+
+    @property
+    def runs(self) -> dict[str, int]:
+        return {key: index.run_id for key, index in self.indexes.items()}
+
+
+def service_retriever(inputs: E1Inputs) -> ChromaRetriever:
+    """E1-C — 운영 검색기를 실행 시작 때 확정한 run과 미리 계산한 질의 임베딩으로 만든다."""
+    embedder = PrecomputedQueryEmbedder(inputs.embeddings, inputs.embedding_model)
+    return ChromaRetriever(inputs.store, StaticPointers(inputs.indexes), embedder)
 
 
 def e1_searchers(inputs: E1Inputs, conditions: Sequence[Condition]) -> dict[str, Retriever]:
@@ -267,7 +276,7 @@ def e1_searchers(inputs: E1Inputs, conditions: Sequence[Condition]) -> dict[str,
     searchers: dict[str, Retriever] = {}
     if "N" in conditions or "F" in conditions:
         name = merged_collection_name(inputs.runs)
-        sources = {key: collection_name(key, run_id) for key, run_id in inputs.runs.items()}
+        sources = {key: index.collection for key, index in inputs.indexes.items()}
         build_merged_collection(inputs.store, sources, name)
         for code in ("N", "F"):
             if code in conditions:
@@ -275,7 +284,7 @@ def e1_searchers(inputs: E1Inputs, conditions: Sequence[Condition]) -> dict[str,
                     inputs.store, name, inputs.embeddings, filter_by_source=code == "F"
                 )
     if "C" in conditions:
-        searchers["E1-C"] = inputs.service_retriever()
+        searchers["E1-C"] = service_retriever(inputs)
     return searchers
 
 
@@ -285,24 +294,20 @@ def run_e1(
     conditions: Sequence[Condition],
     out_dir: Path,
     ks: Sequence[int],
-    service_retriever: Callable[[], Retriever] = unavailable_service_retriever,
 ) -> tuple[Path, Path]:
-    if "C" in conditions:
-        service_retriever()  # 연결 전이면 비싼 준비(임베딩·병합) 전에 실패
     engine = create_engine(settings.database_url)
     try:
         with Session(engine) as session:
-            runs = active_runs(session)
+            indexes = active_indexes(session)
     finally:
         engine.dispose()
     store = ChromaVectorStore(settings.chroma_data_dir)
     embedding_config = load_embedding_config()
     queries = [q.query for q in sets.ret] + [q.query for q in sets.oos]
-    embeddings: Mapping[str, Sequence[float]] = {}
-    if "N" in conditions or "F" in conditions:
-        embedder = OpenAIEmbeddingClient(settings.openai_api_key, embedding_config)
-        embeddings = asyncio.run(embed_queries(embedder, queries))
-    searchers = e1_searchers(E1Inputs(store, runs, embeddings, service_retriever), conditions)
+    embedder = OpenAIEmbeddingClient(settings.openai_api_key, embedding_config)
+    embeddings = asyncio.run(embed_queries(embedder, queries))
+    inputs = E1Inputs(store, indexes, embeddings, embedding_config.model)
+    searchers = e1_searchers(inputs, conditions)
     rows = [
         row
         for condition, searcher in searchers.items()
@@ -316,7 +321,9 @@ def run_e1(
         "git_commit": _git_commit(),
         "python": platform.python_version(),
         "embedding_model": embedding_config.model,
-        "active_runs": ", ".join(f"{k}=run{v}" for k, v in sorted(runs.items())),
+        "active_runs": ", ".join(
+            f"{k}=run{v.run_id}@{(v.commit_sha or '')[:7]}" for k, v in sorted(indexes.items())
+        ),
         "conditions": ", ".join(searchers),
         "top_k": ", ".join(str(k) for k in ks),
         "questions": ", ".join(f"{k}={v}" for k, v in sets.counts().items()),
@@ -326,9 +333,7 @@ def run_e1(
 
 
 def run_e2() -> tuple[Path, Path]:
-    raise RetrieverUnavailableError(
-        "E2는 전략별 인덱스(R-7-3)와 서비스 Retriever(R-4-1)가 있어야 실행할 수 있다."
-    )
+    raise RetrieverUnavailableError("E2는 전략별 인덱스(R-7-3)가 있어야 실행할 수 있다.")
 
 
 # --- CLI ----------------------------------------------------------------------

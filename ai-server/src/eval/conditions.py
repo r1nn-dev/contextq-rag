@@ -2,7 +2,7 @@
 
 - E1-N·E1-F는 두 소스 ACTIVE 컬렉션을 합친 **실험용 병합 컬렉션**에서 검색한다.
   운영 경로(서비스 Retriever)에는 넣지 않는다 (ADR-004 컬렉션 격리 유지).
-- E1-C는 운영 방식 그대로 서비스 `Retriever`를 쓴다 → 러너가 주입한다.
+- E1-C는 운영 방식 그대로 서비스 `ChromaRetriever`를 쓴다 → 러너가 만든다.
 - 쿼리 임베딩은 질문셋 전체를 한 번에 계산해 두고 조건마다 재사용한다(비용·결정성).
 """
 
@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from src.domain.retrieval import RetrievedChunk
-from src.ingest.embedder import EmbeddingClient
+from src.ingest.embedder import EmbeddingClient, EmbeddingError
 from src.ingest.store import VectorStore
 from src.retrieval.search import to_retrieved_chunk
 
@@ -90,3 +90,17 @@ class MergedCollectionSearcher:
         where = {"source_key": source_key} if self.filter_by_source else None
         hits = self.store.query(self.collection, self.embeddings[query], top_k, where=where)
         return [to_retrieved_chunk(hit) for hit in hits]
+
+
+@dataclass(frozen=True)
+class PrecomputedQueryEmbedder:
+    """미리 계산한 질의 임베딩을 돌려주는 `QueryEmbedder` — E1-C가 N·F와 같은 벡터를 쓴다."""
+
+    embeddings: Mapping[str, Sequence[float]]
+    model: str
+
+    def embed_query(self, text: str) -> list[float]:
+        try:
+            return list(self.embeddings[text])
+        except KeyError:
+            raise EmbeddingError(f"미리 계산하지 않은 질의입니다: {text[:40]!r}") from None

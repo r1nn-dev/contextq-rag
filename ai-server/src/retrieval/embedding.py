@@ -13,7 +13,10 @@ from src.ingest.embedder import EmbeddingError
 
 
 class QueryEmbedder(Protocol):
-    model: str  # INV-03 비교 기준
+    @property
+    def model(self) -> str:
+        """질의 임베딩 모델 — INV-03 비교 기준."""
+        ...
 
     def embed_query(self, text: str) -> list[float]: ...
 
