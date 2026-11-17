@@ -85,7 +85,7 @@
 | nginx `proxy_read_timeout` | 150초 | nginx가 backend 응답을 기다리는 한도 | 반드시 스트림 최대 시간(120초)보다 커야 함 |
 | STREAMING 고착 판정 | 150초 | 스위퍼가 `FAILED(STALE)`로 전환하는 기준 | 스트림 최대 시간 + 30초. 프로세스 비정상 종료 대비 |
 | 스위퍼 주기 | 60초 | STREAMING 고착 정리 배치 | backend `@Scheduled` |
-| 메타 API 캐시 | 60초 | `GET /meta/sources` 응답 캐시 | 인덱스 활성화 시 캐시 즉시 무효화 |
+| 메타 API 캐시 | 60초 | `GET /api/v1/sources` 응답 캐시 | 인덱스 활성화 시 캐시 즉시 무효화 |
 | ai-server 활성 인덱스 포인터 캐시 | 30초 (+ reload 즉시 반영) | ai-server가 활성 run을 재조회하는 주기 | reload 호출 실패 시 안전망 |
 | 인덱스 VALIDATING 제한 시간 | 10분 | 검증 단계 최대 시간 | 초과 시 `FAILED(VALIDATION_TIMEOUT)`, 기존 인덱스 유지 |
 | FAILED 컬렉션 | 24시간 후 삭제 | 실패 인덱스 디버깅용 보관 | 디스크(20GiB) 보호 |
@@ -173,27 +173,27 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 | 소스 비활성화 | `enabled = false`로 전환해도 기존 대화·이력은 유지되고 읽기 전용이 된다(2.3절) |
 | 신규 프레임워크 추가 | Adapter 구현 + 카탈로그 행 추가만으로 가능해야 한다. 졸업작품 범위에서는 추가하지 않으며, 확장 경로만 보고서에 기술(기획서 5.5) |
 
-### 3.3 메타 API 응답 계약 (`GET /api/v1/meta/sources`)
+### 3.3 메타 API 응답 계약 (`GET /api/v1/sources`)
+
+응답 형식은 `docs/specs/api-spec.md` > 2.1을 따른다. 필드는 camelCase이며, 이 절은 정책 관점의 규칙만 적는다.
 
 ```json
 {
-  "frameworks": [{
-    "key": "langchain",
-    "display_name": "LangChain",
-    "versions": [
-      { "source_key": "langchain_v03", "label": "v0.3",
-        "active_run": { "ingest_run_id": 12, "commit_sha": "a1b2c3d", "ingested_at": "2026-10-05", "chunk_count": 4210 } },
-      { "source_key": "langchain_v1x", "label": "v1.x",
-        "active_run": { "ingest_run_id": 13, "commit_sha": "e4f5a6b", "ingested_at": "2026-10-05", "chunk_count": 3380 } }
-    ],
-    "compare_pairs": [{ "a": "langchain_v03", "b": "langchain_v1x" }],
-    "compare_enabled": true
-  }],
-  "guest": { "remaining": 3, "limit": 5 }
+  "sources": [
+    { "sourceKey": "langchain_v03", "framework": "langchain", "versionLabel": "v0.3", "displayName": "LangChain v0.3",
+      "enabled": true, "activeRun": { "commitSha": "<COMMIT_SHA_A>", "ingestedAt": "2026-10-05", "chunkCount": 3842 } },
+    { "sourceKey": "langchain_v1x", "framework": "langchain", "versionLabel": "v1.x", "displayName": "LangChain v1.x",
+      "enabled": true, "activeRun": { "commitSha": "<COMMIT_SHA_B>", "ingestedAt": "2026-10-05", "chunkCount": 5120 } }
+  ],
+  "comparePairs": [{ "compareEnabled": true, "sourceKeyA": "langchain_v03", "sourceKeyB": "langchain_v1x" }]
 }
 ```
 
-`guest`는 게스트 요청에만 포함한다. 로그인 사용자는 `guest: null`이다. 값은 예시다.
+- `sources`에는 3.2 활성 조건을 만족하는 소스만 담는다.
+- `comparePairs[].compareEnabled`는 DB 컬럼이 아니라 3.2 `compare_enabled` 규칙으로 계산한 값이다.
+- 값은 예시다.
+
+> **미확정:** 게스트 남은 질문 횟수를 응답에 담을지(필드 이름·포함 API)는 아직 정하지 않았다. 게스트 세션 작업에서 API 명세에 먼저 정한 뒤 이 절에 반영한다.
 
 ---
 
@@ -467,7 +467,8 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 
 ### 9.2 오류 응답 계약
 
-- 스트림 시작 전 오류: HTTP 상태 + `{"code", "message", "request_id", "timestamp"}`.
+- 스트림 시작 전 오류(backend → 브라우저): HTTP 상태 + 공통 오류 응답 `{"success": false, "error": {"code", "message", "details"}}` (`docs/specs/api-spec.md` > 0.3). 스트림이 아닌 모든 API도 같은 형식이다.
+- 스트림 시작 전 오류(ai-server → backend, 내부망): HTTP 상태 + `{"code", "message", "request_id", "timestamp"}` (`docs/specs/api-spec.md` > 6.1). backend는 이를 위 공통 오류 응답으로 바꿔 브라우저에 전달한다.
 - 스트림 시작 후 오류: `event: error` + `{"code", "message", "requestId", "partial": bool}` (INV-09). 필드 표기는 9.3을 따른다.
 - `message`는 사용자 표시용 한국어. 스택 트레이스·내부 호스트명은 노출하지 않는다.
 
