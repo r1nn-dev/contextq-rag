@@ -1,0 +1,25 @@
+question_id: SHR-005
+question_set: Q-shared
+title: 프롬프트 템플릿 사용
+type: API_USAGE
+difficulty: EASY
+query: 모델에 보낼 프롬프트를 구성하는 방법은?
+versions:
+  v0_3:
+    source_key: langchain_v03
+    gold_sections:
+    - file_path: docs/docs/concepts/prompt_templates.mdx
+      heading_path: Prompt Templates
+  v1_x:
+    source_key: langchain_v1x
+    gold_sections:
+    - file_path: src/oss/langchain/messages.mdx
+      heading_path: Messages > Basic usage
+label_schema:
+  version_error: 0 = 버전 오류 없음 / 1 = 선택한 버전이 아닌 코드·API 포함
+  evidence_quality: 'R1·R2 조건만: 0 = 근거 없음 / 1 = 부분 / 2 = 충분'
+  answer_usefulness: 0 = 무관 / 1 = 부분 유용 / 2 = 유용
+metadata:
+  created_by: ai-draft
+  created_at: '2026-11-17T00:00:00Z'
+  reviewed_by: null

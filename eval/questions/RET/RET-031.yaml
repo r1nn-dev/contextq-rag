@@ -1,0 +1,16 @@
+question_id: RET-031
+question_set: Q-ret
+title: v1.x init_chat_model
+type: API_USAGE
+difficulty: EASY
+target_version: v1.x
+query: LangChain v1.x에서 init_chat_model로 모델을 초기화하는 방법은?
+gold:
+  sections:
+  - file_path: src/oss/langchain/models.mdx
+    heading_path: Models > Basic usage
+metadata:
+  created_by: ai-draft
+  created_at: '2026-11-17T00:00:00Z'
+  is_decoy: false
+  reviewed_by: null

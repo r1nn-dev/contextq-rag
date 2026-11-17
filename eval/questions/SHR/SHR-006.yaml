@@ -1,0 +1,25 @@
+question_id: SHR-006
+question_set: Q-shared
+title: 도구 실행 전 사람 승인
+type: VERSION_SPECIFIC
+difficulty: MEDIUM
+query: 도구를 실행하기 전에 사람 승인을 받으려면 어떻게 해?
+versions:
+  v0_3:
+    source_key: langchain_v03
+    gold_sections:
+    - file_path: docs/docs/how_to/tools_human.ipynb
+      heading_path: How to add a human-in-the-loop for tools
+  v1_x:
+    source_key: langchain_v1x
+    gold_sections:
+    - file_path: src/oss/langchain/human-in-the-loop.mdx
+      heading_path: Human-in-the-loop > Configuring interrupts
+label_schema:
+  version_error: 0 = 버전 오류 없음 / 1 = 선택한 버전이 아닌 코드·API 포함
+  evidence_quality: 'R1·R2 조건만: 0 = 근거 없음 / 1 = 부분 / 2 = 충분'
+  answer_usefulness: 0 = 무관 / 1 = 부분 유용 / 2 = 유용
+metadata:
+  created_by: ai-draft
+  created_at: '2026-11-17T00:00:00Z'
+  reviewed_by: null

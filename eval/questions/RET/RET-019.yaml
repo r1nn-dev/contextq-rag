@@ -1,0 +1,16 @@
+question_id: RET-019
+question_set: Q-ret
+title: v0.3 Runnable 폴백
+type: API_USAGE
+difficulty: MEDIUM
+target_version: v0.3
+query: LangChain v0.3에서 with_fallbacks로 모델 호출이 실패하면 다른 모델로 대체하는 방법은?
+gold:
+  sections:
+  - file_path: docs/docs/how_to/fallbacks.ipynb
+    heading_path: How to add fallbacks to a runnable
+metadata:
+  created_by: ai-draft
+  created_at: '2026-11-17T00:00:00Z'
+  is_decoy: false
+  reviewed_by: null

@@ -1,6 +1,6 @@
 # RAG 평가 지표 및 방법론
 
-> **최종 수정**: 2026-11-05
+> **최종 수정**: 2026-11-17
 
 ---
 
@@ -21,14 +21,20 @@
 > 반환된 Top-K 청크 중 적어도 하나가 gold 섹션에 해당하면 1, 아니면 0.
 
 ```
-Hit@K(q) = 1  if ∃ c ∈ Top-K(q) : c.heading_path ∈ gold_sections(q)
+Hit@K(q) = 1  if ∃ c ∈ Top-K(q), g ∈ gold_sections(q) : match(c, g)
          = 0  otherwise
+
+match(c, g) = c.file_path == g.file_path
+              AND (c.heading_path == g.heading_path
+                   OR c.heading_path 가 g.heading_path + " > " 로 시작)
 
 Hit@K = (1/|Q|) × Σ Hit@K(q)   for q ∈ Q
 ```
 
-- `gold_sections(q)`: `eval/questions/{셋}/{ID}.yaml`의 `gold.sections`
-- `heading_path` 비교: 대소문자 무시, 앞뒤 공백 제거 후 정확히 일치
+- `gold_sections(q)`: `eval/questions/{셋 접두사}/{ID}.yaml`의 `gold.sections` (Q-shared는 버전별 `versions.*.gold_sections`)
+- gold는 `{file_path, heading_path}` 쌍이며 `heading_path` 깊이는 2 이하다(`eval-scenarios.md` §2.6). 하위 섹션까지 적중으로 보는 이유: 전략 A·B는 H3 단위 `heading_path`를 갖고 전략 C는 H2 단위로 묶으므로, gold를 H2 이하로 두고 하위를 포함해야 전략 간 판정 기준이 같아진다.
+- `heading_path` 비교: 대소문자 무시, 앞뒤 공백 제거 후 비교
+- 아래 MRR@K·Precision@K의 "gold 청크"·"관련"도 같은 `match`로 판정한다.
 
 #### MRR@K (Mean Reciprocal Rank)
 
@@ -346,6 +352,7 @@ python scripts/eval/aggregate_e1.py \
 | --- | --- |
 | v0.1 | 최초 작성 |
 | v0.2 | Precision@K / 버전 혼입률 수식의 `c.version` → `c.source_key` 통일; E1 결과 JSONL의 `chunks_returned.version` → `source_key` |
+| v0.3 | Hit@K gold 판정을 `{file_path, heading_path}` 쌍 + 하위 섹션 포함으로 확정 (질문셋 v1 형식 확정) |
 
 ---
 

@@ -1,0 +1,18 @@
+question_id: RET-011
+question_set: Q-ret
+title: v0.3 LCEL 파이프 연산자 체인
+type: CODE_PATTERN
+difficulty: MEDIUM
+target_version: v0.3
+query: LangChain v0.3에서 파이프(|) 연산자로 프롬프트, 모델, 출력 파서를 연결하는 방법은?
+gold:
+  sections:
+  - file_path: docs/docs/how_to/sequence.ipynb
+    heading_path: How to chain runnables
+  - file_path: docs/docs/concepts/lcel.mdx
+    heading_path: LangChain Expression Language (LCEL)
+metadata:
+  created_by: ai-draft
+  created_at: '2026-11-17T00:00:00Z'
+  is_decoy: false
+  reviewed_by: null
