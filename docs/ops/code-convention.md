@@ -1,6 +1,6 @@
 # 코드 컨벤션
 
-> **최종 수정일:** 2026-11-15
+> **최종 수정일:** 2026-11-17
 
 ---
 
@@ -140,7 +140,8 @@ backend/contextq/src/main/java/com/r1nn/contextq/
 ├── chat/          # 질의 처리·이력 (Controller, Service, Repository)
 ├── domain/        # JPA 엔티티 공통
 ├── infra/         # DB 설정, WebClient (ai-server 연동)
-└── common/        # 예외 처리, 응답 DTO, 유틸리티
+├── common/        # 예외 처리, 응답 DTO, 유틸리티
+└── global/config/ # 앱 전역 설정 (Spring Security, @ConfigurationProperties)
 ```
 
 - 신규 도메인은 위 목록에 없는 경우 먼저 `docs/ops/package-structure.md`에 반영한다.
