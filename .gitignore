@@ -97,7 +97,9 @@ data/
 .codex/
 .cursor/
 .aider*
-.continue/ 
+.continue/
+.agents/
+skills-lock.json
 
 # Personal notes / local scratch
 .personal/
