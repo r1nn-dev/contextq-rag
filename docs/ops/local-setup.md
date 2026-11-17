@@ -1,6 +1,6 @@
 # ContextQ-RAG 로컬 개발 환경 세팅
 
-> **최종 수정일**: 2026-11-14
+> **최종 수정일**: 2026-11-17
 
 ---
 
@@ -56,7 +56,7 @@ cp .env.example .env
 | `POSTGRES_PASSWORD` | PostgreSQL 비밀번호 | `openssl rand -hex 16` |
 | `JWT_SECRET` | JWT 서명 키 | `openssl rand -hex 32` |
 | `INTERNAL_TOKEN` | 서비스 간 내부 인증 토큰 | `openssl rand -hex 32` |
-| `VITE_API_BASE_URL` | 프론트엔드 API 엔드포인트 | 로컬: `http://localhost:8080` |
+| `VITE_API_BASE_URL` | 프론트엔드 API 호출 경로 접두사 | 빈 값 (동일 출처, Vite 프록시가 `/api`를 backend로 전달) |
 
 ---
 

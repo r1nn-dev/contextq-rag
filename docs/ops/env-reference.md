@@ -89,9 +89,10 @@ openssl rand -hex 32
 
 | 변수명 | 설명 | 예시 / 기본값 | 필수 |
 |---|---|---|---|
-| `VITE_API_BASE_URL` | 프론트엔드 → Spring Boot API 엔드포인트 | 로컬: `http://localhost:8080` | ✅ |
+| `VITE_API_BASE_URL` | 프론트엔드 API 호출 경로 접두사 | 빈 값 (동일 출처) | 선택 |
 
-> Vite 환경 변수는 `VITE_` 접두사가 붙어야 브라우저 번들에 포함된다.
+> Vite 환경 변수는 `VITE_` 접두사가 붙어야 브라우저 번들에 포함된다.  
+> backend는 CORS를 허용하지 않는다(`docs/planning/policy.md` > §11 > "CORS 미허용"). 브라우저는 동일 출처의 `/api/...`를 호출하고, 개발 환경은 Vite 프록시, 운영은 nginx가 backend로 전달한다. 다른 출처 URL을 넣으면 요청이 차단된다.
 
 ### 1.8 애플리케이션 환경
 
@@ -171,7 +172,7 @@ INTERNAL_TOKEN=            # openssl rand -hex 32
 # ================================================
 # 프론트엔드
 # ================================================
-VITE_API_BASE_URL=http://localhost:8080
+VITE_API_BASE_URL=          # 빈 값 = 동일 출처 /api (Vite 프록시·nginx)
 
 # ================================================
 # 앱 환경 (선택)
