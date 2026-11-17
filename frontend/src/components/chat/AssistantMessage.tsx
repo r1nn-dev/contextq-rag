@@ -7,7 +7,7 @@ import type { Turn } from '@/hooks/useSseQuery'
 import { Markdown, type CitationContext } from './Markdown'
 
 const LOGIN_CODES = new Set(['GUEST_QUOTA_EXCEEDED', 'GUEST_SESSION_LIMIT', 'GUEST_MODE_NOT_ALLOWED'])
-const NO_RETRY_CODES = new Set(['CONVERSATION_FULL', 'SOURCE_UNAVAILABLE', 'DAILY_QUOTA_EXCEEDED'])
+const NO_RETRY_CODES = new Set(['CONVERSATION_FULL', 'SOURCE_UNAVAILABLE', 'DAILY_QUOTA_EXCEEDED', 'IN_PROGRESS'])
 
 const NO_CONTEXT_REASON: Record<string, string> = {
   LOW_SIMILARITY: '질문과 가까운 문서의 유사도가 임계값보다 낮아 LLM을 호출하지 않았습니다.',
@@ -26,6 +26,8 @@ interface AssistantMessageProps {
   turn: Turn
   snapshot: SnapshotInfo | null
   versionLabel: string
+  /** false for read-only conversations */
+  canRetry?: boolean
   onRetry: () => void
   onCitation: (rank: string) => void
   onSuggest: (question: string) => void
@@ -71,7 +73,7 @@ export function NoContextCard({
   )
 }
 
-function ErrorBox({ turn, onRetry }: { turn: Turn; onRetry: () => void }): JSX.Element | null {
+function ErrorBox({ turn, onRetry, canRetry }: { turn: Turn; onRetry: () => void; canRetry: boolean }): JSX.Element | null {
   const error = turn.error
   if (error === null) return null
   let action: ReactNode = (
@@ -85,7 +87,7 @@ function ErrorBox({ turn, onRetry }: { turn: Turn; onRetry: () => void }): JSX.E
         로그인하고 계속하기
       </Link>
     )
-  } else if (NO_RETRY_CODES.has(error.code)) {
+  } else if (NO_RETRY_CODES.has(error.code) || !canRetry) {
     action = null
   }
   return (
@@ -105,6 +107,7 @@ export function AssistantMessage({
   turn,
   snapshot,
   versionLabel,
+  canRetry = true,
   onRetry,
   onCitation,
   onSuggest,
@@ -157,7 +160,7 @@ export function AssistantMessage({
           )}
         </div>
       )}
-      {turn.done?.status === 'PARTIAL' && (
+      {turn.done?.status === 'PARTIAL' && canRetry && (
         <button type="button" className="btn btn-ghost btn-sm" onClick={onRetry}>
           <Icon name="refresh" size={13} /> 다시 생성
         </button>
@@ -166,9 +169,10 @@ export function AssistantMessage({
         <ErrorBox
           turn={{ ...turn, error: { code: turn.done.statusReason ?? 'FAILED', message: '답변 생성에 실패했습니다.', partial: hasBody, retryAfterSec: null } }}
           onRetry={onRetry}
+          canRetry={canRetry}
         />
       )}
-      <ErrorBox turn={turn} onRetry={onRetry} />
+      <ErrorBox turn={turn} onRetry={onRetry} canRetry={canRetry} />
     </div>
   )
 }
