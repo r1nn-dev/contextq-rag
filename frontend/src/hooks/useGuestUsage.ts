@@ -1,7 +1,7 @@
 // Guest question counter shown in the sidebar and banner.
-// The API has no field for the remaining count, so this tab counts questions whose
-// meta arrived (quota is charged on validation pass, policy §1.3). The server's
-// GUEST_QUOTA_EXCEEDED response stays authoritative.
+// Starts from the server count in GET /api/v1/sources `guest` (api-spec 2.1), then this tab
+// counts questions whose meta arrived (quota is charged on validation pass, policy §1.3).
+// The server's GUEST_QUOTA_EXCEEDED response stays authoritative.
 
 import { createContext, useContext } from 'react'
 

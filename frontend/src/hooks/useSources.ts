@@ -1,12 +1,14 @@
 // Version catalog loaded once at app start (api-spec 2.1 > 프론트 계약).
 
 import { createContext, useContext } from 'react'
-import type { ComparePair, Source } from '@/types/sources'
+import type { ComparePair, GuestUsage, Source } from '@/types/sources'
 
 export interface SourcesState {
   status: 'loading' | 'ready' | 'error'
   sources: Source[]
   comparePairs: ComparePair[]
+  /** Server guest usage at load time; null when logged in or not loaded yet. */
+  guest: GuestUsage | null
   errorMessage: string | null
   reload: () => void
 }
