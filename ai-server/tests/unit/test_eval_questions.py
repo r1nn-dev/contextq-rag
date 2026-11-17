@@ -14,6 +14,7 @@ from src.eval.questions import (
     SharedQuestion,
     load_question,
     load_question_sets,
+    tau_calibration_oos,
     unreviewed,
     v1_composition_errors,
 )
@@ -169,6 +170,21 @@ def test_unreviewed_lists_questions_without_reviewer() -> None:
     )
 
     assert unreviewed(sets) == ["RET-002", "OOS-001"]
+
+
+def test_tau_calibration_defaults_true_and_can_exclude_ambiguous_questions() -> None:
+    ambiguous = _oos("OOS-002")
+    ambiguous["expected_behavior"] = {
+        "no_context": True,
+        "reason": "모호함",
+        "tau_calibration": False,
+    }
+    sets = QuestionSets(
+        oos=[OosQuestion.model_validate(_oos()), OosQuestion.model_validate(ambiguous)]
+    )
+
+    assert sets.oos[0].expected_behavior.tau_calibration is True  # 필드가 없으면 포함
+    assert [q.question_id for q in tau_calibration_oos(sets)] == ["OOS-001"]
 
 
 def test_repository_question_sets_match_v1_composition() -> None:

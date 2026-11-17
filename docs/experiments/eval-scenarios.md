@@ -96,6 +96,7 @@ gold:                      # Q-ret 필수. Q-oos는 쓰지 않음.
 expected_behavior:         # Q-oos 필수.
   no_context: boolean      # true면 LLM 미호출 + 안내 메시지 반환
   reason: string           # 범위 밖인 이유
+  tau_calibration: boolean # τ 결정(E1 부속) 표본 포함 여부. 기본 true. 범위 밖이 아니라 모호해서 걸리는 질문은 false — 동작 확인용으로만 쓴다
 
 metadata:
   created_by: string
