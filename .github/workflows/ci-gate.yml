@@ -130,6 +130,11 @@ jobs:
         working-directory: frontend
         run: npm run lint
 
+      - name: 단위 테스트
+        if: steps.check.outputs.exists == 'true'
+        working-directory: frontend
+        run: npm test
+
       - name: Vite 빌드
         if: steps.check.outputs.exists == 'true'
         working-directory: frontend
