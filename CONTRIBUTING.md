@@ -1,4 +1,4 @@
-> **최종 수정일:** 2026-11-09
+> **최종 수정일:** 2026-11-18
 > **기준 브랜치:** `develop` (기본 브랜치), `main` (배포/릴리즈)
 
 ---
@@ -89,6 +89,8 @@ chore/3-ci-github-actions-setup
 | 문서 수집·파싱·청킹·임베딩 | `ingest` | `ai-server/src/ingest/` |
 | 공통 DTO·설정·유틸리티, SSE 계약 | `shared` | `ai-server/src/domain/`, `ai-server/src/config/`, `contracts/` |
 | Spring Boot 비즈니스 로직·API | `backend` | `backend/src/main/java/` |
+| Spring Boot 인증·게스트 세션 (`auth` 패키지) | `auth` | `backend/contextq/src/main/java/com/r1nn/contextq/auth/` |
+| Spring Boot 채팅 중계·대화 이력 (`chat` 패키지) | `chat` | `backend/contextq/src/main/java/com/r1nn/contextq/chat/` |
 | React 프론트엔드 | `frontend` | `frontend/src/` |
 | 오프라인 수집·실험 스크립트 | `scripts` | `scripts/` |
 | RAG 평가 질문셋·결정 규칙·평가 러너 | `eval` | `eval/`, `ai-server/src/eval/` |

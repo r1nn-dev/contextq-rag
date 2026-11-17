@@ -1,6 +1,6 @@
 # API 명세서
 
-> 최종 수정일: 2026-11-17
+> 최종 수정일: 2026-11-18
 
 ---
 
@@ -101,7 +101,7 @@ record CursorResponse<T>(
 
 | 코드 | HTTP | 도메인 | 발생 조건 |
 | --- | --- | --- | --- |
-| `INVALID_REQUEST` | 400 | 공통 | Bean Validation 실패. `details[]`에 필드별 사유 포함 |
+| `INVALID_REQUEST` | 400 | 공통 | Bean Validation 실패·해석할 수 없는 요청 본문. `details[]`에 필드별 사유 포함. 없는 경로(404)·허용되지 않는 메서드(405)도 이 코드를 쓰고 HTTP 상태만 다르다 |
 | `AUTH_INVALID_CREDENTIALS` | 401 | Auth | 로그인 실패 (미존재 계정도 더미 BCrypt 수행, 시간차 제거) |
 | `AUTH_TOKEN_MISSING` | 401 | Auth | Authorization 헤더 없음 |
 | `AUTH_TOKEN_INVALID` | 401 | Auth | JWT 서명 오류·형식 불일치 |
@@ -132,7 +132,7 @@ record CursorResponse<T>(
 | `AI_BUSY` | 503 | AI | 동시 생성 20 초과 (즉시 거절) |
 | `INDEX_NOT_ACTIVE` | 503 | Index | ACTIVE run 없음 (INV-01 위반, 장애) |
 | `INTERNAL_UNAUTHORIZED` | 401 | AI | ai-server 내부 API `X-Internal-Token` 누락·불일치 (backend 설정 오류, 브라우저에는 `AI_UNAVAILABLE`로 전달) |
-| `INTERNAL_ERROR` | 500 | AI | ai-server 예기치 않은 오류. 스트림 후에는 `error` 이벤트 (브라우저에는 `AI_UNAVAILABLE`로 전달) |
+| `INTERNAL_ERROR` | 500 | 공통 | backend 예기치 않은 오류(스택 트레이스 미노출, 서버 로그에 `X-Request-Id`와 함께 원인 기록). ai-server의 같은 코드는 스트림 전후 모두 브라우저에 `AI_UNAVAILABLE`로 전달 |
 | `UPSTREAM_TIMEOUT` | 504 | AI | 첫 이벤트 15초·비교 30초 초과 |
 
 ---
