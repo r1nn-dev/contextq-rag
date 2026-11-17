@@ -4,5 +4,6 @@
 import './handlers/auth'
 import './handlers/sources'
 import './handlers/chat'
+import './handlers/conversations'
 
 export { mockFetch } from './router'
