@@ -1,0 +1,23 @@
+---
+sidebar_position: 3
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# LangChain Expression Language (LCEL)
+
+:::tip[Prerequisites]
+Read the runnable interface guide before this conceptual overview.
+:::
+
+LCEL composes runnables declaratively so chains get streaming and batching for free.
+
+<Tabs>
+  <TabItem value="py" label="Python">
+Use the pipe operator to compose a prompt, a model and an output parser.
+  </TabItem>
+</Tabs>
+
+```python
+chain = prompt | model | parser  # :::tip stays inside code
+```
