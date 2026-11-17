@@ -1,5 +1,6 @@
 package com.r1nn.contextq.chat.controller;
 
+import com.r1nn.contextq.chat.dto.ConversationDetailResponse;
 import com.r1nn.contextq.chat.dto.ConversationSummaryResponse;
 import com.r1nn.contextq.chat.service.ConversationQueryService;
 import com.r1nn.contextq.common.response.ApiResponse;
@@ -10,6 +11,7 @@ import java.time.Instant;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -37,5 +39,14 @@ public class ConversationController {
           int size) {
     return ResponseEntity.ok(
         ApiResponse.ok(queryService.list(ChatController.userIdOf(authentication), before, size)));
+  }
+
+  /** Messages, sources and snapshots of one owned conversation (api-spec §4.2, INV-14). */
+  @GetMapping("/{conversationId}")
+  public ResponseEntity<ApiResponse<ConversationDetailResponse>> detail(
+      Authentication authentication, @PathVariable Long conversationId) {
+    return ResponseEntity.ok(
+        ApiResponse.ok(
+            queryService.detail(ChatController.userIdOf(authentication), conversationId)));
   }
 }

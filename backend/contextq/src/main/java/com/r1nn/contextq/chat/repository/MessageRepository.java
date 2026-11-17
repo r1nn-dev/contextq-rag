@@ -15,6 +15,9 @@ import org.springframework.data.repository.query.Param;
 
 public interface MessageRepository extends JpaRepository<Message, Long> {
 
+  /** Conversation messages oldest first (idx_msg_conv_created, api-spec §4.2). */
+  List<Message> findByConversation_IdOrderByCreatedAtAscIdAsc(Long conversationId);
+
   long countByConversation_IdAndRoleAndStatusIn(
       Long conversationId, MessageRole role, Collection<MessageStatus> statuses);
 
