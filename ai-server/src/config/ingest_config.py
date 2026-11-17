@@ -47,3 +47,17 @@ def load_chunking_config(config_dir: Path = CONFIG_DIR) -> ChunkingConfig:
 def embedding_model_name(config_dir: Path = CONFIG_DIR) -> str:
     """청크 메타데이터·run에 기록할 임베딩 모델 이름 (INV-03)."""
     return str(_load_yaml("models.yaml", config_dir)["embedding"]["model"])
+
+
+class EmbeddingConfig(BaseModel):
+    model: str
+    dimensions: int = Field(gt=0)
+    batch_size: int = Field(gt=0, le=2048)
+    timeout_seconds: float = Field(gt=0)
+    max_retries: int = Field(ge=0)
+    price_per_1m_tokens_usd: float = Field(ge=0)
+
+
+@lru_cache
+def load_embedding_config(config_dir: Path = CONFIG_DIR) -> EmbeddingConfig:
+    return EmbeddingConfig.model_validate(_load_yaml("models.yaml", config_dir)["embedding"])
