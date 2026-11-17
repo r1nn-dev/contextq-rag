@@ -1,0 +1,11 @@
+# local profile — PostgreSQL from infra/docker-compose (host port 5432 by default)
+
+spring:
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/contextq_db}
+    username: ${DATABASE_USERNAME:contextq}
+    password: ${DATABASE_PASSWORD:}
+
+logging:
+  level:
+    com.r1nn.contextq: DEBUG
