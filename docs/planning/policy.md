@@ -520,7 +520,7 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 | 로그 형식 | JSON 구조 로그. 질문 원문은 운영 로그에 남기지 않고 길이·해시만 기록(원문은 DB 이력에만). JWT·쿠키·API 키는 마스킹 |
 | 헬스체크 | backend `/actuator/health`(DB 연결), ai-server `/internal/v1/health`(Chroma 로드·소스별 ACTIVE run 존재). Compose `healthcheck`로 의존 순서 제어 |
 | 배포 | `deploy.sh <git-sha>`: 이미지 태그 = git SHA. 롤백 = 직전 SHA로 재실행. `latest` 태그 운영 사용 금지. 전시회 환경 전환·원복: `scripts/exhibition-profile.sh apply|reset` (11/18 적용, 11/19 00:00 원복) |
-| DB 마이그레이션 | `app` 스키마는 Flyway(backend 소유), `ai` 스키마는 Alembic(ai-server 소유). 서로의 스키마에 쓰기 금지, 읽기는 backend가 `ai.sources`·`ai.index_pointers`만 조회 |
+| DB 마이그레이션 | `app` 스키마는 Flyway(backend 소유), `ai` 스키마는 Alembic(ai-server 소유). 서로의 스키마에 쓰기 금지. backend는 ai 스키마를 직접 읽지 않고 ai-server `GET /internal/v1/sources`로 조회 |
 | 백업 | 일 1회 `pg_dump` → S3, 7일 보관. 인덱스는 스냅샷 자체가 백업. 복구 절차는 `docs/deployment.md`에 기록하고 W5에 1회 리허설 |
 | 비밀 정보 | `.env`는 저장소 제외, `.env.example`만 커밋. CI에서 gitleaks 실패 시 병합 차단 |
 

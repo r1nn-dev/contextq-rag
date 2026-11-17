@@ -42,7 +42,7 @@ graph TB
 
     subgraph External
         OAI["OpenAI API\nEmbedding + LLM"]
-        GH["GitHub API\n.mdx 원본 수집"]
+        GH["GitHub\ngit sparse checkout 원본 수집"]
         S3["Amazon S3\nDB 백업 + 인덱스 스냅샷"]
     end
 
@@ -52,7 +52,7 @@ graph TB
     BE -->|"WebClient Non-blocking\nPOST /internal/v1/chat/stream"| AI
     BE -->|"Flyway 마이그레이션\napp 스키마 읽기·쓰기"| RDB
     AI -->|"Alembic 마이그레이션\nai 스키마 읽기·쓰기"| RDB
-    BE -->|"ai.sources·index_pointers 읽기만"| RDB
+    BE -->|"GET /internal/v1/sources\n소스·활성 run 조회"| AI
     AI --> VDB
     AI -->|"임베딩·생성 API"| OAI
     AI -.->|"오프라인 수집 (로컬·스테이징 전용)"| GH
@@ -62,7 +62,7 @@ graph TB
 
 - **컨테이너 5개:** nginx, backend(Spring Boot), ai-server(FastAPI), chroma, postgres — `docker-compose up`으로 통합 실행
 - **네트워크 경계:** nginx만 외부 노출. ai-server `/internal/**`는 nginx에서 차단 — 외부에서 직접 접근 불가
-- **스키마 소유권:** `app` 스키마 = backend 독점 쓰기, `ai` 스키마 = ai-server 독점 쓰기. backend는 `ai.sources`, `ai.index_pointers` 읽기만 허용
+- **스키마 소유권:** `app` 스키마 = backend 독점 쓰기, `ai` 스키마 = ai-server 독점 쓰기. backend는 ai 스키마 테이블을 직접 읽지 않고 ai-server `GET /internal/v1/sources`로 조회
 
 ---
 
