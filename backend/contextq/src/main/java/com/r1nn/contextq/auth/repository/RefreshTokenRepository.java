@@ -13,6 +13,13 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
 
   Optional<RefreshToken> findByTokenHash(String tokenHash);
 
+  /**
+   * Family of a presented token without loading the token itself, so the token is read only after
+   * the family lock (fresh state, INV-15).
+   */
+  @Query("select t.family.id from RefreshToken t where t.tokenHash = :hash")
+  Optional<Long> findFamilyIdByTokenHash(@Param("hash") String tokenHash);
+
   List<RefreshToken> findByFamily_Id(Long familyId);
 
   long countByFamily_IdAndStatus(Long familyId, RefreshToken.Status status);
