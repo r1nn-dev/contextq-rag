@@ -60,7 +60,7 @@ The source of the document list is `docs/README.md`.
 | Domain policy, state transitions | `docs/planning/policy.md` |
 | RAG pipeline design | `docs/specs/rag-pipeline.md` |
 | API contracts | `docs/specs/api-spec.md` |
-| DB schema | `docs/specs/db-design.md` |
+| DB schema | `docs/architecture/db-design.md` |
 | Service interfaces | `docs/specs/interfaces.md` |
 | Data sources | `docs/planning/data-sources.md` |
 | Branches, commits, PRs | `CONTRIBUTING.md` §1.3 |

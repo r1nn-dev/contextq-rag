@@ -54,7 +54,7 @@ backend/contextq/src/main/java/com/r1nn/contextq/
 ### 1.5 신규 도메인 추가 절차
 
 1. `docs/ops/package-structure.md` §1.4 테이블에 역할 추가
-2. `docs/specs/db-design.md`에 관련 ERD 추가
+2. `docs/architecture/db-design.md`에 관련 ERD 추가
 3. `code-convention.md §5` 스코프 목록 업데이트 (신규 scope 필요 시)
 4. `docs/ai/review-checklist.md §L` 업데이트
 

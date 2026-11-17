@@ -13,7 +13,7 @@ After the user approves the stage 00 report and the stage 10 commit plan.
 - Issue number and settled scope from stages 00 and 10
 - ADRs and reference documents identified in stage 00
 - `docs/specs/api-spec.md` — REST endpoints, request/response schema, status codes
-- `docs/specs/db-design.md` — table schema, relationships, Flyway migration notes
+- `docs/architecture/db-design.md` — table schema, relationships, Flyway migration notes
 - `docs/specs/interfaces.md` — X-Internal-Token, ai-server proxy contract
 - `docs/planning/policy.md` — business rules, state transitions, session limits
 - `docs/ops/code-convention.md` — Java style, package structure
@@ -35,7 +35,7 @@ After the user approves the stage 00 report and the stage 10 commit plan.
    - Exception handling paths not in `docs/specs/api-spec.md`
    - Values or behaviors not in the documents
 3. If an ADR and a reference document differ on the same point, follow the ADR and list the conflict.
-4. **Contract change**: if any commit requires changing `docs/specs/api-spec.md`, `docs/specs/db-design.md`, `docs/specs/interfaces.md`, or `docs/planning/policy.md`, stop planning and propose the change as a prerequisite Issue before proceeding.
+4. **Contract change**: if any commit requires changing `docs/specs/api-spec.md`, `docs/architecture/db-design.md`, `docs/specs/interfaces.md`, or `docs/planning/policy.md`, stop planning and propose the change as a prerequisite Issue before proceeding.
 5. For infra-adjacent commits (Dockerfile, `docker-compose.yml` for `backend`): note that env-var additions must also be reflected in `docs/ops/env-reference.md`.
 6. Output the plan and wait for approval.
 

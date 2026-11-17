@@ -57,7 +57,7 @@ Human gate: user approves the Issue list and dependency order before commit plan
 3. For each commit, identify what is settled vs what needs a decision:
    - Is the API path, request/response schema, and status code in `docs/specs/api-spec.md`?
    - Is the state transition in `docs/planning/policy.md`?
-   - Is the DB schema in `docs/specs/db-design.md`?
+   - Is the DB schema in `docs/architecture/db-design.md`?
    - Is the AI Server ↔ Backend interface in `docs/specs/interfaces.md`?
    - Does this RAG/config change need a new ADR? (`CONTRIBUTING.md` §9.4)
    - Does this `configs/` or prompt change need Before/After eval results? (`CONTRIBUTING.md` §9.5)
