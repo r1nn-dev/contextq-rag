@@ -33,6 +33,8 @@ AI_SCHEMA = "ai"
 
 # PostgreSQL에서는 JSONB, 단위 테스트용 SQLite에서는 JSON으로 매핑한다
 JsonColumn = JSON().with_variant(JSONB(), "postgresql")
+# SQLite는 INTEGER PRIMARY KEY만 자동 증가하므로 단위 테스트에서만 INTEGER로 매핑한다
+IdColumn = BigInteger().with_variant(Integer(), "sqlite")
 Timestamp = DateTime(timezone=True)
 
 
@@ -50,7 +52,7 @@ class Source(Base):
         UniqueConstraint("framework", "version_label", name="uq_sources_fw_ver"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    id: Mapped[int] = mapped_column(IdColumn, Identity(always=True), primary_key=True)
     source_key: Mapped[str] = mapped_column(String(50), nullable=False)
     framework: Mapped[str] = mapped_column(String(50), nullable=False)
     version_label: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -73,7 +75,7 @@ class ComparePair(Base):
     __tablename__ = "compare_pairs"
     __table_args__ = (UniqueConstraint("source_key_a", "source_key_b", name="uq_cp_pair"),)
 
-    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    id: Mapped[int] = mapped_column(IdColumn, Identity(always=True), primary_key=True)
     source_key_a: Mapped[str] = mapped_column(
         String(50),
         ForeignKey(f"{AI_SCHEMA}.sources.source_key", name="fk_cp_source_a"),
@@ -94,7 +96,7 @@ class IngestRun(Base):
     __table_args__ = (Index("idx_ir_source_status", "source_key", "status"),)
 
     # 스냅샷 복원 시 run id를 그대로 넣어야 하므로 BY DEFAULT (db-design §3.11)
-    id: Mapped[int] = mapped_column(BigInteger, Identity(always=False), primary_key=True)
+    id: Mapped[int] = mapped_column(IdColumn, Identity(always=False), primary_key=True)
     source_key: Mapped[str] = mapped_column(String(50), nullable=False)
     status: Mapped[str] = mapped_column(String(30), nullable=False)
     commit_sha: Mapped[str | None] = mapped_column(CHAR(40))

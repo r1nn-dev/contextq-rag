@@ -67,10 +67,11 @@ Chroma 벡터 인덱스는 로컬에서 빌드 후 EC2에 전송합니다.
 프로덕션 서버에서는 직접 빌드하지 않습니다.
 
 ```bash
-make build-index   # 문서 수집 → 파싱 → 임베딩 → Chroma 저장
+make ingest SOURCE=langchain_v03   # 문서 수집 → 전처리·청킹 → 임베딩 → 검증 (소스별 새 run)
+make ingest SOURCE=langchain_v1x
 ```
 
-> 상세 절차는 `docs/ops/data-pipeline.md`를 참고합니다. (작성 예정)
+> 수집 대상·저장 경로는 `docs/specs/data-sources.md`, 빌드·활성화 명령은 `docs/adr/ADR-005-offline-index-build.md`를 참고합니다.
 
 ### 개발 환경 (서비스별)
 

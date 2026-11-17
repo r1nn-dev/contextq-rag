@@ -2,8 +2,8 @@
 
 | 항목 | 값 |
 | --- | --- |
-| **최종 수정** | 2026-11-05 |
-| **관련** | `기획서_v1.md` §3 (기술 스택), `claude/protocol.md` E1·E2 (인덱스 빌드 절차), `claude/eval-scenarios.md` Q-ret·Q-oos·Q-shared |
+| **최종 수정** | 2026-11-17 |
+| **관련** | `docs/planning/policy.md` §3 소스·버전 정책 · §4 인덱스 정책 · §10.1 IngestRun, `docs/specs/doc-source.md` (전처리 규칙), `docs/experiments/protocol.md` E1·E2 |
 
 ---
 
@@ -11,156 +11,116 @@
 
 | 소스 | 종류 | 역할 |
 | --- | --- | --- |
-| LangChain v0.3 공식 문서 | 공개 GitHub 저장소 (MIT) | v0.3 검색 코퍼스. `langchain_v03_run{id}` Chroma 컬렉션에 적재 |
-| LangChain v1.x 공식 문서 | 공개 GitHub 저장소 (MIT) | v1.x 검색 코퍼스. `langchain_v1x_run{id}` Chroma 컬렉션에 적재 |
+| LangChain v0.3 공식 문서 | 공개 GitHub 저장소 (MIT) | v0.3 검색 코퍼스. run마다 `langchain_v03_run{id}` Chroma 컬렉션에 적재 |
+| LangChain v1.x 공식 문서 | 공개 GitHub 저장소 (MIT) | v1.x 검색 코퍼스. run마다 `langchain_v1x_run{id}` Chroma 컬렉션에 적재 |
 | 평가 질문셋 Q-ret | 직접 작성 (버전별 10문항) | Retriever 성능 측정 (E2 Hit@K / MRR@K / Precision@K) |
 | 평가 질문셋 Q-oos | 직접 작성 (버전별 10문항) | NO_CONTEXT 임계값 τ 결정 (E1) |
 | 평가 질문셋 Q-shared | 직접 작성 (공통 20문항) | 버전 간 답변 정확도 비교 (E3) |
 
 - 공식 문서는 외부 ML 데이터셋이 아니라 **검색 코퍼스(retrieval corpus)** 역할을 한다. 모델 학습에는 쓰지 않는다.
-- v0.3과 v1.x 코퍼스는 완전히 별개의 Chroma 컬렉션으로 분리한다. 버전 오염을 차단하기 위함이다 (기획서 §4.1 L2 버전 오염 문제).
+- 수집 대상(저장소·ref·문서 경로·포맷·Adapter)은 `ai.sources` 카탈로그가 소유한다. 이 문서는 카탈로그 값의 근거와 포함·제외 경로를 기록한다.
+- v0.3과 v1.x 코퍼스는 run 단위로 분리된 별개의 Chroma 컬렉션에 적재한다(ADR-004).
 - 평가 질문셋은 `eval/questions/` 에 버전으로 커밋한다. 실험 도중 질문을 수정하지 않는다.
 
 ---
 
-## 2. 로컬 저장 경로 규칙
+## 2. 수집 방식과 로컬 저장 경로
+
+수집은 `make ingest SOURCE=<source_key>`가 실행한다(ADR-005). local·staging 프로필에서 `INGEST_ENABLED=true`일 때만 명령이 등록된다(INV-17).
+
+1. `ingest_runs`에 PENDING run을 만든다.
+2. COLLECTING으로 전이하고 카탈로그의 `repo_url`·`ref`·`doc_path`로 sparse checkout을 실행한다.
+   - 매 run 새로 받는다(`--depth 1 --filter=blob:none`). 이전 run 파일이 섞이지 않는다.
+   - 체크아웃한 커밋의 40자 SHA를 `ingest_runs.commit_sha`에 기록한다(ADR-007).
+3. 실패하면 FAILED로 전이하고 `failure_stage`·`failure_reason`을 기록한다. 기존 ACTIVE run은 건드리지 않는다(RAG-10).
 
 ```
-data/
+${INGEST_DATA_DIR}/            # 기본값 ./data (ai-server 기준). Git에 올리지 않는다
   raw/
-    langchain_v03/          # sparse checkout 원본. 수정 금지
-      SOURCE.txt            # 저장소 URL, 고정 커밋 SHA, checkout 날짜, 담당자
-      docs/docs/            # Docusaurus .md / .mdx 파일
-    langchain_v1x/          # sparse checkout 원본. 수정 금지
-      SOURCE.txt
-      src/oss/              # Mintlify .mdx 파일
-      src/snippets/         # 스니펫 컴포넌트 소스 (v1.x snippet expansion에 필요)
-  processed/
-    langchain_v03/          # 전처리 결과 JSONL. 스크립트로만 생성
-      chunks.jsonl
+    langchain_v03/             # 체크아웃 원본. 수정 금지. run마다 새로 받는다
+      SOURCE.txt               # repo, ref, sha, 수집 시각(UTC)
+      docs/docs/
     langchain_v1x/
-      chunks.jsonl
-eval/
-  questions/
-    q_ret_v03.jsonl         # Q-ret (v0.3)
-    q_ret_v1x.jsonl         # Q-ret (v1.x)
-    q_oos_v03.jsonl         # Q-oos (v0.3)
-    q_oos_v1x.jsonl         # Q-oos (v1.x)
-    q_shared.jsonl          # Q-shared (공통)
+      SOURCE.txt
+      src/oss/
+      src/snippets/            # 스니펫 확장용 (Mintlify)
+  reports/
+    run{id}/                   # run별 산출 리포트 (예: missing_snippets.csv)
 ```
 
-- `data/`는 Git에 올리지 않는다 (`.gitignore`). **스크립트만 커밋한다.**
-  - `scripts/data/checkout_v03.sh` — sparse checkout + SHA 고정
-  - `scripts/data/checkout_v1x.sh` — sparse checkout + SHA 고정
-  - `scripts/data/preprocess_v03.py` — v0.3 전처리
-  - `scripts/data/preprocess_v1x.py` — v1.x 전처리 (snippet expansion 포함)
-- 전처리 결과 형식은 **JSONL**. 같은 커밋 SHA에서 같은 스크립트를 재실행하면 동일 결과가 나와야 한다.
+- `data/`는 `.gitignore` 대상이다. 코드(`ai-server/src/ingest/`)만 커밋한다.
+- 같은 커밋 SHA에서 같은 청킹 파라미터로 다시 실행하면 같은 `chunk_id` 집합이 나와야 한다(INV-04).
 - 원본 문서는 GitHub 저장소 이외의 위치에 재배포하지 않는다.
 
 ---
 
 ## 3. 소스별 상세
 
-### 3.1 LangChain v0.3 공식 문서
+### 3.1 LangChain v0.3 공식 문서 (`langchain_v03`)
 
 | 항목 | 내용 |
 | --- | --- |
 | **저장소** | `langchain-ai/langchain` |
-| **브랜치** | `v0.3` |
+| **ref** | `v0.3` (브랜치) |
 | **문서 디렉터리** | `docs/docs/` |
-| **파일 형식** | Docusaurus `.md` / `.mdx` |
+| **체크아웃 경로** | `docs/docs/` |
+| **파일 형식** | Docusaurus `.mdx` / `.md` / `.ipynb` |
+| **Adapter** | `DocusaurusAdapter` |
 | **라이선스** | MIT |
-| **언어** | 영어 |
-| **예상 파일 수** | 약 300–500개 (checkout 후 확인) |
 
-**Sparse Checkout 절차:**
+**포함 경로** (정책서 §3.2 포함 범위: 개념·튜토리얼·how-to·마이그레이션 가이드)
 
-```bash
-git clone --filter=blob:none --no-checkout \
-    https://github.com/langchain-ai/langchain.git data/raw/langchain_v03
-cd data/raw/langchain_v03
-git sparse-checkout init --cone
-git sparse-checkout set docs/docs
-git checkout v0.3           # 브랜치 HEAD 고정
-COMMIT_SHA=$(git rev-parse HEAD)
-echo "repo=langchain-ai/langchain branch=v0.3 sha=$COMMIT_SHA date=$(date -I) author=$(git config user.name)" \
-    > SOURCE.txt
-```
-
-- **커밋 SHA는 SOURCE.txt에 기록하고 이 문서 §5 라이선스 표 하단에도 기재한다.**
-- 실험 재현 시 동일 SHA로 checkout해야 한다. `git checkout $COMMIT_SHA`
-
-**전처리 절차 (`scripts/data/preprocess_v03.py`):**
-
-1. `docs/docs/` 하위 `.md` / `.mdx` 파일을 재귀 탐색한다.
-2. YAML frontmatter 블록 (`---…---`) 을 제거한다.
-3. MDX 코드 블록 메타(`:::tip`, `:::note`, `:::js` 등 Docusaurus directive) 를 제거하되, 블록 안의 텍스트 내용은 보존한다.
-4. JSX 인라인 태그(`<X />`, `<X>…</X>`)를 제거한다. 단, 코드 블록(` ``` `) 내부는 건드리지 않는다.
-5. `.ipynb` 가 같은 디렉터리에 있으면 셀을 순서대로 직렬화한다: `# [code]` / `# [output]` 헤더 뒤에 텍스트를 붙인다.
-6. 문서를 **헤딩 단위로 청크 분할**한다 (기본 단위: H2, 보조: H3). 최소 100 토큰, 최대 512 토큰 초과 시 단락 단위 추가 분할.
-7. 각 청크에 아래 필드를 부여한다:
-
-| 필드 | 설명 |
+| 경로 (`docs/docs/` 기준) | 내용 |
 | --- | --- |
-| `chunk_id` | `{file_stem}_{seq:04d}` |
-| `source_key` | `"langchain_v03"` (Chroma 컬렉션 접두사와 일치) |
-| `source_file` | 원본 파일의 `docs/docs/`-relative 경로 |
-| `heading_path` | `"개요 > 설치 > pip 설치"` 형태의 헤딩 계층 경로 |
-| `permalink` | `https://github.com/langchain-ai/langchain/blob/{SHA}/docs/docs/{path}#{anchor}` |
-| `text` | 전처리된 청크 텍스트 |
-| `token_count` | tiktoken `cl100k_base` 기준 토큰 수 |
+| `concepts/**` | 개념 가이드 |
+| `how_to/**` | how-to 가이드 |
+| `tutorials/**` | 튜토리얼 |
+| `versions/**` | 마이그레이션 가이드(v0.2·v0.3, chains·memory 이전), 릴리스 정책 |
+| `troubleshooting/**` | 오류 해결 가이드 |
+| `introduction.mdx` | 소개 |
 
-8. 출력: `data/processed/langchain_v03/chunks.jsonl` (한 행 = 한 청크)
+**제외 경로**
 
----
+| 경로 | 사유 |
+| --- | --- |
+| `integrations/**` | 수백 개 제공자 페이지. 버전 단절 학습과 무관, 레이블링 비용 과다 (정책서 §3.2) |
+| `contributing/**`, `additional_resources/**`, `changes/**`, `people.mdx` | 개념·how-to 범위 밖 |
+| `_templates/**`, `example_data/**` | 문서 아님 |
 
-### 3.2 LangChain v1.x 공식 문서
+### 3.2 LangChain v1.x 공식 문서 (`langchain_v1x`)
 
 | 항목 | 내용 |
 | --- | --- |
 | **저장소** | `langchain-ai/docs` |
-| **브랜치** | `main` |
+| **ref** | `main` (수집 시점 커밋 SHA로 고정, 정책서 §3.2 버전 의미) |
 | **문서 디렉터리** | `src/oss/` |
-| **스니펫 디렉터리** | `src/snippets/` |
-| **파일 형식** | Mintlify `.mdx` (JSX 컴포넌트 사용) |
+| **체크아웃 경로** | `src/oss/`, `src/snippets/` |
+| **파일 형식** | Mintlify `.mdx` (JSX 컴포넌트, 스니펫 import, `:::python`/`:::js` 조건부 블록) |
+| **Adapter** | `MintlifyAdapter` |
 | **라이선스** | MIT |
-| **언어** | 영어 |
-| **예상 파일 수** | 약 400–600개 (checkout 후 확인) |
 
-**Sparse Checkout 절차:**
+**포함 경로**
 
-```bash
-git clone --filter=blob:none --no-checkout \
-    https://github.com/langchain-ai/docs.git data/raw/langchain_v1x
-cd data/raw/langchain_v1x
-git sparse-checkout init --cone
-git sparse-checkout set src/oss src/snippets
-git checkout main
-COMMIT_SHA=$(git rev-parse HEAD)
-echo "repo=langchain-ai/docs branch=main sha=$COMMIT_SHA date=$(date -I) author=$(git config user.name)" \
-    > SOURCE.txt
-```
+| 경로 (`src/oss/` 기준) | 내용 |
+| --- | --- |
+| `langchain/**` | LangChain v1 개념·how-to·튜토리얼 (아래 제외 경로 빼고) |
+| `concepts/**` | 공통 개념 가이드 |
+| `python/migrate/langchain-v1.mdx` | v1 마이그레이션 가이드 (정책서 §3.2 필수) |
+| `common-errors.mdx`, `versioning.mdx`, `release-policy.mdx` | 오류·버전 정책 (v0.3 `troubleshooting`·`versions`와 대응) |
 
-**전처리 절차 (`scripts/data/preprocess_v1x.py`):**
+**제외 경로**
 
-v0.3과 동일한 1–8단계를 적용하되, 아래 단계를 추가한다.
+| 경로 | 사유 |
+| --- | --- |
+| `javascript/**`, `langchain/frontend/**` | JS/TS 전용 문서 (정책서 §3.2 수집 언어: Python만) |
+| `langgraph/**`, `python/migrate/langgraph-*.mdx` | `langgraph` 패키지 문서 — 별도 버전 체계 (정책서 §3.2) |
+| `deepagents/**`, `python/migrate/langchain-mcp-adapters.mdx` | 별도 패키지 문서 — v0.3 ↔ v1.x 비교 프레이밍과 무관 |
+| `integrations/**`, `python/integrations/**` | 제공자 페이지 (정책서 §3.2) |
+| `python/releases/**`, `langchain/changelog-*.mdx` | 릴리스 노트 (정책서 §3.2) |
+| `reference/**` | API Reference (정책서 §3.2) |
+| `contributing/**`, `openwiki/**`, `learn.mdx`, `security-policy.mdx`, `python/studio.mdx` | 개념·how-to 범위 밖 |
 
-> **v1.x 전용: Snippet Expansion**
->
-> Mintlify는 `<ComponentName />` 형태의 JSX 컴포넌트로 반복 코드 블록을 삽입한다. `src/snippets/` 디렉터리에 컴포넌트 소스가 있다.
->
-> 1. `.mdx` 파일에서 `<[A-Z][A-Za-z]+\s*/>` 패턴을 찾는다.
-> 2. 컴포넌트 이름을 `src/snippets/` 하위 파일명과 매핑한다 (파일명 대소문자 무시).
-> 3. 매핑에 성공하면 태그를 스니펫 본문으로 치환한다.
-> 4. 매핑에 실패하면 태그를 제거하고 경고 로그를 남긴다 (`logs/preprocess_v1x_warnings.txt`).
-
-**heading_path 및 permalink 생성 규칙:**
-
-```
-permalink = https://github.com/langchain-ai/docs/blob/{SHA}/src/oss/{path}#{anchor}
-```
-
-- `anchor` 는 GitHub Markdown 헤딩 앵커 규칙을 따른다 (소문자, 공백→`-`, 특수문자 제거).
+- 공용 페이지의 `:::js` 블록은 내용까지 제거하고 `:::python` 블록은 마커만 제거한다(정책서 §4.3).
 
 ---
 
@@ -170,36 +130,13 @@ permalink = https://github.com/langchain-ai/docs/blob/{SHA}/src/oss/{path}#{anch
 
 | 질문셋 | 파일 | 작성 기준 |
 | --- | --- | --- |
-| Q-ret (v0.3) | `eval/questions/q_ret_v03.jsonl` | v0.3 문서에 정답이 명확히 존재하는 질문 10개. 각 질문의 정답 청크 ID (`gold_chunk_id`) 기록 |
-| Q-ret (v1.x) | `eval/questions/q_ret_v1x.jsonl` | v1.x 문서에 정답이 명확히 존재하는 질문 10개. `gold_chunk_id` 기록 |
+| Q-ret (v0.3) | `eval/questions/q_ret_v03.jsonl` | v0.3 문서에 정답이 명확히 존재하는 질문 10개. 정답 위치(파일·heading_path) 기록 |
+| Q-ret (v1.x) | `eval/questions/q_ret_v1x.jsonl` | v1.x 문서에 정답이 명확히 존재하는 질문 10개. 정답 위치 기록 |
 | Q-oos (v0.3) | `eval/questions/q_oos_v03.jsonl` | v0.3 문서에 존재하지 않는 주제 (예: v1.x 전용 API). NO_CONTEXT 를 유도해야 한다 |
 | Q-oos (v1.x) | `eval/questions/q_oos_v1x.jsonl` | v1.x 문서에 존재하지 않는 주제 (예: 삭제된 v0.3 API) |
-| Q-shared | `eval/questions/q_shared.jsonl` | v0.3·v1.x 모두에서 답변 가능한 공통 개념 20개 (E3 비교 실험용). 각 질문에 버전별 `gold_chunk_id` 기록 |
+| Q-shared | `eval/questions/q_shared.jsonl` | v0.3·v1.x 모두에서 답변 가능한 공통 개념 20개 (E3 비교 실험용). 버전별 정답 위치 기록 |
 
-**JSONL 스키마 (Q-ret / Q-shared):**
-
-```json
-{
-  "id": "v03_ret_001",
-  "version": "v0.3",
-  "question": "LangChain v0.3에서 ConversationBufferMemory를 사용하려면 어떻게 임포트하나요?",
-  "gold_chunk_id": "how_to_add_memory_0003",
-  "gold_heading_path": "How-To > Add Memory > ConversationBufferMemory",
-  "note": ""
-}
-```
-
-**JSONL 스키마 (Q-oos):**
-
-```json
-{
-  "id": "v03_oos_001",
-  "version": "v0.3",
-  "question": "LangGraph Studio에서 그래프를 시각적으로 디버깅하는 방법은?",
-  "expected_behavior": "NO_CONTEXT",
-  "note": "LangGraph Studio는 v1.x 이후에 등장. v0.3 문서에 없음"
-}
-```
+> `chunk_id`는 청킹 전략·파라미터마다 달라지므로(정책서 §4.1) 정답은 청크 ID가 아니라 파일 경로·heading_path로 기록한다. 질문셋 스키마는 평가 질문셋 작업(R-3-1)에서 확정한다.
 
 ---
 
@@ -207,28 +144,23 @@ permalink = https://github.com/langchain-ai/docs/blob/{SHA}/src/oss/{path}#{anch
 
 | 소스 | 라이선스 | 확인 상태 |
 | --- | --- | --- |
-| `langchain-ai/langchain` v0.3 문서 | MIT | GitHub `LICENSE` 파일 확인 필요 (미결 D-1) |
-| `langchain-ai/docs` main 문서 | MIT | GitHub `LICENSE` 파일 확인 필요 (미결 D-1) |
+| `langchain-ai/langchain` v0.3 문서 | MIT (`Copyright (c) LangChain, Inc.`) | 저장소 루트 `LICENSE` 확인 (2026-11-17) |
+| `langchain-ai/docs` main 문서 | MIT (`Copyright (c) 2025 LangChain`) | 저장소 루트 `LICENSE` 확인 (2026-11-17) |
 
-- 두 저장소 모두 MIT 라이선스로 공개되어 있으며, 비상업적·교육·연구 목적 사용에 제한이 없다.
 - **보고서·발표 자료**에 LangChain 공식 문서를 출처로 표기한다.
-- 고정된 커밋 SHA는 아래 표에 checkout 완료 후 기재한다.
+- ACTIVE로 활성화한 run의 커밋 SHA를 아래 표에 기록한다. SHA의 원본은 `ai.ingest_runs.commit_sha`다.
 
-| 저장소 | 브랜치 | 고정 커밋 SHA | Checkout 날짜 |
-| --- | --- | --- | --- |
-| `langchain-ai/langchain` | `v0.3` | (미결 D-2) | - |
-| `langchain-ai/docs` | `main` | (미결 D-2) | - |
+| 저장소 | ref | ACTIVE run | 커밋 SHA | 수집일 |
+| --- | --- | --- | --- | --- |
+| `langchain-ai/langchain` | `v0.3` | | | |
+| `langchain-ai/docs` | `main` | | | |
 
 ---
 
 ## 미결 사항
 
-- [ ] **D-1** 각 저장소의 `LICENSE` 파일 원문 확인 후 라이선스 표 갱신
-- [ ] **D-2** Sparse checkout 실행 후 고정 커밋 SHA를 이 문서 §5 표와 `SOURCE.txt` 에 기록
-- [ ] **D-3** v0.3 `docs/docs/` 파일 수·토큰 총량 확인 (청크 수 예측, Chroma 메모리 예산 검증)
-- [ ] **D-4** v1.x `src/snippets/` 컴포넌트 목록과 `.mdx` 내 참조 현황 확인 (매핑 실패율 추정)
-- [ ] **D-5** heading_path 에서 비 ASCII 문자(한국어 혼재 여부) 처리 규칙 확정
-- [ ] **D-6** `.ipynb` 파일 존재 여부 확인 (특히 v0.3 `how-to/` 계열)
+- [ ] **D-2** 두 소스 ACTIVE run의 커밋 SHA를 §5 표에 기록 (인덱스 검증 게이트·활성화 작업 완료 시)
+- [ ] **D-5** heading_path 에서 비 ASCII 문자 처리 규칙 확정 (현재 두 소스 모두 영어 문서)
 - [ ] **D-7** Q-ret / Q-oos / Q-shared 질문셋 작성 완료 (E1·E2·E3 실험 전에 커밋)
 
 ---
@@ -239,6 +171,7 @@ permalink = https://github.com/langchain-ai/docs/blob/{SHA}/src/oss/{path}#{anch
 | --- | --- |
 | v0.1 | 최초 작성 |
 | v0.2 | §3.1·§3.2 청크 메타데이터 `version` 필드 → `source_key` 로 통일 |
+| v0.3 | 수집을 `make ingest`(sparse checkout, run 단위)로 정리, 포함·제외 경로 확정, 수집 스크립트·JSONL 산출물 제거, 청크 필드는 정책서 §4.2로 일원화, 라이선스 확인(D-1), 파일 수·`.ipynb` 존재 확인(D-3·D-4·D-6은 각 Adapter 작업에서 측정) |
 
 ---
 
