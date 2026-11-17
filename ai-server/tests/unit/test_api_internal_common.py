@@ -75,7 +75,10 @@ def test_server_without_token_rejects_everything() -> None:
 
 
 def test_health_does_not_need_token() -> None:
-    assert TestClient(make_app()).get("/internal/v1/health").status_code == 200
+    app = make_app()
+    app.state.index_services = None  # 실제 DB에 붙지 않게 (헬스 판정은 test_health.py)
+
+    assert TestClient(app).get("/internal/v1/health").status_code == 503  # 401이 아님
 
 
 @pytest.mark.parametrize(

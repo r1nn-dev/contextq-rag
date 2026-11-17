@@ -11,7 +11,7 @@
 
 import argparse
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -33,6 +33,7 @@ from src.ingest.pipeline import (
     IngestOptions,
     run_ingest,
 )
+from src.ingest.reload import notify_reload
 from src.ingest.runs import InvalidTransitionError, SourceNotFoundError
 from src.ingest.store import ChromaVectorStore, VectorStore
 
@@ -92,12 +93,25 @@ def _ingest(
     )
 
 
-def _print_activation(action: str, result: ActivationResult) -> None:
+def _print_activation(
+    action: str,
+    result: ActivationResult,
+    settings: Settings,
+    notify: Callable[[str, str, str], str | None] = notify_reload,
+) -> None:
+    """결과를 출력하고 ai-server에 reload를 요청한다. 실패는 경고만 남긴다 (정책서 §4.5)."""
     print(
         f"{action}: {result.source_key} → run {result.active_run_id} ACTIVE"
         f" (SUPERSEDED {result.superseded or '-'}, PURGED {result.purged or '-'})."
-        " 서버 반영은 포인터 캐시 만료(30초) 후 적용된다."
     )
+    failure = notify(settings.ai_server_internal_url, settings.internal_token, result.source_key)
+    if failure is None:
+        print(f"서버 포인터 reload 완료: {settings.ai_server_internal_url}")
+    else:
+        print(
+            f"경고: 서버 포인터 reload 실패 ({failure}). 포인터 캐시 만료(30초) 후 반영된다.",
+            file=sys.stderr,
+        )
 
 
 def main(argv: Sequence[str] | None = None, settings: Settings | None = None) -> int:
@@ -132,10 +146,10 @@ def main(argv: Sequence[str] | None = None, settings: Settings | None = None) ->
             _ingest(args, settings, session_factory, store)
         elif args.command == "activate":
             with session_factory() as session:
-                _print_activation("activate", activate(session, store, args.run))
+                _print_activation("activate", activate(session, store, args.run), settings)
         elif args.command == "rollback":
             with session_factory() as session:
-                _print_activation("rollback", rollback(session, store, args.source))
+                _print_activation("rollback", rollback(session, store, args.source), settings)
         return 0
     except (SourceNotFoundError, IngestFailedError, ActivationError, InvalidTransitionError) as exc:
         print(str(exc), file=sys.stderr)

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 
 from src.config.settings import Settings, settings
-from src.routers import chat_stream, health
+from src.routers import chat_stream, health, index_meta
 from src.routers.errors import install_error_handlers
 
 
@@ -23,6 +23,7 @@ def create_app(app_settings: Settings) -> FastAPI:
     install_error_handlers(app)
     app.include_router(health.router)
     app.include_router(chat_stream.router)
+    app.include_router(index_meta.router)
     return app
 
 

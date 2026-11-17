@@ -82,9 +82,10 @@ openssl rand -hex 32
 
 | 변수명 | 설명 | 예시 / 기본값 | 필수 |
 |---|---|---|---|
-| `AI_SERVER_INTERNAL_URL` | Spring Boot → FastAPI 내부 URL | `http://localhost:8000` | 선택 |
+| `AI_SERVER_INTERNAL_URL` | Spring Boot → FastAPI 내부 URL. ai-server 활성화·롤백 CLI도 이 주소로 `POST /internal/v1/index/reload`를 호출한다 | `http://localhost:8000` | 선택 |
 
-> 미설정 시 `application.yml` 기본값 `http://localhost:8000`이 적용된다.  
+> 미설정 시 `application.yml` 기본값 `http://localhost:8000`이 적용된다. ai-server CLI의 기본값도 `http://localhost:8000`이다.  
+> CLI의 reload 호출에는 `INTERNAL_TOKEN`이 함께 필요하다. 호출이 실패하면 경고만 출력하고, 30초 포인터 캐시 만료로 반영된다 (`docs/planning/policy.md` > §4.5).  
 > Docker Compose 환경에서는 컨테이너 이름으로 설정한다: `http://ai-server:8000`
 
 ### 1.7 프론트엔드

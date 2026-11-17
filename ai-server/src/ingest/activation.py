@@ -4,8 +4,8 @@
 - 롤백: 현재 ACTIVE ↔ 직전 SUPERSEDED (1세대만).
 - 정리: 새 SUPERSEDED가 생기면 그 이전 SUPERSEDED, 24시간 지난 FAILED → PURGED(컬렉션 삭제).
 - 컬렉션 삭제는 DB 커밋 뒤에 한다. 삭제가 실패해도 포인터·상태는 이미 일관된 상태다.
-- 서버 반영용 reload API(`POST /internal/v1/index/reload`)는 내부 API 작업에서 추가한다.
-  그 전까지는 정책서 §4.5대로 포인터 캐시(30초) 만료로 반영된다.
+- 서버 반영: CLI가 성공 후 `POST /internal/v1/index/reload`를 호출한다(`ingest/reload.py`).
+  실패해도 정책서 §4.5대로 포인터 캐시(30초) 만료로 반영된다.
 """
 
 from dataclasses import dataclass, field
