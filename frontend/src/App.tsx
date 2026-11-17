@@ -1,10 +1,14 @@
-import { Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes } from 'react-router-dom'
+import { AdminLayout } from '@/components/admin/AdminLayout'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { RequireAuth } from '@/components/layout/RequireAuth'
 import { AuthProvider } from '@/components/providers/AuthProvider'
 import { ConversationListProvider } from '@/components/providers/ConversationListProvider'
 import { GuestUsageProvider } from '@/components/providers/GuestUsageProvider'
 import { SourcesProvider } from '@/components/providers/SourcesProvider'
+import { AdminIndexPage } from '@/pages/admin/AdminIndexPage'
+import { AdminLogsPage } from '@/pages/admin/AdminLogsPage'
+import { AdminUsersPage } from '@/pages/admin/AdminUsersPage'
 import { ChatPage } from '@/pages/ChatPage'
 import { HistoryPage } from '@/pages/HistoryPage'
 import { LandingPage } from '@/pages/LandingPage'
@@ -33,6 +37,12 @@ function App(): JSX.Element {
                     </RequireAuth>
                   }
                 />
+              </Route>
+              <Route path="/admin" element={<AdminLayout />}>
+                <Route index element={<Navigate to="/admin/index" replace />} />
+                <Route path="index" element={<AdminIndexPage />} />
+                <Route path="users" element={<AdminUsersPage />} />
+                <Route path="logs" element={<AdminLogsPage />} />
               </Route>
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
