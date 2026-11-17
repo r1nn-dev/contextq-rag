@@ -10,7 +10,7 @@
 | --- | --- |
 | 프로젝트명 | ContextQ-RAG |
 | 최초 작성일 | 2026-06-04 |
-| 최종 수정일 | 2026-10-01 |
+| 최종 수정일 | 2026-11-17 |
 | 문서 버전 | v1.0 |
 | GitHub Repository |  |
 | 서비스 사이트 | (배포 후 링크, HTTPS) |
@@ -558,7 +558,7 @@ agent = create_agent(model=..., tools=[...])
 | --- | --- | --- |
 | 프론트엔드 | React + Vite, TypeScript | SPA, SEO 불필요. SSE 스트림 파싱을 커스텀 훅(`useSseQuery`)으로 캡슐화. Next.js SSR 불필요 |
 | 백엔드 | Spring Boot 3.x, Spring Security, Spring Data JPA, WebClient | 인증·트랜잭션 성숙도. MVC에서 `Flux<ServerSentEvent>` 반환으로 SSE 중계. WebClient Non-blocking |
-| AI 서버 | FastAPI (Python 3.11+), uvicorn | async 스트리밍, LangChain·OpenAI SDK Python 생태계 집중 |
+| AI 서버 | FastAPI (Python 3.12), uvicorn | async 스트리밍, LangChain·OpenAI SDK Python 생태계 집중 |
 | RAG | `langchain-text-splitters`, `langchain-openai`, `langchain-chroma` (필요 범위만) | 분할기·어댑터만 사용. 체인 추상화에 의존하지 않고 검색·프롬프트 직접 구성하여 단계별 지연 측정 명확화 |
 | LLM | GPT-4o-mini (환경 변수로 교체 가능) | 비교 대상은 LLM 자체가 아니라 RAG 설계. E3의 모든 조건에서 같은 모델을 써야 모델이 결론을 좌우하지 않음. 비용 최소화 |
 | 임베딩 | text-embedding-3-small | ada-002 대비 성능↑·비용↓. 청크 메타데이터에 모델명 기록 → 불일치 검색 차단 |
