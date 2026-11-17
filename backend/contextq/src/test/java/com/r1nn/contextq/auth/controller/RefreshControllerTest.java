@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.r1nn.contextq.TestcontainersConfiguration;
+import com.r1nn.contextq.auth.domain.RefreshToken;
 import com.r1nn.contextq.auth.domain.TokenFamily;
 import com.r1nn.contextq.auth.domain.User;
 import com.r1nn.contextq.auth.repository.RefreshTokenRepository;
@@ -127,11 +128,15 @@ class RefreshControllerTest {
         families.save(
             TokenFamily.start(
                 userId, now.minus(Duration.ofDays(7)).plusSeconds(3600), Duration.ofDays(7)));
+    RefreshToken oldToken = tokens.save(RefreshToken.issue(old, "c".repeat(64), now));
+    RefreshToken recentToken = tokens.save(RefreshToken.issue(recent, "d".repeat(64), now));
 
     cleanup.cleanup();
 
     assertThat(families.findById(old.getId())).isEmpty();
+    assertThat(tokens.findById(oldToken.getId())).isEmpty(); // tokens go before their family (FK)
     assertThat(families.findById(recent.getId())).isPresent();
+    assertThat(tokens.findById(recentToken.getId())).isPresent();
   }
 
   private MvcResult login() throws Exception {
