@@ -1,0 +1,6 @@
+ai 스키마 마이그레이션 (Alembic)
+
+- 실행 위치: ai-server/
+- 적용: uv run alembic upgrade head
+- 새 리비전: uv run alembic revision -m "<설명>"
+- 버전 테이블: ai.alembic_version
