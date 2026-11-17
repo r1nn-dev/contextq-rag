@@ -2,8 +2,11 @@ import path from 'path'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
+
+  // `npm run dev:mock` serves the in-browser API mock (src/mocks) instead of the backend
+  define: mode === 'mock' ? { 'import.meta.env.VITE_USE_MOCK': JSON.stringify('true') } : {},
 
   resolve: {
     alias: {
@@ -22,4 +25,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))

@@ -73,6 +73,8 @@ cd backend/contextq && ./gradlew dependencies --quiet && cd ../..
 cd frontend && npm install && cd ..
 ```
 
+> backend 없이 화면만 확인할 때는 `cd frontend && npm run dev:mock`으로 실행한다. 브라우저 안의 목 응답(`frontend/src/mocks/`)이 API 명세와 같은 형식으로 응답한다. 질문에 "양자"를 넣으면 NO_CONTEXT, "오류"를 넣으면 스트림 중 오류, "실패"를 넣으면 스트림 전 오류 화면을 확인할 수 있다.
+
 ---
 
 ## Step 4 — Docker 인프라 기동
