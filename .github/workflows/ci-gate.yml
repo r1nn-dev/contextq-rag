@@ -61,11 +61,11 @@ jobs:
       - name: backend 존재 여부 확인
         id: check
         run: |
-          if [ -d "backend" ] && [ -f "backend/gradlew" ]; then
+          if [ -f "backend/contextq/gradlew" ]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "backend/ 없음 — 잡을 건너뜁니다."
+            echo "backend/contextq/gradlew 없음 — 잡을 건너뜁니다."
           fi
 
       - name: JDK 21 설치
@@ -78,17 +78,17 @@ jobs:
 
       - name: gradlew 실행 권한 부여
         if: steps.check.outputs.exists == 'true'
-        working-directory: backend
+        working-directory: backend/contextq   # Gradle project root (code-convention §3.1)
         run: chmod +x gradlew
 
       - name: Spotless 포맷 검사
         if: steps.check.outputs.exists == 'true'
-        working-directory: backend
+        working-directory: backend/contextq
         run: ./gradlew spotlessCheck
 
       - name: Gradle 빌드 및 테스트
         if: steps.check.outputs.exists == 'true'
-        working-directory: backend
+        working-directory: backend/contextq
         run: ./gradlew build
 
   frontend:
