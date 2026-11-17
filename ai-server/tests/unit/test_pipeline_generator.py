@@ -157,6 +157,35 @@ async def test_aclose_mid_stream_closes_openai_stream() -> None:
     assert stream.usage is None  # 중간에 닫으면 사용량 없음
 
 
+class GeneratorIterStream(FakeStream):
+    """OpenAI `AsyncStream`처럼 `__aiter__`가 비동기 제너레이터를 돌려준다."""
+
+    iterator_closed = False
+
+    async def _iterate(self) -> Any:
+        try:
+            for item in self.pieces:
+                yield item
+        finally:
+            self.iterator_closed = True
+
+    def __aiter__(self) -> Any:  # type: ignore[override]
+        return self._iterate()
+
+
+async def test_aclose_mid_stream_also_closes_inner_iterator() -> None:
+    """#108: 근거 부족으로 중간에 닫을 때 내부 이터레이터도 닫아 GC 정리 경고를 남기지 않는다."""
+    fake = GeneratorIterStream([piece("a"), piece("b"), piece(finish="stop")])
+    stream = generator(FakeCompletions(fake)).generate_stream(
+        "q", CHUNKS, display_name="x", prompt_version="single_v1"
+    )
+
+    assert await stream.__anext__() == "a"
+    await stream.aclose()
+
+    assert fake.iterator_closed and fake.closed
+
+
 async def test_unknown_prompt_version_fails_before_calling_openai() -> None:
     completions = FakeCompletions(FakeStream([]))
 

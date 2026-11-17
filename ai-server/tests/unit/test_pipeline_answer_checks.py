@@ -65,6 +65,61 @@ def test_buffer_is_capped_at_16_characters() -> None:
     assert gate.state is GateState.PASS
 
 
+HEADER = "LangChain v1.x 기준"
+
+
+def run_with_header(tokens: list[str]) -> tuple[str, SentinelGate]:
+    gate = SentinelGate(header=HEADER)
+    out = "".join(gate.feed(t) for t in tokens) + gate.flush()
+    return out, gate
+
+
+@pytest.mark.parametrize(
+    "tokens",
+    [
+        ["LangChain v1.x 기준 [[NO_ANSWER]]"],  # #108 실측 형태
+        ["Lang", "Chain", " v1.x", " 기준", "\n\n", "[[NO_", "ANSWER]]"],  # 조각 + 줄바꿈
+        ["[[NO_ANSWER]]"],  # 머리말 없는 sentinel도 그대로 감지
+    ],
+)
+def test_sentinel_after_version_header_emits_nothing(tokens: list[str]) -> None:
+    out, gate = run_with_header(tokens)
+
+    assert out == ""
+    assert gate.abstained
+
+
+def test_answer_with_header_is_released_when_body_starts() -> None:
+    gate = SentinelGate(header=HEADER)
+
+    assert gate.feed("LangChain v1.x") == ""  # 머리말 접두어 → 보류
+    assert gate.feed(" 기준\n\n") == ""  # 머리말 뒤 공백 → 아직 sentinel일 수 있음
+    assert gate.feed("에이전트는") == "LangChain v1.x 기준\n\n에이전트는"
+    assert gate.state is GateState.PASS
+
+
+def test_text_that_is_not_header_is_released_immediately() -> None:
+    gate = SentinelGate(header=HEADER)
+
+    assert gate.feed("에이") == "에이"  # 머리말·sentinel 어느 쪽의 접두어도 아님
+    assert gate.state is GateState.PASS
+
+
+def test_header_with_other_version_is_not_held() -> None:
+    out, gate = run_with_header(["LangChain v0.3 기준 [[NO_ANSWER]]"])
+
+    assert out == "LangChain v0.3 기준 [[NO_ANSWER]]"  # 요청 버전과 다른 머리말은 판정 대상 아님
+    assert not gate.abstained
+
+
+def test_buffer_limit_grows_by_header_length() -> None:
+    gate = SentinelGate(header=HEADER)
+
+    assert gate.feed(HEADER + " " * 15) == ""
+    assert gate.feed(" ") == HEADER + " " * 16  # 머리말 + 16자에서 판정 종료
+    assert gate.state is GateState.PASS
+
+
 def test_cited_numbers_parses_single_and_grouped_citations() -> None:
     answer = "LangChain v1.x 기준 [1]. 도구는 [2][3] 또는 [3, 4]로 정의한다 [10]."
 

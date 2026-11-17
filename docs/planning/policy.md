@@ -312,7 +312,7 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 | --- | --- | --- | --- |
 | `LOW_SIMILARITY` | top-1 similarity < τ | 호출 안 함 (INV-07) | `meta`(sources: [], no_context: true) → `done`(status: NO_CONTEXT) |
 | `LLM_ABSTAIN` | 컨텍스트는 통과했으나 모델이 근거 부족을 선언 | 호출함 | `meta`(sources 포함) → `done`(status: NO_CONTEXT) |
-- `LLM_ABSTAIN` 판정: 프롬프트가 근거 부족 시 첫 출력을 `[[NO_ANSWER]]`로 시작하도록 지시한다. ai-server는 첫 16자를 버퍼링해 sentinel이면 토큰을 내보내지 않고 NO_CONTEXT로 종결한다.
+- `LLM_ABSTAIN` 판정: 프롬프트가 근거 부족 시 기준 버전 줄 없이 `[[NO_ANSWER]]`만 출력하도록 지시한다. 모델이 그래도 기준 버전 머리말(`{display_name} 기준`)을 먼저 쓸 수 있으므로, ai-server는 앞 공백을 뺀 응답이 ① sentinel로 시작하거나 ② 머리말 뒤 공백 다음이 sentinel이면 근거 부족으로 판정한다. 응답 앞부분이 이 두 형태의 접두어인 동안만 보류하고(최대 머리말 길이 + 16자), 아니면 즉시 내보낸다. 근거 부족이면 보류분을 포함해 토큰을 하나도 내보내지 않고 NO_CONTEXT로 종결한다.
 - 기획서의 NO_CONTEXT 처리율 지표(Q-oos τ 표본 9문항 기준 80% 이상, 소스별 9건 중 8건 이상 LLM 미호출)는 `LOW_SIMILARITY`만 집계한다. 모호한 질문(`tau_calibration: false`)은 표본에서 뺀다. `LLM_ABSTAIN`은 L3 완화 효과로 별도 집계한다.
 - 고정 안내문: "선택한 버전({label}, {commit_sha_7}) 문서에서 근거를 찾을 수 없습니다." + 다른 버전으로 질문하기 버튼(비교 가능한 경우).
 
@@ -322,7 +322,7 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 | --- | --- |
 | 모델 | `LLM_MODEL` 환경 변수, 기본 `gpt-4o-mini`. 메시지에 실제 모델명 기록 |
 | 파라미터 | temperature 0, `max_tokens` 1,024 |
-| 프롬프트 규칙 | ① 컨텍스트 밖 지식으로 API·코드를 만들지 않는다 ② 주장마다 [n] 인용 ③ 선택 버전을 답변 첫 줄에 명시 ④ 코드 예시는 컨텍스트 코드에 근거 ⑤ 근거 부족 시 sentinel |
+| 프롬프트 규칙 | ① 컨텍스트 밖 지식으로 API·코드를 만들지 않는다 ② 주장마다 [n] 인용 ③ 선택 버전을 답변 첫 줄에 명시 ④ 코드 예시는 컨텍스트 코드에 근거 ⑤ 근거 부족 시 기준 버전 줄 없이 sentinel만 출력(③보다 우선) |
 | 프롬프트 버전 | `ai-server/configs/prompts/` 파일명(확장자 `.j2` 제외) = `prompt_version`(예: `single_v1`). 변경은 새 파일 추가(기존 버전 파일 수정 금지) + PR + 동일 질문셋 비교 결과 첨부 |
 | 인용 검증 | 스트림 종료 시 본문의 [n]을 파싱해 범위 밖 번호를 `done.invalidCitations`로 전송. UI는 해당 번호를 비활성 렌더 |
 
