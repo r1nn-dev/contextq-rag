@@ -54,6 +54,7 @@ def test_load_active_index_returns_run_snapshot(session: Session) -> None:
         ingested_at=date(2026, 11, 17),
         chunk_count=120,
         embedding_model="text-embedding-3-small",
+        display_name="LangChain v1.x",
     )
     assert index.collection == f"{KEY}_run{run_id}"
 

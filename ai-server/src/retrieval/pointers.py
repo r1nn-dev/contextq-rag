@@ -35,6 +35,7 @@ class ActiveIndex:
     ingested_at: date | None
     chunk_count: int | None
     embedding_model: str | None
+    display_name: str = ""  # ai.sources.display_name — 답변 첫 줄 버전 표시 (정책서 §5.5 ③)
 
     @property
     def collection(self) -> str:
@@ -71,6 +72,7 @@ def load_active_index(session: Session, source_key: str) -> ActiveIndex:
         ingested_at=finished.date() if finished else None,
         chunk_count=run.chunk_count,
         embedding_model=run.embedding_model,
+        display_name=source.display_name,
     )
 
 

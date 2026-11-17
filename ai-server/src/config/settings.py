@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     # OpenAI API 키
     openai_api_key: str = ""
 
+    # 답변 생성 모델 (LLM_MODEL, 선택) — 비어 있으면 configs/models.yaml llm.model (정책서 §5.5)
+    llm_model: str = ""
+
     # NO_CONTEXT 임계값 τ 덮어쓰기 (TAU_{SOURCE_KEY}, 선택) — 없으면 configs/rag.yaml 값 (ADR-008)
     tau_langchain_v03: float | None = Field(default=None, ge=0, le=1)
     tau_langchain_v1x: float | None = Field(default=None, ge=0, le=1)
