@@ -1,27 +1,28 @@
 question_id: SHR-008
 question_set: Q-shared
-title: 문서 로더 사용법
-type: API_USAGE
-difficulty: EASY
-query: PDF 같은 문서를 불러오는 방법은?
+title: 도구 실행 오류 처리
+type: VERSION_SPECIFIC
+difficulty: MEDIUM
+query: 도구 실행 중 오류가 나면 어떻게 처리해?
 versions:
   v0_3:
     source_key: langchain_v03
     gold_sections:
-    - file_path: docs/docs/how_to/document_loader_pdf.ipynb
-      heading_path: How to load PDFs
-    - file_path: docs/docs/concepts/document_loaders.mdx
-      heading_path: Document loaders
+    - file_path: docs/docs/how_to/tools_error.ipynb
+      heading_path: How to handle tool errors
+    - file_path: docs/docs/how_to/custom_tools.ipynb
+      heading_path: How to create tools > Handling Tool Errors
   v1_x:
     source_key: langchain_v1x
     gold_sections:
-    - file_path: src/oss/langchain/knowledge-base.mdx
-      heading_path: Build a semantic search engine with LangChain > Load and split a PDF
+    - file_path: src/oss/langchain/tools.mdx
+      heading_path: Tools > Tool execution
 label_schema:
   version_error: 0 = 버전 오류 없음 / 1 = 선택한 버전이 아닌 코드·API 포함
   evidence_quality: 'R1·R2 조건만: 0 = 근거 없음 / 1 = 부분 / 2 = 충분'
   answer_usefulness: 0 = 무관 / 1 = 부분 유용 / 2 = 유용
 metadata:
   created_by: ai-draft
-  created_at: '2026-11-17T00:00:00Z'
+  created_at: '2026-11-18T00:00:00Z'
   reviewed_by: null
+  source: '검수 교체(#103) — 이전 문서 로더 사용법은 두 버전 답이 같음. v0.3 ToolException·try/except / v1.x @wrap_tool_call'

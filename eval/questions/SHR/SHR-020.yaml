@@ -10,8 +10,6 @@ versions:
     gold_sections:
     - file_path: docs/docs/how_to/debugging.ipynb
       heading_path: How to debug your LLM apps
-    - file_path: docs/docs/concepts/tracing.mdx
-      heading_path: Tracing
   v1_x:
     source_key: langchain_v1x
     gold_sections:

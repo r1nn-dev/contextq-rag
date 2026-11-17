@@ -15,6 +15,8 @@ versions:
     gold_sections:
     - file_path: src/oss/langchain/middleware/built-in.mdx
       heading_path: Prebuilt middleware > Provider-agnostic middleware
+    - file_path: src/oss/langchain/models.mdx
+      heading_path: Models > Parameters
 label_schema:
   version_error: 0 = 버전 오류 없음 / 1 = 선택한 버전이 아닌 코드·API 포함
   evidence_quality: 'R1·R2 조건만: 0 = 근거 없음 / 1 = 부분 / 2 = 충분'

@@ -1,27 +1,30 @@
 question_id: SHR-010
 question_set: Q-shared
-title: 임베딩 모델 연결
-type: API_USAGE
-difficulty: MEDIUM
-query: 텍스트를 임베딩 벡터로 바꾸는 방법은?
+title: 실행 중 모델 바꾸기
+type: VERSION_SPECIFIC
+difficulty: HARD
+query: 실행 중에 상황에 따라 사용할 모델을 바꾸는 방법은?
 versions:
   v0_3:
     source_key: langchain_v03
     gold_sections:
-    - file_path: docs/docs/how_to/embed_text.mdx
-      heading_path: Text embedding models
-    - file_path: docs/docs/concepts/embedding_models.mdx
-      heading_path: Embedding models
+    - file_path: docs/docs/how_to/configure.ipynb
+      heading_path: How to configure runtime chain internals > Configurable Alternatives
+    - file_path: docs/docs/how_to/chat_models_universal_init.ipynb
+      heading_path: How to init any model in one line > Creating a configurable model
   v1_x:
     source_key: langchain_v1x
     gold_sections:
-    - file_path: src/oss/langchain/knowledge-base.mdx
-      heading_path: Build a semantic search engine with LangChain > Generate embeddings
+    - file_path: src/oss/langchain/models.mdx
+      heading_path: Models > Advanced topics
+    - file_path: src/oss/langchain/middleware/custom.mdx
+      heading_path: Custom middleware > Examples
 label_schema:
   version_error: 0 = 버전 오류 없음 / 1 = 선택한 버전이 아닌 코드·API 포함
   evidence_quality: 'R1·R2 조건만: 0 = 근거 없음 / 1 = 부분 / 2 = 충분'
   answer_usefulness: 0 = 무관 / 1 = 부분 유용 / 2 = 유용
 metadata:
   created_by: ai-draft
-  created_at: '2026-11-17T00:00:00Z'
+  created_at: '2026-11-18T00:00:00Z'
   reviewed_by: null
+  source: '검수 교체(#103) — 이전 임베딩 모델 연결은 두 버전 답이 같음. v0.3 configurable_alternatives / v1.x 동적 모델 선택(wrap_model_call). v1.x models.mdx Advanced topics는 넓은 절(41청크)'

@@ -309,10 +309,10 @@ metadata:
 | SHR-004 | 메모리 관리 방식 | VERSION_SPECIFIC | MEDIUM | 높음 | 📝 |  |
 | SHR-005 | 프롬프트 템플릿 사용 | API_USAGE | EASY | 낮음 | 📝 |  |
 | SHR-006 | 도구 실행 전 사람 승인 | VERSION_SPECIFIC | MEDIUM | 중간 | 📝 | 계획 '콜백 핸들러 등록' → v1.x 코퍼스에 콜백 문서 없음 |
-| SHR-007 | 채팅 모델 초기화 | API_USAGE | EASY | 낮음 | 📝 | 계획 '커스텀 LLM 구현' → v1.x 코퍼스에 해당 문서 없음 |
-| SHR-008 | 문서 로더 사용법 | API_USAGE | EASY | 낮음 | 📝 |  |
-| SHR-009 | 텍스트 분할기 | API_USAGE | MEDIUM | 중간 | 📝 |  |
-| SHR-010 | 임베딩 모델 연결 | API_USAGE | MEDIUM | 중간 | 📝 |  |
+| SHR-007 | 모델 호출 전후 사용자 정의 로직 | VERSION_SPECIFIC | MEDIUM | 높음 | 📝 | 검수 교체(#103): 이전 '채팅 모델 초기화'는 두 버전 답이 같음 → 콜백 핸들러 / 미들웨어 훅 |
+| SHR-008 | 도구 실행 오류 처리 | VERSION_SPECIFIC | MEDIUM | 높음 | 📝 | 검수 교체(#103): 이전 '문서 로더 사용법'은 두 버전 답이 같음 → `ToolException` / `@wrap_tool_call` |
+| SHR-009 | 긴 대화 메시지 줄이기 | VERSION_SPECIFIC | MEDIUM | 중간 | 📝 | 검수 교체(#103): 이전 '텍스트 분할기'는 두 버전 답이 같음 → `trim_messages` / 단기 메모리 패턴 |
+| SHR-010 | 실행 중 모델 바꾸기 | VERSION_SPECIFIC | HARD | 높음 | 📝 | 검수 교체(#103): 이전 '임베딩 모델 연결'은 두 버전 답이 같음 → `configurable_alternatives` / 동적 모델 선택 |
 | SHR-011 | 벡터스토어 저장/검색 | API_USAGE | MEDIUM | 중간 | 📝 |  |
 | SHR-012 | 스트리밍 출력 | VERSION_SPECIFIC | MEDIUM | 높음 | 📝 |  |
 | SHR-013 | 모델 호출 폴백·재시도 | VERSION_SPECIFIC | HARD | 중간 | 📝 | 계획 '비동기 호출 방식' → v1.x 코퍼스에 비동기 전용 섹션 없음 |
