@@ -21,6 +21,9 @@ import tools.jackson.databind.node.ObjectNode;
 /**
  * State of one relayed answer (one per request, used by one stream at a time).
  *
+ * <p>Methods are synchronized: events arrive on a worker thread while a client cancel arrives on
+ * the servlet thread.
+ *
  * <p>Turns each ai-server event into the event sent to the browser and persists the steps of policy
  * §6.3: {@code meta} → snapshot, {@code token} → memory only, {@code done}/{@code error}/
  * timeout/disconnect → one terminal UPDATE. After the terminal event nothing else is emitted
@@ -72,7 +75,7 @@ final class RelaySession {
   }
 
   /** Browser events for one upstream event (empty when nothing is relayed). */
-  List<ServerSentEvent<String>> handle(ServerSentEvent<String> event) {
+  synchronized List<ServerSentEvent<String>> handle(ServerSentEvent<String> event) {
     if (ended) {
       return List.of();
     }
@@ -100,7 +103,7 @@ final class RelaySession {
   }
 
   /** Stream failed before a terminal event: timeout or broken upstream (api-spec §3.1). */
-  List<ServerSentEvent<String>> fail(Throwable error) {
+  synchronized List<ServerSentEvent<String>> fail(Throwable error) {
     if (ended) {
       return List.of();
     }
@@ -114,8 +117,23 @@ final class RelaySession {
     return List.of(terminate(ErrorCode.AI_UNAVAILABLE.name(), "AI_UNAVAILABLE", null));
   }
 
+  /**
+   * Browser went away (policy §2.3): the upstream subscription is already being cancelled, which
+   * closes the ai-server connection and its OpenAI stream. Store what was received.
+   */
+  synchronized void onClientCancel() {
+    if (ended) {
+      return;
+    }
+    ended = true;
+    log.info("stream_aborted requestId={} reason=CLIENT_ABORTED tokens={}", requestId, tokens);
+    persist(
+        tokens > 0 ? MessageStatus.PARTIAL : MessageStatus.FAILED,
+        AnswerOutcome.interrupted(content.toString(), "CLIENT_ABORTED"));
+  }
+
   /** Upstream closed without {@code done}/{@code error}. */
-  List<ServerSentEvent<String>> endIfOpen() {
+  synchronized List<ServerSentEvent<String>> endIfOpen() {
     if (ended) {
       return List.of();
     }
