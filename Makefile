@@ -2,7 +2,7 @@
 # Shortcut commands for local development.
 # Prerequisites: Docker Desktop, uv, node/npm, lefthook
 
-.PHONY: up down logs ingest activate-index rollback-index eval eval-check test hooks help
+.PHONY: up down logs ingest activate-index rollback-index smoke-index eval eval-check test hooks help
 
 # --- Docker Compose -------------------------------------------------------
 
@@ -26,6 +26,9 @@ activate-index: ## Activate a READY run (READY -> ACTIVE, pointer swap). Usage: 
 
 rollback-index: ## Roll back to the previous SUPERSEDED run (1 generation). Usage: make rollback-index SOURCE=<key>
 	cd ai-server && uv run python -m src.ingest.cli rollback --source $(SOURCE)
+
+smoke-index: ## Re-run smoke questions on ACTIVE runs with configs/rag.yaml τ (read-only). Usage: make smoke-index [SOURCE=<key>]
+	cd ai-server && uv run python -m src.ingest.cli smoke $(if $(SOURCE),--source $(SOURCE),)
 
 # --- Evaluation (docs/experiments/evaluation.md §4) -----------------------
 # Needs DB (ACTIVE pointers), CHROMA_DATA_DIR index, OPENAI_API_KEY for query embeddings.

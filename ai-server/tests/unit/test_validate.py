@@ -158,7 +158,7 @@ def test_smoke_tau_threshold(smoke_store: ChromaVectorStore) -> None:
 
 def test_smoke_config_has_five_questions_per_source() -> None:
     config = load_smoke_config()
-    assert config.tau == 0.30 and config.top_k == 5
+    assert config.top_k == 5  # τ는 configs/rag.yaml source_key별 값을 쓴다
     assert {k: len(v) for k, v in config.sources.items()} == {
         "langchain_v03": 5,
         "langchain_v1x": 5,

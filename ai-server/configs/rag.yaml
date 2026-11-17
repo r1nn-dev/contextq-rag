@@ -6,11 +6,12 @@ retrieval:
   top_k: 5
   # 컨텍스트 토큰 예산 3,000 고정 — 성능 우선으로 공식 축소 없이 상한 그대로 (eval/decision_rules.md §4)
   context_budget_tokens: 3000
-  # NO_CONTEXT 임계값 τ (source_key별) — 개발용 0.30, E1 부속 실험(R-4-6)에서 확정.
+  # NO_CONTEXT 임계값 τ (source_key별) — E1 확정 2026-11-18 (eval/results/E1/analysis.md,
+  # eval/decision_rules.md §3·§5). 인덱스 검증 스모크도 이 값을 쓴다.
   # 환경 변수 TAU_{SOURCE_KEY}가 있으면 덮어쓴다. 소스를 추가하면 여기에도 등록한다.
   thresholds:
-    langchain_v03: 0.30
-    langchain_v1x: 0.30
+    langchain_v03: 0.29
+    langchain_v1x: 0.34
 
 generation:
   # 요청에 promptVersion이 없을 때 쓰는 단일 모드 프롬프트 (configs/prompts/{prompt_version}.j2)

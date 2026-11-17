@@ -88,6 +88,7 @@ class IngestDependencies:
     price_per_1m_tokens_usd: float
     permalink_checker: PermalinkCheck
     smoke: SmokeConfig
+    smoke_tau: Callable[[str], float]  # source_key → 서비스 τ (configs/rag.yaml + TAU_* 덮어쓰기)
 
 
 class ValidationFailedError(RuntimeError):
@@ -259,7 +260,7 @@ def _gate_checks(
             name,
             deps.embedder_factory(),
             deps.smoke.sources.get(run.source_key, []),
-            tau=deps.smoke.tau,
+            tau=deps.smoke_tau(run.source_key),
             top_k=deps.smoke.top_k,
         )
     )

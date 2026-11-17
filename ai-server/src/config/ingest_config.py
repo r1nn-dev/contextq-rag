@@ -72,7 +72,8 @@ class SmokeQuestion(BaseModel):
 
 
 class SmokeConfig(BaseModel):
-    tau: float = Field(ge=0, le=1)
+    """스모크 질문. τ는 서비스와 같은 `configs/rag.yaml` 값을 쓴다 (정책서 §4.4 "top-1 ≥ τ")."""
+
     top_k: int = Field(gt=0)
     sources: dict[str, list[SmokeQuestion]]
 
