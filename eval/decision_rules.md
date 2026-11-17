@@ -63,9 +63,13 @@
 | --- | --- | --- | --- |
 | 채택 청킹 전략 |  | `eval/results/E2/` |  |
 | 운영 Top-K |  | `eval/results/E2/` |  |
-| τ (`langchain_v03`) |  | `eval/results/E1/` |  |
-| τ (`langchain_v1x`) |  | `eval/results/E1/` |  |
+| τ (`langchain_v03`) | 0.29 (FPR_NC 0/20, Recall_NC 4/9 — 합격 미달) | `eval/results/E1/` | 2026-11-18 |
+| τ (`langchain_v1x`) | 0.34 (FPR_NC 1/20, Recall_NC 5/9 — 합격 미달) | `eval/results/E1/` | 2026-11-18 |
 | 컨텍스트 토큰 예산 | 3,000 (고정) | §4 | 2026-11-18 |
+
+- **τ 합격 미달 기록 (`evaluation.md` §5.2):** 두 소스 모두 Recall_NC가 합격선(8/9)에 미달했다. LangChain과 무관한 Q-oos는 모두 차단됐고, 통과한 것은 LangChain 용어가 섞인 근접 사례(OOS-002·006·007·009·010)다. 이들의 최대 유사도(0.37~0.50)가 Q-ret 하위권과 겹쳐 τ만으로는 구분할 수 없다. 8/9를 맞추는 τ(v0.3 ≈ 0.50, v1.x ≈ 0.47)는 FPR_NC 20~25%라 §3-3 조건을 어긴다. 규칙대로 τ를 채택하고, 생성 단계 근거 부족 판정(`LLM_ABSTAIN`)과 합친 2단계 처리율을 따로 측정한다(`eval/results/E1/analysis.md` §4).
+- §3-5는 실제로 적용될 수 없다: 모든 관측값 이하의 τ는 FPR_NC = 0이라 §3-3 조건을 만족하는 τ가 항상 있다.
+- §3-7의 스모크 τ는 `configs/smoke_questions.yaml`의 전역값 대신 `configs/rag.yaml` source_key별 τ를 읽도록 바꿔 한 곳에서만 관리한다(#96).
 
 ## 6. 결정 이력
 

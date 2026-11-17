@@ -124,7 +124,7 @@ openssl rand -hex 32
 | `TAU_LANGCHAIN_V03` | v0.3 소스 NO_CONTEXT 임계값 τ 덮어쓰기 (0~1) | 미설정 → `ai-server/configs/rag.yaml` 값 | 선택 |
 | `TAU_LANGCHAIN_V1X` | v1.x 소스 NO_CONTEXT 임계값 τ 덮어쓰기 (0~1) | 미설정 → `ai-server/configs/rag.yaml` 값 | 선택 |
 
-> τ의 기본값은 `ai-server/configs/rag.yaml` `retrieval.thresholds`에 source_key별로 둔다 (ADR-008). 확정 전 개발용 값은 0.30이다 (`docs/planning/policy.md` > §5.3).  
+> τ의 기본값은 `ai-server/configs/rag.yaml` `retrieval.thresholds`에 source_key별로 둔다 (ADR-008). E1로 확정한 값은 `langchain_v03` 0.29, `langchain_v1x` 0.34다 (`docs/planning/policy.md` > §5.3).  
 > Top-K와 컨텍스트 토큰 예산은 환경 변수가 없고 `ai-server/configs/rag.yaml`에서만 바꾼다.
 
 ---
