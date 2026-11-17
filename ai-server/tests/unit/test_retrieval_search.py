@@ -11,7 +11,7 @@ from src.config.ingest_config import load_embedding_config
 from src.ingest.embedder import EmbeddingError
 from src.ingest.store import ChromaVectorStore
 from src.retrieval.embedding import OpenAIQueryEmbedder
-from src.retrieval.errors import IndexNotActiveError
+from src.retrieval.errors import EmbeddingModelMismatchError, IndexNotActiveError
 from src.retrieval.pointers import ActiveIndex, StaticPointers
 from src.retrieval.search import ChromaRetriever
 
@@ -202,3 +202,67 @@ def test_query_embedding_policy_values() -> None:
     config = load_embedding_config()
 
     assert (config.query_timeout_seconds, config.query_max_retries) == (5, 1)
+
+
+# --- 2차 검증(INV-02)·임베딩 모델(INV-03) -------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "contaminated",
+    [
+        {"source_key": V03},  # 다른 소스
+        {"version": "v0.3"},  # 다른 버전
+        {"ingest_run_id": 2},  # 같은 소스의 다른 run
+    ],
+)
+def test_contaminated_chunk_is_discarded_and_logged(
+    tmp_path: Path, contaminated: dict[str, Any], caplog: pytest.LogCaptureFixture
+) -> None:
+    store = ChromaVectorStore(tmp_path / "chroma")
+    metas = [meta(V1X, 3, 0), {**meta(V1X, 3, 1), **contaminated}, meta(V1X, 3, 2)]
+    add_collection(store, V1X, 3, [[1.0, 0.0, 0.0], [0.9, 0.1, 0.0], [0.5, 0.5, 0.0]], metas)
+    retriever = ChromaRetriever(store, StaticPointers({V1X: index()}), EMBEDDER)
+
+    with caplog.at_level("ERROR", logger="src.retrieval.search"):
+        result = retriever.search("q", V1X, top_k=3)
+
+    assert [c["chunk_id"] for c in result.chunks] == [f"{V1X}-r3-0", f"{V1X}-r3-2"]
+    assert result.discarded == 1
+    [record] = caplog.records
+    assert record.getMessage() == "retrieval_chunk_discarded"
+    assert record.__dict__["invariant"] == "INV-02"
+    assert record.__dict__["chunk_id"] == f"{V1X}-r3-1"
+
+
+def test_clean_index_discards_nothing(
+    store: ChromaVectorStore, caplog: pytest.LogCaptureFixture
+) -> None:
+    retriever = ChromaRetriever(store, StaticPointers({V1X: index()}), EMBEDDER)
+
+    with caplog.at_level("ERROR"):
+        result = retriever.search("q", V1X, top_k=3)
+
+    assert result.discarded == 0
+    assert not caplog.records  # E1-F 목표: INV-02 폐기 로그 0건
+
+
+def test_collection_model_mismatch_rejects_search(tmp_path: Path) -> None:
+    store = ChromaVectorStore(tmp_path / "chroma")
+    add_collection(store, V1X, 3, [[1.0, 0.0, 0.0]], model="text-embedding-3-large")
+    embedder = FakeQueryEmbedder({"q": [1.0, 0.0, 0.0]})
+    retriever = ChromaRetriever(store, StaticPointers({V1X: index()}), embedder)
+
+    with pytest.raises(EmbeddingModelMismatchError) as exc:
+        retriever.retrieve("q", V1X)
+    assert exc.value.code == "EMBEDDING_MODEL_MISMATCH"
+    assert embedder.calls == []  # 임베딩 호출 전에 거부
+
+
+def test_chunk_model_mismatch_rejects_search(tmp_path: Path) -> None:
+    store = ChromaVectorStore(tmp_path / "chroma")
+    metas = [meta(V1X, 3, 0, embedding_model="text-embedding-ada-002")]
+    add_collection(store, V1X, 3, [[1.0, 0.0, 0.0]], metas)
+    retriever = ChromaRetriever(store, StaticPointers({V1X: index()}), EMBEDDER)
+
+    with pytest.raises(EmbeddingModelMismatchError):
+        retriever.retrieve("q", V1X)
