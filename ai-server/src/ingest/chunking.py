@@ -12,6 +12,7 @@ from langchain_text_splitters import (
     TextSplitter,
 )
 
+from src.adapters.markdown import fence_mask, to_lines
 from src.config.ingest_config import Strategy
 from src.domain.documents import NormalizedDocument, Section
 
@@ -81,6 +82,83 @@ class SplitterChunker:
         return chunks
 
 
+def group_sections(sections: tuple[Section, ...], header_depth: int) -> list[Section]:
+    """heading_path 깊이가 header_depth보다 깊은 섹션을 바로 앞 묶음에 이어 붙인다 (전략 C)."""
+    groups: list[Section] = []
+    for section in sections:
+        depth = section.heading_path.count(" > ") + 1
+        if groups and depth > header_depth:
+            head = groups[-1]
+            groups[-1] = Section(
+                head.heading_path,
+                f"{head.text}\n{section.text}",
+                head.line_numbers + section.line_numbers,
+            )
+        else:
+            groups.append(section)
+    return groups
+
+
+def _blocks(lines: list[str]) -> list[tuple[int, int]]:
+    """펜스 밖 빈 줄로 나눈 문단 블록 [start, end] 목록. 코드 펜스는 한 블록 안에 남는다."""
+    mask = fence_mask(to_lines("\n".join(lines)))
+    blocks: list[tuple[int, int]] = []
+    start: int | None = None
+    for i, (text, in_fence) in enumerate(zip(lines, mask, strict=True)):
+        if not in_fence and not text.strip():
+            if start is not None:
+                blocks.append((start, i - 1))
+                start = None
+        elif start is None:
+            start = i
+    if start is not None:
+        blocks.append((start, len(lines) - 1))
+    return blocks
+
+
+class StructureChunker:
+    """전략 C — H2 묶음을 문단 경계로 나누고, 코드 펜스는 쪼개지 않는다."""
+
+    def __init__(self, chunk_size: int, header_depth: int) -> None:
+        self.chunk_size = chunk_size
+        self.header_depth = header_depth
+
+    def chunk(self, document: NormalizedDocument) -> list[Chunk]:
+        _require_sections(document)
+        chunks: list[Chunk] = []
+        for group in group_sections(document.sections, self.header_depth):
+            lines = group.text.split("\n")
+            for first, last in self._pack(lines):
+                chunks.append(
+                    Chunk(
+                        content="\n".join(lines[first : last + 1]),
+                        heading_path=group.heading_path,
+                        line_start=group.line_numbers[first],
+                        line_end=group.line_numbers[last],
+                    )
+                )
+        return chunks
+
+    def _size(self, lines: list[str], first: int, last: int) -> int:
+        return len("\n".join(lines[first : last + 1]))
+
+    def _pack(self, lines: list[str]) -> list[tuple[int, int]]:
+        """문단 블록을 상한까지 이어 담는다. 상한을 넘는 단일 블록은 그대로 한 청크다."""
+        ranges: list[tuple[int, int]] = []
+        current: tuple[int, int] | None = None
+        for first, last in _blocks(lines):
+            if current is None:
+                current = (first, last)
+            elif self._size(lines, current[0], last) <= self.chunk_size:
+                current = (current[0], last)
+            else:
+                ranges.append(current)
+                current = (first, last)
+        if current is not None:
+            ranges.append(current)
+        return ranges
+
+
 def make_chunker(strategy: Strategy, params: dict[str, Any]) -> DocumentChunker:
     if strategy == "A":
         return SplitterChunker(
@@ -99,5 +177,9 @@ def make_chunker(strategy: Strategy, params: dict[str, Any]) -> DocumentChunker:
                 chunk_overlap=params["chunk_overlap"],
                 add_start_index=True,
             )
+        )
+    if strategy == "C":
+        return StructureChunker(
+            chunk_size=params["chunk_size"], header_depth=len(params["header_levels"])
         )
     raise ChunkingError(f"지원하지 않는 청킹 전략입니다: {strategy}")

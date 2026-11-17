@@ -73,3 +73,33 @@ def _double(section: Section) -> tuple[int, ...]:
 def test_document_without_sections_raises() -> None:
     with pytest.raises(ChunkingError):
         make_chunker("B", CONFIG.params("B")).chunk(_doc())
+
+
+def test_strategy_c_groups_h3_into_h2() -> None:
+    sections = (
+        _section("T", ["# T", "intro"], 1),
+        _section("T > Tools", ["## Tools", "tools body"], 3),
+        _section("T > Tools > Define", ["### Define", "define body"], 5),
+        _section("T > Models", ["## Models", "models body"], 7),
+    )
+    chunks = make_chunker("C", CONFIG.params("C")).chunk(_doc(*sections))
+    assert [(c["heading_path"], c["line_start"], c["line_end"]) for c in chunks] == [
+        ("T", 1, 2),
+        ("T > Tools", 3, 6),
+        ("T > Models", 7, 8),
+    ]
+    assert "### Define" in chunks[1]["content"]
+
+
+def test_strategy_c_never_splits_code_fences() -> None:
+    code = ["```python", *[f"x{i} = {i}  # " + "c" * 40 for i in range(40)], "", "y = 1", "```"]
+    prose = ["para " * 50, "", "para " * 50, ""]
+    lines = ["## Big", "", *prose, *code, "", "after the fence " * 5]
+    section = _section("T > Big", lines, 10)
+    chunks = make_chunker("C", CONFIG.params("C")).chunk(_doc(section))
+
+    assert not any(splits_code_fence(c["content"]) for c in chunks)
+    fenced = [c for c in chunks if "```python" in c["content"]]
+    assert len(fenced) == 1 and len(fenced[0]["content"]) > 1000  # 상한보다 큰 펜스도 한 청크
+    assert [c["line_start"] for c in chunks] == sorted(c["line_start"] for c in chunks)
+    assert chunks[0]["line_start"] == 10 and chunks[-1]["line_end"] == 10 + len(lines) - 1
