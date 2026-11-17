@@ -43,6 +43,7 @@ packages = ["src"]
 
 [tool.ruff]
 line-length = 100
+extend-exclude = ["tests/fixtures"]  # 수집 원문 흉내 데이터 (린트 대상 아님)
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]    # E: pycodestyle, F: Pyflakes, I: isort, UP: pyupgrade

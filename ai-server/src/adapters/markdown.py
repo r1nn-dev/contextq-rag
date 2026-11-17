@@ -110,7 +110,7 @@ _HTML_TAGS = (
 _TAG_NAME = rf"(?:[A-Z][\w.]*|(?:{_HTML_TAGS})\b)"
 _TAG = re.compile(rf"<(/?)({_TAG_NAME})([^<>]*?)(/?)>")
 _TAG_START = re.compile(rf"<(/?)({_TAG_NAME})([^<>]*)$")
-_TITLE_ATTR = re.compile(r"\btitle=(?:\"([^\"]*)\"|'([^']*)'|\{[\"']([^\"']*)[\"']\})")
+_TITLE_ATTR = re.compile(r"\b(?:title|label)=(?:\"([^\"]*)\"|'([^']*)'|\{[\"']([^\"']*)[\"']\})")
 _JSX_COMMENT = re.compile(r"\{/\*.*?\*/\}")
 
 
@@ -200,6 +200,15 @@ def collapse_blank_lines(lines: list[Line]) -> list[Line]:
 
 _HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
 _ANCHOR = re.compile(r"\s*\{#[^}]*\}\s*$")
+
+
+def first_h1(lines: list[Line]) -> str | None:
+    """펜스 밖 첫 H1 텍스트 (문서 제목 후보)."""
+    for line, in_fence in zip(lines, fence_mask(lines), strict=True):
+        match = None if in_fence else _HEADING.match(line.text)
+        if match and len(match.group(1)) == 1:
+            return clean_heading(match.group(2)) or None
+    return None
 
 
 def clean_heading(text: str) -> str:
