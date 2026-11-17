@@ -1,14 +1,15 @@
 question_id: OOS-009
 question_set: Q-oos
-title: '"LangChain 최신 버전이 뭐야?" (실시간 정보)'
+title: 다음 메이저 버전 출시일 (미래 정보)
 type: OUT_OF_SCOPE
 difficulty: MEDIUM
 target_version: null
-query: LangChain 최신 버전이 뭐야?
+query: LangChain 다음 메이저 버전 출시 예정일은 언제야?
 expected_behavior:
   no_context: true
-  reason: 실시간 정보 질문 — 수집 시점 문서로 답할 수 없음. versioning 문서와 유사도가 높을 수 있어 경계 사례
+  reason: 미래 정보라 수집 문서로 답할 수 없음. versioning.mdx 지원 정책 절에 "next major release" 표현만 있고 날짜는 없어 유사도가 어느 정도 나오는 근접 사례
 metadata:
   created_by: ai-draft
-  created_at: '2026-11-17T00:00:00Z'
+  created_at: '2026-11-18T00:00:00Z'
   reviewed_by: null
+  source: '검수 교체(#103) — 이전 ''LangChain 최신 버전이 뭐야?''는 v1.x 인덱스 10개 파일의 langchain>=1.x 버전 문자열로 근거 있는 듯한 오답 위험'

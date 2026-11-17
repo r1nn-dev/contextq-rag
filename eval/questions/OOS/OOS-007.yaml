@@ -1,14 +1,15 @@
 question_id: OOS-007
 question_set: Q-oos
-title: LangGraph StateGraph 사용법 (범위 외 패키지)
+title: LangGraph Functional API (범위 외 패키지)
 type: OUT_OF_SCOPE
 difficulty: MEDIUM
 target_version: null
-query: LangGraph에서 StateGraph로 노드와 엣지를 정의하는 방법은?
+query: LangGraph Functional API에서 @entrypoint와 @task로 워크플로를 정의하는 방법은?
 expected_behavior:
   no_context: true
-  reason: langgraph 패키지 문서는 수집 제외(정책서 §3.2) — NO_CONTEXT 처리 대상
+  reason: LangGraph 전용 기능이고 langgraph 문서는 수집 제외(정책서 §3.2). 인덱스에 @entrypoint·@task 0건. LangGraph 용어가 섞인 근접 사례
 metadata:
   created_by: ai-draft
-  created_at: '2026-11-17T00:00:00Z'
+  created_at: '2026-11-18T00:00:00Z'
   reviewed_by: null
+  source: '검수 교체(#103) — 이전 ''LangGraph StateGraph''는 인덱스에 StateGraph·add_edge 예제가 v0.3 27개·v1.x 9개 파일에 있어 답이 됨'

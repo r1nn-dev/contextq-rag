@@ -293,10 +293,10 @@ metadata:
 | OOS-003 | PyTorch 텐서 연산 (범위 외) | OUT_OF_SCOPE | EASY | 📝 |
 | OOS-004 | NumPy 배열 슬라이싱 (범위 외) | OUT_OF_SCOPE | EASY | 📝 |
 | OOS-005 | React 컴포넌트 생성 (범위 외) | OUT_OF_SCOPE | EASY | 📝 |
-| OOS-006 | LangChain 1.5 버전 기능 (미수집 버전) | OUT_OF_SCOPE | MEDIUM | 📝 |
-| OOS-007 | LangGraph StateGraph 사용법 (범위 외 패키지) | OUT_OF_SCOPE | MEDIUM | 📝 |
-| OOS-008 | 의도적으로 모호한 질문 | OUT_OF_SCOPE | HARD | 📝 |
-| OOS-009 | "LangChain 최신 버전이 뭐야?" (실시간 정보) | OUT_OF_SCOPE | MEDIUM | 📝 |
+| OOS-006 | Kubernetes Helm 배포 (범위 외 운영) | OUT_OF_SCOPE | MEDIUM | 📝 |
+| OOS-007 | LangGraph Functional API (범위 외 패키지) | OUT_OF_SCOPE | MEDIUM | 📝 |
+| OOS-008 | 의도적으로 모호한 질문 (τ 결정 표본 제외) | OUT_OF_SCOPE | HARD | 📝 |
+| OOS-009 | 다음 메이저 버전 출시일 (미래 정보) | OUT_OF_SCOPE | MEDIUM | 📝 |
 | OOS-010 | 한국어 LangChain 문서 (언어 범위 외) | OUT_OF_SCOPE | EASY | 📝 |
 
 ### 5.3 Q-shared (버전 정확도 비교, E3 사용)
