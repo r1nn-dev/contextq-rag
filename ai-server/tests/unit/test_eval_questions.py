@@ -169,3 +169,18 @@ def test_unreviewed_lists_questions_without_reviewer() -> None:
     )
 
     assert unreviewed(sets) == ["RET-002", "OOS-001"]
+
+
+def test_repository_question_sets_match_v1_composition() -> None:
+    """저장소 `eval/questions/` 전체가 스키마와 v1 구성을 지킨다 (eval-scenarios.md §1·§2.6)."""
+    sets = load_question_sets()
+
+    assert v1_composition_errors(sets) == []
+    golds = [s for q in sets.ret for s in q.gold.sections] + [
+        s for q in sets.shared for v in q.versions.by_label().values() for s in v.gold_sections
+    ]
+    # 정책서 §3.2 제외 범위는 gold로 쓰지 않는다
+    excluded = [
+        g.file_path for g in golds if "integrations/" in g.file_path or "langgraph" in g.file_path
+    ]
+    assert excluded == []

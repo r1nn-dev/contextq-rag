@@ -1,0 +1,29 @@
+question_id: SHR-004
+question_set: Q-shared
+title: 메모리 관리 방식
+type: VERSION_SPECIFIC
+difficulty: MEDIUM
+query: 대화 기록(메모리)을 관리하는 방법은?
+versions:
+  v0_3:
+    source_key: langchain_v03
+    gold_sections:
+    - file_path: docs/docs/how_to/message_history.ipynb
+      heading_path: How to add message history
+    - file_path: docs/docs/versions/migrating_memory/index.mdx
+      heading_path: How to migrate to LangGraph memory
+  v1_x:
+    source_key: langchain_v1x
+    gold_sections:
+    - file_path: src/oss/langchain/short-term-memory.mdx
+      heading_path: Short-term memory > Overview
+    - file_path: src/oss/langchain/short-term-memory.mdx
+      heading_path: Short-term memory > Usage
+label_schema:
+  version_error: 0 = 버전 오류 없음 / 1 = 선택한 버전이 아닌 코드·API 포함
+  evidence_quality: 'R1·R2 조건만: 0 = 근거 없음 / 1 = 부분 / 2 = 충분'
+  answer_usefulness: 0 = 무관 / 1 = 부분 유용 / 2 = 유용
+metadata:
+  created_by: ai-draft
+  created_at: '2026-11-17T00:00:00Z'
+  reviewed_by: null
