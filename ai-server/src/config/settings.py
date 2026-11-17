@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     # backend가 RAG 엔드포인트 호출 시 X-Internal-Token 헤더에 첨부
     internal_token: str = ""
 
+    # ai-server 내부 URL (AI_SERVER_INTERNAL_URL) — 활성화·롤백 CLI의 reload 호출 주소 (정책서 §4.5)
+    ai_server_internal_url: str = "http://localhost:8000"
+
     # PostgreSQL 접속 정보 — ai 스키마는 ai-server(Alembic)가 소유
     postgres_host: str = "localhost"
     postgres_port: int = 5432
