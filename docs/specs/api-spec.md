@@ -131,6 +131,8 @@ record CursorResponse<T>(
 | `AI_UNAVAILABLE` | 503 | AI | ai-server 연결 실패 |
 | `AI_BUSY` | 503 | AI | 동시 생성 20 초과 (즉시 거절) |
 | `INDEX_NOT_ACTIVE` | 503 | Index | ACTIVE run 없음 (INV-01 위반, 장애) |
+| `INTERNAL_UNAUTHORIZED` | 401 | AI | ai-server 내부 API `X-Internal-Token` 누락·불일치 (backend 설정 오류, 브라우저에는 `AI_UNAVAILABLE`로 전달) |
+| `INTERNAL_ERROR` | 500 | AI | ai-server 예기치 않은 오류. 스트림 후에는 `error` 이벤트 (브라우저에는 `AI_UNAVAILABLE`로 전달) |
 | `UPSTREAM_TIMEOUT` | 504 | AI | 첫 이벤트 15초·비교 30초 초과 |
 
 ---
@@ -965,7 +967,7 @@ data: {"event":"done", "status":"COMPLETED", ...}
 > **서비스**: ai-server (Python FastAPI + uvicorn)\
 **Base URL**: `http://ai-server:8000` (Docker Compose 내부망 전용)\
 **노출 범위**: 외부 인터넷 미노출. nginx에서 `/internal/**` 차단\
-**인증**: 내부망 신뢰. 별도 토큰 없음\
+**인증**: `X-Internal-Token` 헤더 = `INTERNAL_TOKEN` (ADR-012). 누락·불일치 시 401 `INTERNAL_UNAUTHORIZED`. 토큰이 설정되지 않은 서버는 모든 요청을 거부한다. 예외: `GET /internal/v1/health`(Compose healthcheck)\
 **FastAPI 문서**: `/docs` — local·staging 프로필만 노출 (prod 비노출, 9.1 참고)
 
 ---
@@ -974,7 +976,7 @@ data: {"event":"done", "status":"COMPLETED", ...}
 
 - **Method / URI**: `POST /internal/v1/chat/stream`
 - **서비스**: ai-server (FastAPI)
-- **인증**: 내부망 전용
+- **인증**: `X-Internal-Token`
 - **설명**: backend의 WebClient가 호출. 검색·재작성·생성을 수행하고 SSE 이벤트 스트림 반환. asyncio Semaphore 20으로 동시 생성 제한.
 
 **요청 바디**
@@ -997,8 +999,12 @@ data: {"event":"done", "status":"COMPLETED", ...}
 
 | 필드 | 설명 |
 | --- | --- |
-| `history` | 최근 3턴 (USER·ASSISTANT 쌍). 첫 질문이면 빈 배열 `[]` |
-| `promptVersion` | `prompts/` 디렉터리 파일명. backend가 환경 변수로 주입 |
+| `requestId` | 선택. 없으면 `X-Request-Id` 헤더, 그것도 없으면 ai-server가 UUID v4 생성 |
+| `mode` | `SINGLE`. `COMPARE`는 비교 모드 구현(R-8) 전까지 400 `INVALID_REQUEST` |
+| `sourceKey` | `SINGLE`이면 필수 |
+| `question` | trim 후 1~1,000자 (정책서 §5.1) |
+| `history` | 최근 3턴 (USER·ASSISTANT 쌍). 첫 질문이면 빈 배열 `[]`. 최대 6개, 메시지당 2,000자. 질의 재작성(멀티턴) 구현 전까지는 형식만 검증하고 쓰지 않는다 (`rewrittenQuery`·`rewriteMs`는 `null`) |
+| `promptVersion` | 선택. `ai-server/configs/prompts/` 파일명(확장자 제외). backend가 환경 변수로 주입. 없으면 `ai-server/configs/rag.yaml` `generation.prompt_version`. 없는 버전이면 400 |
 
 **응답**: `200 OK`, `text/event-stream`
 
@@ -1007,7 +1013,7 @@ data: {"event":"meta", "requestId":"a1b2c3d4", "sourceKey":"langchain_v03", "ing
 
 data: {"event":"token", "t":"LangChain v0.3에서 "}
 
-data: {"event":"done", "status":"COMPLETED", "finishReason":"stop", "usage":{"prompt":1240,"completion":312}, "latency":{"rewriteMs":450,"embedMs":80,"retrieveMs":120,"ttftMs":1850,"totalMs":5300}, "invalidCitations":[]}
+data: {"event":"done", "status":"COMPLETED", "finishReason":"stop", "usage":{"prompt":1240,"completion":312}, "latency":{"rewriteMs":450,"embedMs":80,"retrieveMs":120,"ttftMs":1850,"totalMs":5300}, "invalidCitations":[], "model":"gpt-4o-mini-2024-07-18", "promptVersion":"single_v1"}
 ```
 
 **NO\_CONTEXT 시 응답 (LLM 미호출)**
@@ -1026,9 +1032,27 @@ data: {"event":"done", "status":"NO_CONTEXT", "statusReason":"LOW_SIMILARITY", "
 
 | 코드 | HTTP | 조건 |
 | --- | --- | --- |
-| `INVALID_REQUEST` | 400 | 필드 검증 실패 (Pydantic) |
-| `INDEX_NOT_ACTIVE` | 503 | ACTIVE run 없음 (INV-01) |
+| `INVALID_REQUEST` | 400 | 필드 검증 실패 (Pydantic), 없는 `promptVersion`, `mode=COMPARE`(R-8 전) |
+| `INTERNAL_UNAUTHORIZED` | 401 | `X-Internal-Token` 누락·불일치 (ADR-012) |
+| `SOURCE_NOT_FOUND` | 404 | `sourceKey`가 소스 카탈로그에 없음 |
+| `SOURCE_UNAVAILABLE` | 409 | 비활성 소스 |
+| `EMBEDDING_MODEL_MISMATCH` | 500 | 인덱스 임베딩 모델 ≠ 질의 임베딩 모델 (INV-03) |
+| `INDEX_NOT_ACTIVE` | 503 | ACTIVE run 없음 또는 그 컬렉션 없음 (INV-01) |
 | `AI_BUSY` | 503 | asyncio Semaphore 소진 |
+
+**종결 상태 (스트림 후, 정책서 §10.2)**
+
+| 조건 | 종결 이벤트 |
+| --- | --- |
+| `finishReason=stop` | `done` COMPLETED |
+| `finishReason=length` | `done` PARTIAL, `statusReason=LENGTH` |
+| 그 밖의 `finishReason`(예: `content_filter`) | `done` PARTIAL, `statusReason`=대문자 사유 |
+| 유사도 미달 | `meta(noContext=true)` → `done` NO_CONTEXT, `LOW_SIMILARITY` |
+| sentinel `[[NO_ANSWER]]` | `meta`(sources 포함) → `done` NO_CONTEXT, `LLM_ABSTAIN` (토큰 없음) |
+| 단일 스트림 120초 초과 | 토큰 ≥ 1: `done` PARTIAL, 0개: `done` FAILED — 둘 다 `statusReason=MAX_DURATION` |
+| 질의 임베딩·OpenAI 생성 실패 | `error` `LLM_ERROR` (`partial` = 토큰 수신 여부) |
+| 스트림 중 인덱스 오류(컬렉션 삭제 등) | `error` + 해당 코드(`INDEX_NOT_ACTIVE` 등) |
+| 그 밖의 예기치 않은 서버 오류 | `error` `INTERNAL_ERROR` (종결 이벤트 1회 보장, INV-06) |
 
 **에러 (스트림 후)**: `event: error` SSE 이벤트
 
@@ -1054,7 +1078,7 @@ data: {"event":"done", "status":"NO_CONTEXT", "statusReason":"LOW_SIMILARITY", "
 
 - **Method / URI**: `GET /internal/v1/health`
 - **서비스**: ai-server (FastAPI)
-- **인증**: 내부망 전용
+- **인증**: 없음 (내부망 전용, Compose healthcheck가 헤더 없이 호출)
 - **설명**: Docker Compose `healthcheck`에서 호출. Chroma 로드 여부 + 소스별 ACTIVE run 존재 확인.
 
 **응답 200 (정상)**
@@ -1090,7 +1114,7 @@ data: {"event":"done", "status":"NO_CONTEXT", "statusReason":"LOW_SIMILARITY", "
 
 - **Method / URI**: `GET /internal/v1/sources`
 - **서비스**: ai-server (FastAPI)
-- **인증**: 내부망 전용
+- **인증**: `X-Internal-Token`
 - **설명**: backend의 `GET /api/v1/sources` 캐시 갱신 시 호출. ACTIVE run 포인터를 ai-server가 직접 조회해서 반환.\
 *(backend는 ai 스키마 테이블을 직접 읽지 않으므로 소스·활성 run 정보의 유일한 조회 경로다.)*
 
@@ -1122,7 +1146,7 @@ data: {"event":"done", "status":"NO_CONTEXT", "statusReason":"LOW_SIMILARITY", "
 
 - **Method / URI**: `POST /internal/v1/pipeline/ingest`
 - **서비스**: ai-server (FastAPI)
-- **인증**: 내부망 전용
+- **인증**: `X-Internal-Token`
 - **설명**: backend가 `POST /api/v1/admin/index/ingest/{sourceKey}` 처리 후 비동기로 호출. 수집→전처리→임베딩→검증 파이프라인 전체를 백그라운드로 실행. 완료 시 READY 상태로 전이 (ACTIVE 전환은 별도 명령).
 
 **요청 바디**
@@ -1159,7 +1183,7 @@ data: {"event":"done", "status":"NO_CONTEXT", "statusReason":"LOW_SIMILARITY", "
 
 - **Method / URI**: `POST /internal/v1/index/reload`
 - **서비스**: ai-server (FastAPI)
-- **인증**: 내부망 전용
+- **인증**: `X-Internal-Token`
 - **설명**: 관리자가 `make activate-index`로 `READY → ACTIVE` 전환 완료 후 backend가 호출. ai-server의 인메모리 인덱스 포인터 캐시와 소스 메타 캐시를 즉시 무효화·재로드.
 
 **요청 바디**
@@ -1241,7 +1265,7 @@ meta (noContext=true)      → done (status: NO_CONTEXT)
 | --- | --- | --- |
 | `meta` | `event`, `requestId`, `conversationId`, `messageId` | `sourceKey`, `ingestRunId`, `commitSha`, `ingestedAt`, `rewrittenQuery`, `noContext`, `sources[]` |
 | `token` | `event`, `t` | — |
-| `done` | `event`, `status` | `statusReason`, `finishReason`, `usage`, `latency`, `invalidCitations`, `compareResult` |
+| `done` | `event`, `status` | `statusReason`, `finishReason`, `usage`, `latency`, `invalidCitations`, `compareResult`, `model`, `promptVersion` |
 | `error` | `event`, `code`, `message`, `requestId`, `partial` | — |
 
 ### B.4 비교 모드 meta 추가 필드

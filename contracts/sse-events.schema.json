@@ -152,6 +152,14 @@
         },
         "compareResult": {
           "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/compareResult" }]
+        },
+        "model": {
+          "description": "Actual model name returned by the LLM API (INV-13 snapshot). null when the LLM was not called.",
+          "type": ["string", "null"]
+        },
+        "promptVersion": {
+          "description": "Prompt file name used for generation, e.g. single_v1 (INV-13 snapshot).",
+          "type": ["string", "null"]
         }
       },
       "additionalProperties": false

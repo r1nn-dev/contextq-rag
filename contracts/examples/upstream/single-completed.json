@@ -42,6 +42,8 @@
       "ttftMs": 1850,
       "totalMs": 5300
     },
-    "invalidCitations": []
+    "invalidCitations": [],
+    "model": "gpt-4o-mini-2024-07-18",
+    "promptVersion": "single_v1"
   }
 ]
