@@ -1,0 +1,81 @@
+[
+  {
+    "event": "meta",
+    "requestId": "a1b2c3d4-0000-4000-8000-000000000001",
+    "conversationId": 42,
+    "messageId": 305,
+    "sourceKeyA": "langchain_v03",
+    "sourceKeyB": "langchain_v1x",
+    "ingestRunIdA": 7,
+    "ingestRunIdB": 8,
+    "commitShaA": "0123456789abcdef0123456789abcdef01234567",
+    "commitShaB": "89abcdef0123456789abcdef0123456789abcdef",
+    "ingestedAtA": "2026-10-05",
+    "ingestedAtB": "2026-10-05",
+    "rewrittenQuery": null,
+    "noContext": false,
+    "sources": [
+      {
+        "rank": "A1",
+        "headingPath": "Agents > Creating agents > Basic agent",
+        "permalink": "https://github.com/langchain-ai/langchain/blob/0123456789abcdef0123456789abcdef01234567/docs/agents.md?plain=1#L42-L89",
+        "siteUrl": "https://python.langchain.com/v0.3/docs/agents/",
+        "similarity": 0.8732
+      },
+      {
+        "rank": "B1",
+        "headingPath": "Agents > create_agent",
+        "permalink": "https://github.com/langchain-ai/docs/blob/89abcdef0123456789abcdef0123456789abcdef/src/oss/agents.mdx?plain=1#L10-L40",
+        "siteUrl": "https://docs.langchain.com/oss/python/langchain/agents",
+        "similarity": 0.82
+      }
+    ]
+  },
+  {
+    "event": "done",
+    "status": "COMPLETED",
+    "statusReason": null,
+    "finishReason": "stop",
+    "usage": {
+      "prompt": 2100,
+      "completion": 540
+    },
+    "latency": {
+      "rewriteMs": null,
+      "embedMs": 90,
+      "retrieveMs": 210,
+      "ttftMs": null,
+      "totalMs": 9800
+    },
+    "invalidCitations": [],
+    "compareResult": {
+      "version_a": {
+        "summary": "v0.3은 AgentExecutor로 에이전트를 실행한다.",
+        "citations": [
+          "A1"
+        ],
+        "no_evidence": false
+      },
+      "version_b": {
+        "summary": "v1.x는 create_agent로 에이전트를 만든다.",
+        "citations": [
+          "B1"
+        ],
+        "no_evidence": false
+      },
+      "changes": [
+        {
+          "aspect": "에이전트 생성 함수",
+          "a": "AgentExecutor",
+          "b": "create_agent",
+          "citations_a": [
+            "A1"
+          ],
+          "citations_b": [
+            "B1"
+          ]
+        }
+      ]
+    }
+  }
+]

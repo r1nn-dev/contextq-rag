@@ -1,0 +1,9 @@
+[
+  {
+    "event": "error",
+    "code": "UPSTREAM_TIMEOUT",
+    "message": "응답이 지연되고 있습니다. 다시 질문해주세요.",
+    "requestId": "a1b2c3d4-0000-4000-8000-000000000001",
+    "partial": false
+  }
+]
