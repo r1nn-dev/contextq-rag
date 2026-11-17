@@ -2,7 +2,7 @@
 # Shortcut commands for local development.
 # Prerequisites: Docker Desktop, uv, node/npm, lefthook
 
-.PHONY: up down logs build-index activate-index test hooks help
+.PHONY: up down logs ingest activate-index test hooks help
 
 # --- Docker Compose -------------------------------------------------------
 
@@ -15,14 +15,13 @@ down: ## Stop full stack
 logs: ## Tail container logs
 	docker compose -f infra/docker-compose.yml logs -f
 
-# --- Index build (offline, local only) ------------------------------------
+# --- Index build (offline, local·staging only — ADR-005) ------------------
+# Requires INGEST_ENABLED=true and APP_PROFILE != prod; DB migrated (alembic upgrade head).
 
-build-index: ## Collect docs → chunk → embed → store in Chroma (local build only, never on prod)
-	# TODO: implement after ai-server/ scripts are created
-	@echo "build-index: not yet implemented"
+ingest: ## Build a new index run for one source. Usage: make ingest SOURCE=langchain_v1x
+	cd ai-server && uv run python -m src.ingest.cli ingest --source $(SOURCE)
 
-activate-index: ## Update ACTIVE_RUN_ID in .env to the latest run
-	# TODO: implement after scripts/activate_index.py is created
+activate-index: ## Activate a READY run (READY -> ACTIVE, pointer swap). Usage: make activate-index RUN=<id>
 	@echo "activate-index: not yet implemented"
 
 # --- Tests ----------------------------------------------------------------

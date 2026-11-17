@@ -95,14 +95,17 @@ uv run alembic upgrade head   # ai.sources · compare_pairs · ingest_runs · in
 cd ..
 ```
 
-인덱스 빌드는 `make build-index` (소스 수집 ~ Chroma 적재, 최초 1회):
+인덱스 빌드는 `make ingest` (소스 하나를 새 run으로 수집 ~ 검증, local·staging 전용 — ADR-005):
 
 ```bash
 # 선택: 로컬에서 인덱스를 직접 빌드하는 경우
-make build-index VERSION=v03
-make build-index VERSION=v1x
-make validate-index
+# APP_PROFILE=local, INGEST_ENABLED=true, POSTGRES_* 접속 정보를 환경 변수로 준비한다
+make ingest SOURCE=langchain_v03
+make ingest SOURCE=langchain_v1x
 ```
+
+> 수집 원본은 `ai-server/data/raw/{source_key}/`에 run마다 새로 받는다 (`INGEST_DATA_DIR`, `docs/specs/data-sources.md` §2).
+> `INGEST_ENABLED`가 꺼져 있거나 `APP_PROFILE=prod`이면 `FORBIDDEN_IN_PROFILE`로 거부된다.
 
 > 인덱스 스냅샷(`.tar.gz`)을 팀 공유 스토리지에서 받아 `make restore-index`로 복원하면 빌드를 생략할 수 있다.
 > 
