@@ -1,60 +1,56 @@
 # ADR-006: 소스 수집 어댑터 인터페이스 설계
 
 ## Status
-Draft
+Accepted
 
 ## Date
-2026-11-14
+2026-11-14 (2026-11-17 개정: 수집 방식을 sparse checkout으로 변경, Accepted)
 
 ## Context
 
-LangChain 공식 문서는 GitHub 리포지토리에서 Markdown 파일로 관리된다. 수집 방법:
+LangChain 공식 문서는 버전마다 저장소·포맷·URL 체계가 다르다(`docs/planning/policy.md` > §3.1).
 
-- **옵션 A**: `langchain.readthedocs.io` 웹 크롤링 → robots.txt, 렌더링된 HTML 파싱 복잡도
-- **옵션 B**: GitHub API로 raw Markdown 직접 수집 → 구조적, SHA 고정 가능
-- **옵션 C**: `langchain-ai/langchain` 리포 클론 후 로컬 파싱 → 용량 큼
+| 버전 | 저장소 · ref · 경로 | 포맷 |
+| --- | --- | --- |
+| v0.3 | `langchain-ai/langchain` · `v0.3` · `docs/docs/` | Docusaurus (`.md`, `.mdx`, `.ipynb`) |
+| v1.x | `langchain-ai/docs` · `main` · `src/oss/` | Mintlify (`.mdx` + 스니펫) |
+
+수집 방법 후보:
+
+- **옵션 A**: 문서 사이트 웹 크롤링 → robots.txt, 렌더링된 HTML 파싱 복잡도
+- **옵션 B**: GitHub REST API로 raw 파일 수집 → 파일 수(수천 개)만큼 API 호출, rate limit 관리 필요
+- **옵션 C**: `git sparse-checkout`으로 문서 디렉터리만 받아 로컬 파싱 → 호출 1회, 커밋 SHA를 그대로 얻음
 
 ## Decision
 
-**GitHub API 기반 소스 어댑터**를 채택한다. 어댑터 인터페이스를 정의하여 소스 교체 가능하게 한다.
+**git sparse checkout으로 문서 디렉터리만 수집**하고, 포맷 차이는 **버전별 Source Adapter**가 흡수한다.
+
+- 수집 대상(저장소·ref·문서 경로)은 코드가 아니라 `ai.sources` 카탈로그에서 읽는다.
+- 수집 단계는 체크아웃한 커밋의 40자 SHA를 run에 기록한다(ADR-007).
+- Adapter는 포맷별로 하나씩 둔다: `DocusaurusAdapter`(v0.3), `MintlifyAdapter`(v1.x). 카탈로그의 `adapter_class`로 선택한다.
+- Adapter는 전처리 규칙(`policy.md` > §4.3)을 적용한 정규화 문서(`NormalizedDocument`: 파일 경로, 제목, 섹션 목록[heading_path, 본문, 원문 라인 범위], 문서 유형, 사이트 URL)를 돌려준다. 청킹·임베딩 계층은 포맷을 모른다.
 
 ```python
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Protocol
 
-@dataclass
-class RawDocument:
-    content: str          # Markdown 원문
-    source_path: str      # 리포 내 상대 경로 (e.g. "docs/concepts/agents.md")
-    commit_sha: str       # 수집 시점 커밋 SHA
-    repo: str             # "langchain-ai/langchain"
-    version_tag: str      # "v0.3" | "v1.x"
-
-class SourceAdapter(ABC):
-    @abstractmethod
-    def fetch_documents(self, version: str) -> list[RawDocument]:
-        ...
-
-class GitHubSourceAdapter(SourceAdapter):
-    """GitHub REST API를 통해 특정 커밋 SHA의 Markdown 문서를 수집"""
-    def fetch_documents(self, version: str) -> list[RawDocument]:
+class SourceAdapter(Protocol):
+    def iter_documents(self, root: Path) -> Iterator[NormalizedDocument]:
+        """체크아웃 루트 아래 문서를 전처리해 정규화 문서로 순회한다."""
         ...
 ```
-
-수집 대상:
-- v0.3: `langchain-ai/langchain` 리포의 `docs/` 디렉토리 (고정 SHA)
-- v1.x: `langchain-ai/langchain-docs` 리포의 최신 `docs/` 디렉토리 (고정 SHA)
 
 ## Consequences
 
 **장점**
-- `SourceAdapter` 인터페이스 뒤로 구현 교체 가능 (GitHub → 로컬 → 다른 소스)
-- GitHub API rate limit 대응: `GITHUB_TOKEN` 환경 변수 사용 시 5000 req/hr
-- raw Markdown 수집 → 불필요한 HTML 파싱 없음
+- `SourceAdapter` 인터페이스 뒤로 포맷별 구현을 분리 — 신규 프레임워크는 Adapter 구현 + 카탈로그 행 추가로 확장(`policy.md` > §3.2)
+- 체크아웃 1회로 수집이 끝나 API rate limit 영향이 없다
+- 체크아웃 결과가 곧 커밋 SHA 고정 원본이라 재현성이 보장된다
 
 **단점 / 트레이드오프**
-- GitHub API 의존 → 네트워크 없는 환경에서 빌드 불가 (오프라인 빌드 환경에서 미리 수집 필요)
-- 대용량 리포의 경우 API 호출 수 증가 → rate limit 주의
+- 수집 환경에 `git`과 네트워크가 필요하다 (오프라인 빌드 환경에서 미리 수집)
+- 체크아웃 디렉터리(`data/raw/`)는 커밋하지 않으므로 재현하려면 같은 SHA로 다시 받아야 한다
 
 **관련 ADR**
 - ADR-007: SHA 고정 (수집 시점 SHA 기록)
