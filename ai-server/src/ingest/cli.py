@@ -65,8 +65,12 @@ def main(argv: Sequence[str] | None = None, settings: Settings | None = None) ->
             options = IngestOptions(
                 data_dir=settings.ingest_data_dir, accept_drift=args.accept_drift
             )
-            run_id = run_ingest(session_factory, args.source, options)
-            print(f"run {run_id}: 수집 완료 (source={args.source})")
+            summary = run_ingest(session_factory, args.source, options)
+            print(
+                f"run {summary.run_id} ({args.source}): {summary.status} — "
+                f"문서 {summary.documents}, 섹션 {summary.sections}, "
+                f"누락 스니펫 {summary.missing_snippets}"
+            )
         return 0
     except SourceNotFoundError as exc:
         print(str(exc), file=sys.stderr)
