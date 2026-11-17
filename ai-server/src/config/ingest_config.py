@@ -61,3 +61,19 @@ class EmbeddingConfig(BaseModel):
 @lru_cache
 def load_embedding_config(config_dir: Path = CONFIG_DIR) -> EmbeddingConfig:
     return EmbeddingConfig.model_validate(_load_yaml("models.yaml", config_dir)["embedding"])
+
+
+class SmokeQuestion(BaseModel):
+    question: str = Field(min_length=1)
+    expected_file: str = Field(min_length=1)
+
+
+class SmokeConfig(BaseModel):
+    tau: float = Field(ge=0, le=1)
+    top_k: int = Field(gt=0)
+    sources: dict[str, list[SmokeQuestion]]
+
+
+@lru_cache
+def load_smoke_config(config_dir: Path = CONFIG_DIR) -> SmokeConfig:
+    return SmokeConfig.model_validate(_load_yaml("smoke_questions.yaml", config_dir))
