@@ -43,6 +43,11 @@ ai-server:
   idle-timeout: 30s                    # policy §2.1 유휴 타임아웃
   sources-cache-ttl: 60s               # policy §2.1 메타 API 캐시
 
+chat:
+  sweeper:
+    interval: 60s                      # policy §2.1 스위퍼 주기
+    stale-after: 150s                  # policy §2.1 STREAMING·PENDING 고착 판정
+
 jwt:
   secret: ${JWT_SECRET}       # required — set JWT_SECRET in .env
   expiration-ms: 86400000     # 24 hours in ms
