@@ -52,3 +52,23 @@ def test_delete_collection_is_idempotent(store: ChromaVectorStore) -> None:
     store.delete_collection(name)
     store.delete_collection(name)
     assert not store.has_collection(name)
+
+
+def test_query_returns_documents_and_applies_metadata_filter(store: ChromaVectorStore) -> None:
+    name = "eval_query_test"
+    store.create_collection(name, {})
+    store.add(
+        name,
+        ids=["a", "b"],
+        embeddings=[[1.0, 0.0, 0.0], [0.9, 0.1, 0.0]],
+        documents=["A", "B"],
+        metadatas=[{"source_key": "s1"}, {"source_key": "s2"}],
+    )
+
+    hits = store.query(name, [1.0, 0.0, 0.0], k=2)
+    filtered = store.query(name, [1.0, 0.0, 0.0], k=2, where={"source_key": "s2"})
+
+    assert [h.chunk_id for h in hits] == ["a", "b"]
+    assert hits[0].document == "A"
+    assert hits[0].similarity == pytest.approx(1.0)
+    assert [h.chunk_id for h in filtered] == ["b"]
