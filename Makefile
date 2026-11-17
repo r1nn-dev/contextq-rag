@@ -2,7 +2,7 @@
 # Shortcut commands for local development.
 # Prerequisites: Docker Desktop, uv, node/npm, lefthook
 
-.PHONY: up down logs ingest activate-index rollback-index test hooks help
+.PHONY: up down logs ingest activate-index rollback-index eval eval-check test hooks help
 
 # --- Docker Compose -------------------------------------------------------
 
@@ -26,6 +26,16 @@ activate-index: ## Activate a READY run (READY -> ACTIVE, pointer swap). Usage: 
 
 rollback-index: ## Roll back to the previous SUPERSEDED run (1 generation). Usage: make rollback-index SOURCE=<key>
 	cd ai-server && uv run python -m src.ingest.cli rollback --source $(SOURCE)
+
+# --- Evaluation (docs/experiments/evaluation.md §4) -----------------------
+# Needs DB (ACTIVE pointers), CHROMA_DATA_DIR index, OPENAI_API_KEY for query embeddings.
+# E1-C and E2 need the service Retriever (R-4-1) — until then: make eval EXP=E1 CONDITIONS="N F"
+
+eval: ## Run retrieval eval -> eval/results/{E1,E2}/. Usage: make eval [EXP="E1 E2"] [CONDITIONS="N F C"]
+	cd ai-server && uv run python -m src.eval.run --exp $(or $(EXP),E1 E2) $(if $(CONDITIONS),--conditions $(CONDITIONS),)
+
+eval-check: ## Validate eval question sets (schema, v1 composition, review status)
+	cd ai-server && uv run python -m src.eval.run --check
 
 # --- Tests ----------------------------------------------------------------
 
