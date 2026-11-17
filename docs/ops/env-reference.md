@@ -46,14 +46,16 @@ openssl rand -hex 16
 
 | 변수명 | 설명 | 예시 / 기본값 | 필수 |
 |---|---|---|---|
-| `JWT_SECRET` | JWT 서명 키 (HS256) | `openssl rand -hex 32` 출력값 | ✅ |
+| `JWT_SECRET` | JWT 서명 키 (HS256). 32바이트 이상이어야 하며 짧으면 기동 실패 | `openssl rand -hex 32` 출력값 | ✅ |
+| `JWT_ACCESS_TOKEN_EXPIRY_MINUTES` | Access Token 유효 시간(분) | `30` (정책서 §2.1) | 선택 |
+| `JWT_REFRESH_TOKEN_EXPIRY_DAYS` | Refresh 패밀리 절대 만료(일) | `7` (정책서 §2.1) | 선택 |
 
 ```bash
 # JWT 서명 키 생성
 openssl rand -hex 32
 ```
 
-> Access Token 만료 시간(`expiration-ms`)은 `application.yml`에 `86400000` (24시간)으로 고정 관리된다. `.env` 오버라이드 불필요.
+> 기본값은 정책서 §2.1(Access 30분, Refresh 패밀리 7일)이다. 바꾸면 정책서와 달라지므로 실험·부하 테스트 외에는 설정하지 않는다. 시계 오차 허용(30초)과 회전 경합 유예(5초)는 `application.yaml`에 고정한다.
 
 ### 1.3.1 관리자 시드
 

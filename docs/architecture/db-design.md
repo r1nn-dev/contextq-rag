@@ -85,6 +85,7 @@
 | role | VARCHAR(30) | NOT NULL | ROLE_USER / ROLE_ADMIN. 계정당 1개 |
 | status | VARCHAR(30) | NOT NULL | ACTIVE / LOCKED |
 | login_failed_count | SMALLINT | NOT NULL | 0\~5. 성공 시 0으로 초기화 |
+| login_failed_at | TIMESTAMPTZ(6) | NULL | 현재 실패 구간의 첫 실패 시각. 이 시각 + 15분이 지난 뒤의 실패는 새 구간(횟수 1)으로 시작. 성공 시 NULL |
 | locked_at | TIMESTAMPTZ(6) | NULL | 5번째 실패 시각. 성공 시 NULL로 초기화 |
 | created_at | TIMESTAMPTZ(6) | NOT NULL |  |
 | updated_at | TIMESTAMPTZ(6) | NOT NULL |  |
@@ -106,6 +107,8 @@
 | LOCKED | 로그인 잠금 (15분) | locked_at + 15분 경과 → 조회 시 자동 ACTIVE로 판정. DB 갱신은 다음 로그인 성공 시 |
 
 > **설계 판단:** LOCKED 만료 여부는 `locked_at + INTERVAL '15 minutes' > NOW()` 런타임 판정. 별도 스케줄러 불필요.
+>
+> **실패 구간:** "15분 내 5회"는 `login_failed_at`(구간 시작)부터 15분 안의 실패 횟수로 판정한다. 마지막 실패만 보면 14분 간격 실패 5회도 잠기므로 구간 시작을 따로 둔다. 5번째 실패에서 LOCKED가 되고 그 응답부터 `AUTH_LOCKED`다.
 
 ---
 
