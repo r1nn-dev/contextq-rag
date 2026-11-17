@@ -108,6 +108,7 @@ openssl rand -hex 32
 | `APP_PROFILE` | ai-server 실행 프로필. `local` · `staging` · `loadtest` · `prod` 중 하나 | `local` | 선택 |
 | `INGEST_ENABLED` | 수집·임베딩 경로 활성화 | `false` | 선택 |
 | `INGEST_DATA_DIR` | 수집 원본(`raw/`)·run 리포트(`reports/`) 저장 루트. ai-server 기준 상대 경로. Git에 올리지 않는다 (`docs/specs/data-sources.md` §2) | `./data` | 선택 |
+| `GITHUB_TOKEN` | 검증 게이트 permalink 전수 검증 시 GitHub 인증 헤더 (정책서 §4.4). 없으면 비인증 요청 | `<placeholder>` | 선택 |
 | `LLM_MOCK` | 생성 단계를 고정 토큰으로 대체하는 mock LLM | `false` | 선택 |
 
 > `APP_PROFILE=prod`에서 `INGEST_ENABLED` 또는 `LLM_MOCK`이 `true`이면 ai-server가 기동하지 않는다 (`docs/planning/policy.md` > §2.2 불변식 > INV-17).  
@@ -187,6 +188,7 @@ VITE_API_BASE_URL=          # 빈 값 = 동일 출처 /api (Vite 프록시·ngin
 # APP_PROFILE=local
 # INGEST_ENABLED=false
 # INGEST_DATA_DIR=./data
+# GITHUB_TOKEN=<placeholder>
 # LLM_MOCK=false
 ```
 
