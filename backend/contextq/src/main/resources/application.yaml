@@ -15,6 +15,10 @@ spring:
       # time zone as a startup parameter, which overrides a TimeZone given in options.
       connection-init-sql: "SET TIME ZONE 'Asia/Seoul'"
 
+  mvc:
+    async:
+      request-timeout: 150s   # > stream max 120s (policy §2.1); = nginx proxy_read_timeout
+
   jpa:
     open-in-view: false       # disables Open Session in View anti-pattern
     hibernate:

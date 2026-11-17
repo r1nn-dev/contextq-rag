@@ -90,6 +90,32 @@ public class SourceCatalog {
     return response;
   }
 
+  /**
+   * Pre-check of the version a question targets (api-spec §3.1 스트림 전 오류, policy §3.2).
+   *
+   * @param followUp true for an existing conversation: a source that disappeared from the catalog
+   *     is reported as {@code SOURCE_UNAVAILABLE} (the conversation became read-only, policy §2.3)
+   * @throws BusinessException {@code SOURCE_NOT_FOUND}, {@code SOURCE_UNAVAILABLE} (disabled) or
+   *     {@code INDEX_NOT_ACTIVE} (no ACTIVE run)
+   */
+  public InternalSources.Source requireAskable(String sourceKey, boolean followUp) {
+    InternalSources.Source source =
+        current().sources().stream()
+            .filter(s -> s.sourceKey().equals(sourceKey))
+            .findFirst()
+            .orElseThrow(
+                () ->
+                    new BusinessException(
+                        followUp ? ErrorCode.SOURCE_UNAVAILABLE : ErrorCode.SOURCE_NOT_FOUND));
+    if (!source.enabled()) {
+      throw new BusinessException(ErrorCode.SOURCE_UNAVAILABLE);
+    }
+    if (source.activeRunId() == null) {
+      throw new BusinessException(ErrorCode.INDEX_NOT_ACTIVE);
+    }
+    return source;
+  }
+
   /** Drops the cache so the next call refetches (index activation, tests). */
   public void invalidate() {
     snapshot = null;
