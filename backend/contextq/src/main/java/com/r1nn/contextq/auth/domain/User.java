@@ -9,6 +9,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
 
@@ -16,11 +17,17 @@ import java.util.Locale;
  * Account (db-design §3.1, policy §1.1).
  *
  * <p>The email is stored normalized (trimmed, lower case); only the BCrypt hash of the password is
- * kept. Lock state changes are added by the login issue.
+ * kept. Failed logins are counted per 15-minute window that starts at the first failure.
  */
 @Entity
 @Table(name = "users")
 public class User extends BaseTimeEntity {
+
+  /** Failures counted inside one window, and the lock length (policy §1.2). */
+  public static final int MAX_FAILURES = 5;
+
+  public static final Duration FAILURE_WINDOW = Duration.ofMinutes(15);
+  public static final Duration LOCK_DURATION = Duration.ofMinutes(15);
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -46,6 +53,10 @@ public class User extends BaseTimeEntity {
   @Column(name = "locked_at")
   private Instant lockedAt;
 
+  /** Start of the current failure window; null after a success. */
+  @Column(name = "login_failed_at")
+  private Instant loginFailedAt;
+
   protected User() {}
 
   private User(String email, String passwordHash, UserRole role) {
@@ -69,6 +80,50 @@ public class User extends BaseTimeEntity {
   /** Trim + lower case (policy §1.1 식별자). */
   public static String normalizeEmail(String email) {
     return email == null ? null : email.strip().toLowerCase(Locale.ROOT);
+  }
+
+  /** LOCKED and the 15-minute lock has not passed (judged at read time, db-design §3.1). */
+  public boolean isLockedAt(Instant now) {
+    return status == UserStatus.LOCKED
+        && lockedAt != null
+        && lockedAt.plus(LOCK_DURATION).isAfter(now);
+  }
+
+  /** Time until the lock ends; zero when not locked. */
+  public Duration lockRemaining(Instant now) {
+    return isLockedAt(now) ? Duration.between(now, lockedAt.plus(LOCK_DURATION)) : Duration.ZERO;
+  }
+
+  /**
+   * Counts a wrong password. A failure after the window has passed starts a new window (an expired
+   * lock is also cleared). The fifth failure inside one window locks the account.
+   *
+   * @return true when this failure locked the account
+   */
+  public boolean recordFailure(Instant now) {
+    if (loginFailedAt == null || !loginFailedAt.plus(FAILURE_WINDOW).isAfter(now)) {
+      loginFailedCount = 1;
+      loginFailedAt = now;
+      status = UserStatus.ACTIVE;
+      lockedAt = null;
+    } else {
+      loginFailedCount++;
+    }
+    if (loginFailedCount >= MAX_FAILURES) {
+      loginFailedCount = MAX_FAILURES;
+      status = UserStatus.LOCKED;
+      lockedAt = now;
+      return true;
+    }
+    return false;
+  }
+
+  /** Successful login clears the failure state (policy §1.2). */
+  public void recordSuccess() {
+    loginFailedCount = 0;
+    loginFailedAt = null;
+    lockedAt = null;
+    status = UserStatus.ACTIVE;
   }
 
   public Long getId() {
@@ -97,5 +152,9 @@ public class User extends BaseTimeEntity {
 
   public Instant getLockedAt() {
     return lockedAt;
+  }
+
+  public Instant getLoginFailedAt() {
+    return loginFailedAt;
   }
 }
