@@ -1,5 +1,6 @@
 package com.r1nn.contextq.global.config;
 
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -44,5 +45,15 @@ class SecurityConfigTest {
     mockMvc
         .perform(MockMvcRequestBuilders.get("/api/v1/anything"))
         .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void rejectedRequestStillCarriesRequestId() throws Exception {
+    mockMvc
+        .perform(
+            MockMvcRequestBuilders.get("/api/v1/anything")
+                .header("X-Request-Id", "a1b2c3d4-0000-4000-8000-000000000001"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(header().string("X-Request-Id", "a1b2c3d4-0000-4000-8000-000000000001"));
   }
 }

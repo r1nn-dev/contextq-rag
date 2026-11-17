@@ -10,3 +10,6 @@ logging:
   level:
     root: WARN
     com.r1nn.contextq: INFO
+  structured:
+    format:
+      console: logstash   # JSON structured log (policy §9.4); MDC requestId is included
