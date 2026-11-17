@@ -1,0 +1,57 @@
+---
+title: Agents
+description: "Build an agent."
+---
+
+import AgentsIntroPy from '/snippets/code-samples/agents-intro-py.mdx';
+import AgentsIntroJs from '/snippets/code-samples/agents-intro-js.mdx';
+import AgentsMissingPy from '/snippets/code-samples/agents-missing-py.mdx';
+
+An agent is a model calling tools in a loop until a given task is complete.
+
+<img
+    src="/oss/images/core_agent_loop.svg"
+    style={{height: "300px"}}
+/>
+
+<Note>
+**Agent = Model + Harness** — the harness shapes what the model sees.
+</Note>
+
+@[`create_agent`] is a configurable harness. Call @[interrupt] to pause.
+
+:::python
+
+<AgentsIntroPy />
+
+:::
+:::js
+
+<AgentsIntroJs />
+
+Only JavaScript readers should ever see this paragraph about createAgent.
+
+:::
+
+## Core components
+
+<img src="/oss/images/harness.svg" />
+
+### Model
+
+Pass a model identifier string or an initialized model instance to the agent.
+
+<Tabs>
+<Tab title="Static model">
+Static models are configured once when creating the agent and never change.
+</Tab>
+</Tabs>
+
+{/* editor note: hidden */}
+
+<AgentsMissingPy />
+
+```python
+# fenced code is never touched: <Tabs> :::js @[`x`]
+import x from 'y'
+```

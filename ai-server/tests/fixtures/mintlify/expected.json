@@ -1,0 +1,79 @@
+{
+  "documents": [
+    {
+      "file_path": "src/oss/langchain/agents.mdx",
+      "title": "Agents",
+      "doc_type": "mdx",
+      "site_url": "https://docs.langchain.com/oss/python/langchain/agents",
+      "sections": [
+        {
+          "heading_path": "Agents",
+          "text": "An agent is a model calling tools in a loop until a given task is complete.\n\n**Agent = Model + Harness** — the harness shapes what the model sees.\n\n`create_agent` is a configurable harness. Call interrupt to pause.\n\n    ```python OpenAI\n    from langchain.agents import create_agent\n\n    agent = create_agent(model=\"openai:gpt-5\", tools=tools)\n    ```\n## Core components",
+          "line_numbers": [
+            10,
+            11,
+            18,
+            20,
+            21,
+            22,
+            25,
+            25,
+            25,
+            25,
+            25,
+            36
+          ]
+        },
+        {
+          "heading_path": "Agents > Core components > Model",
+          "text": "### Model\n\nPass a model identifier string or an initialized model instance to the agent.\n\nStatic model\nStatic models are configured once when creating the agent and never change.\n\n```python\n# fenced code is never touched: <Tabs> :::js @[`x`]\nimport x from 'y'\n```",
+          "line_numbers": [
+            40,
+            41,
+            42,
+            43,
+            45,
+            46,
+            49,
+            54,
+            55,
+            56,
+            57
+          ]
+        }
+      ]
+    },
+    {
+      "file_path": "src/oss/python/migrate/langchain-v1.mdx",
+      "title": "LangChain v1 migration guide",
+      "doc_type": "mdx",
+      "site_url": "https://docs.langchain.com/oss/python/migrate/langchain-v1",
+      "sections": [
+        {
+          "heading_path": "LangChain v1 migration guide",
+          "text": "This guide outlines the major changes between LangChain v1 and previous versions.",
+          "line_numbers": [
+            5
+          ]
+        }
+      ]
+    }
+  ],
+  "report": {
+    "files_read": 3,
+    "files_by_type": {
+      "mdx": 3
+    },
+    "snippet_references": 2,
+    "missing_snippets": [
+      {
+        "file_path": "src/oss/langchain/agents.mdx",
+        "component": "AgentsMissingPy",
+        "import_path": "/snippets/code-samples/agents-missing-py.mdx"
+      }
+    ],
+    "empty_documents": [
+      "src/oss/langchain/retrieval.mdx"
+    ]
+  }
+}
