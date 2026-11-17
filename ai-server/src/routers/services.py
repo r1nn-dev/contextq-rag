@@ -1,7 +1,9 @@
 """내부 API가 쓰는 서비스 객체 묶음 — 첫 요청 때 만들어 앱 상태에 둔다.
 
-헬스체크·문서는 OpenAI 키·DB 없이도 열려야 하므로 기동 시점이 아니라 첫 사용 시점에 만든다.
-테스트는 `app.dependency_overrides[get_services]`로 바꿔 끼운다.
+- 인덱스 묶음(DB·Chroma·포인터 캐시): 헬스체크·소스 조회·reload·질의가 함께 쓴다. OpenAI 키 불필요.
+- 질의 묶음: 인덱스 묶음 + 임베딩·생성 클라이언트. 포인터 캐시를 공유해야 reload가 질의에 반영된다.
+헬스체크·문서는 OpenAI 키 없이도 열려야 하므로 기동 시점이 아니라 첫 사용 시점에 만든다.
+테스트는 `app.dependency_overrides[get_services | get_index_services]`로 바꿔 끼운다.
 """
 
 import asyncio
@@ -10,12 +12,12 @@ from dataclasses import dataclass
 
 from fastapi import Request
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 from src.config.ingest_config import load_embedding_config
 from src.config.rag_config import RagConfig, load_llm_config, load_rag_config
 from src.config.settings import Settings
-from src.ingest.store import ChromaVectorStore
+from src.ingest.store import ChromaVectorStore, VectorStore
 from src.pipeline.generator import OpenAIAnswerGenerator
 from src.pipeline.single import SingleModePipeline
 from src.retrieval.embedding import OpenAIQueryEmbedder
@@ -27,6 +29,28 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+class IndexServices:
+    session_factory: sessionmaker[Session]
+    store: VectorStore
+    pointers: PointerCache
+
+
+def build_index_services(settings: Settings) -> IndexServices:
+    session_factory = sessionmaker(create_engine(settings.database_url, pool_pre_ping=True))
+    return IndexServices(
+        session_factory, ChromaVectorStore(settings.chroma_data_dir), PointerCache(session_factory)
+    )
+
+
+def get_index_services(request: Request) -> IndexServices:
+    services: IndexServices | None = getattr(request.app.state, "index_services", None)
+    if services is None:
+        services = build_index_services(request.app.state.settings)
+        request.app.state.index_services = services
+    return services
+
+
+@dataclass
 class ChatServices:
     config: RagConfig
     pointers: PointerCache | None  # reload가 무효화한다 (R-4-5)
@@ -35,12 +59,11 @@ class ChatServices:
     slots: asyncio.Semaphore  # 시스템 전체 동시 처리 상한 (정책서 §8.1)
 
 
-def build_services(settings: Settings) -> ChatServices:
+def build_services(settings: Settings, index: IndexServices) -> ChatServices:
     config = load_rag_config()
-    engine = create_engine(settings.database_url, pool_pre_ping=True)
-    pointers = PointerCache(sessionmaker(engine))
+    pointers = index.pointers
     retriever = ChromaRetriever(
-        ChromaVectorStore(settings.chroma_data_dir),
+        index.store,
         pointers,
         OpenAIQueryEmbedder(settings.openai_api_key, load_embedding_config()),
     )
@@ -59,7 +82,7 @@ def get_services(request: Request) -> ChatServices:
     services: ChatServices | None = getattr(request.app.state, "chat_services", None)
     if services is None:
         try:
-            services = build_services(request.app.state.settings)
+            services = build_services(request.app.state.settings, get_index_services(request))
         except Exception:
             logger.exception("chat_services_init_failed")
             raise ApiError(
