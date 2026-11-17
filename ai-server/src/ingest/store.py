@@ -5,7 +5,10 @@
 - 서버 모드로 바꿀 때는 `VectorStore` 구현만 바꾼다 (기획서 결정 3).
 """
 
+from __future__ import annotations
+
 from collections.abc import Iterator, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -48,6 +51,17 @@ class VectorStore(Protocol):
     def delete_collection(self, name: str) -> None: ...
 
     def has_collection(self, name: str) -> bool: ...
+
+    def query(self, name: str, embedding: Sequence[float], k: int) -> list[QueryHit]:
+        """similarity 내림차순 Top-k (similarity = 1 − cosine distance)."""
+        ...
+
+
+@dataclass(frozen=True)
+class QueryHit:
+    chunk_id: str
+    similarity: float
+    metadata: dict[str, Any]
 
 
 class ChromaVectorStore:
@@ -127,3 +141,17 @@ class ChromaVectorStore:
     def delete_collection(self, name: str) -> None:
         if self.has_collection(name):
             self.client.delete_collection(name)
+
+    def query(self, name: str, embedding: Sequence[float], k: int) -> list[QueryHit]:
+        collection = self.client.get_collection(name, embedding_function=None)
+        vector: list[Sequence[float]] = [list(embedding)]
+        result = collection.query(
+            query_embeddings=vector, n_results=k, include=["metadatas", "distances"]
+        )
+        ids = result["ids"][0]
+        distances = (result["distances"] or [[]])[0]
+        metadatas = (result["metadatas"] or [[]])[0]
+        return [
+            QueryHit(chunk_id, 1.0 - float(distance), dict(metadata or {}))
+            for chunk_id, distance, metadata in zip(ids, distances, metadatas, strict=True)
+        ]

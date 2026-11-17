@@ -1,0 +1,34 @@
+# 검증 게이트 스모크 질문 — 정책서 §4.4
+# 버전당 5문항: 기대 파일이 Top-K 안에 있고 top-1 similarity ≥ τ 이어야 통과 (5문항 중 5문항)
+# 기대 파일은 저장소 루트 기준 경로이며 data-sources.md §3 포함 경로 안에 있어야 한다.
+
+# 정책서 미결정 사항 "NO_CONTEXT 임계값 τ" 가정값 (개발용).
+# τ 확정(R-4-6, E1) 시 이 값도 같은 값으로 바꾸고 스모크를 다시 실행한다.
+tau: 0.30
+top_k: 5
+
+sources:
+  langchain_v03:
+    - question: "How do I use chat models to call tools?"
+      expected_file: "docs/docs/how_to/tool_calling.ipynb"
+    - question: "What is the LangChain Expression Language (LCEL)?"
+      expected_file: "docs/docs/concepts/lcel.mdx"
+    - question: "How do I stream output from runnables and chat models?"
+      expected_file: "docs/docs/how_to/streaming.ipynb"
+    - question: "How do I return structured output from a chat model?"
+      expected_file: "docs/docs/how_to/structured_output.ipynb"
+    - question: "How do I migrate off ConversationBufferMemory?"
+      expected_file: "docs/docs/versions/migrating_memory/conversation_buffer_memory.ipynb"
+  langchain_v1x:
+    # create_agent·도구 호출은 여러 문서에 흩어져 있어 agents.mdx 고유 개념(harness)으로 묻는다
+    # (실측 run 2: 기존 질문은 Top-5 밖, 이 질문은 1위 0.703·3위 0.639)
+    - question: "What is an agent harness and what are its core components?"
+      expected_file: "src/oss/langchain/agents.mdx"
+    - question: "How do I stream agent progress and LLM tokens?"
+      expected_file: "src/oss/langchain/streaming.mdx"
+    - question: "How do I get structured output from an agent?"
+      expected_file: "src/oss/langchain/structured-output.mdx"
+    - question: "How do I add short-term memory to an agent?"
+      expected_file: "src/oss/langchain/short-term-memory.mdx"
+    - question: "What changed when migrating to LangChain v1?"
+      expected_file: "src/oss/python/migrate/langchain-v1.mdx"

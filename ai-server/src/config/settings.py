@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # Chroma 임베디드 저장 경로 (CHROMA_DATA_DIR) — ADR-002
     chroma_data_dir: Path = Path("data/chroma")
 
+    # 검증 게이트 permalink 전수 검증용 GitHub 토큰 (GITHUB_TOKEN, 선택) — 정책서 §4.4
+    github_token: str = ""
+
     # 생성 단계를 고정 토큰으로 대체하는 mock LLM (LLM_MOCK) — local·loadtest 전용
     llm_mock: bool = False
 

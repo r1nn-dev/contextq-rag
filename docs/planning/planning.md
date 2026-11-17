@@ -605,7 +605,7 @@ agent = create_agent(model=..., tools=[...])
 | 계약 | SSE 이벤트 스키마(meta → token* → done 순서) | JSON Schema |
 | E2E | 비로그인 5회, 로그인 이력, 비교 모드, NO_CONTEXT, 운영 프로필 mock 비활성 | Playwright 또는 수동 체크리스트 |
 | 부하 | k6 시나리오 S0(smoke)~S4(policy) | k6 (로컬 PC에서 실행) |
-| 데이터 | 수집 검증 (메타데이터 완전성, permalink HTTP 200) | `make validate-index` |
+| 데이터 | 수집 검증 (메타데이터 완전성, permalink HTTP 200) | `make ingest`의 VALIDATING 게이트 (정책서 §4.4, 결과는 `ingest_runs.validation_report`) |
 
 ### 8.2 필수 테스트 케이스
 

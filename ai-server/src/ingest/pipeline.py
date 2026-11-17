@@ -2,24 +2,28 @@
 
 현재 구현 범위: PENDING(파라미터 기록) → COLLECTING(sparse checkout, commit_sha 기록)
 → PROCESSING(Source Adapter 전처리 → 청킹 → 메타데이터 조립, 리포트)
-→ EMBEDDING(임베딩 → run 전용 컬렉션 저장, 토큰·비용 기록) → VALIDATING.
-검증 게이트 이후는 후속 작업에서 잇는다.
+→ EMBEDDING(임베딩 → run 전용 컬렉션 저장, 토큰·비용 기록)
+→ VALIDATING(정책서 §4.4 게이트, 10분 제한) → READY. 활성화는 별도 명령(activation.py)이다.
 어느 단계든 실패하면 해당 run만 FAILED로 만들고 기존 ACTIVE run은 건드리지 않는다 (RAG-10).
 """
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.adapters.base import AdapterContext, create_adapter
 from src.config.ingest_config import (
+    SmokeConfig,
     Strategy,
     embedding_model_name,
     load_chunking_config,
+    load_embedding_config,
     params_hash,
 )
 from src.domain.ingest_status import IngestStatus
@@ -31,6 +35,16 @@ from src.ingest.metadata import PreparedChunk, RunContext, assemble
 from src.ingest.reports import report_dir, write_json, write_missing_snippets
 from src.ingest.runs import create_run, fail, get_source, now_utc, transition
 from src.ingest.store import VectorStore, collection_name
+from src.ingest.validate import (
+    VALIDATION_TIMEOUT_SECONDS,
+    CheckResult,
+    Deadline,
+    ValidationTimeoutError,
+    check_chunk_count,
+    check_collection_metadata,
+    check_records,
+    check_smoke,
+)
 
 
 class IngestFailedError(RuntimeError):
@@ -58,15 +72,26 @@ class IngestOptions:
     accept_drift: bool = False
     strategy: Strategy | None = None  # None이면 configs/ingest.yaml 기본 전략
     remote_base: str = GITHUB
+    validation_timeout_seconds: float = VALIDATION_TIMEOUT_SECONDS
+
+
+class PermalinkCheck(Protocol):
+    def check(self, permalinks: Iterable[str], deadline: Deadline) -> CheckResult: ...
 
 
 @dataclass(frozen=True)
 class IngestDependencies:
-    """외부 자원 — 테스트에서는 가짜 임베더·임시 Chroma로 바꾼다."""
+    """외부 자원 — 테스트에서는 가짜 임베더·임시 Chroma·가짜 permalink 검사기로 바꾼다."""
 
     embedder_factory: Callable[[], EmbeddingClient]
     store: VectorStore
     price_per_1m_tokens_usd: float
+    permalink_checker: PermalinkCheck
+    smoke: SmokeConfig
+
+
+class ValidationFailedError(RuntimeError):
+    """게이트 항목 중 하나 이상 실패 — run은 FAILED(VALIDATING), 기존 ACTIVE 유지 (RAG-10)."""
 
 
 @dataclass
@@ -197,6 +222,101 @@ def _embed(
     session.commit()
 
 
+def _as_utc(value: datetime) -> datetime:
+    # SQLite(단위 테스트)는 tz 정보를 버리므로 UTC로 간주한다
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
+def _gate_checks(
+    run: IngestRun, deps: IngestDependencies, deadline: Deadline, checks: list[CheckResult]
+) -> None:
+    """정책서 §4.4 게이트 항목을 순서대로 실행해 checks에 쌓는다."""
+    name = collection_name(run.source_key, run.id)
+    model, dim = run.embedding_model or "", load_embedding_config().dimensions
+    store = deps.store
+
+    checks.append(check_chunk_count(run.chunk_count or 0, run.prev_chunk_count, run.accept_drift))
+    checks.append(
+        check_collection_metadata(
+            store.collection_metadata(name), expected_model=model, expected_dim=dim
+        )
+    )
+    checks.extend(
+        check_records(
+            store.iter_records(name, include_embeddings=True),
+            expected_model=model,
+            expected_dim=dim,
+            deadline=deadline,
+        )
+    )
+    deadline.check()
+    permalinks = (str(r["metadata"].get("permalink", "")) for r in store.iter_records(name))
+    checks.append(deps.permalink_checker.check(permalinks, deadline))
+    deadline.check()
+    checks.append(
+        check_smoke(
+            store,
+            name,
+            deps.embedder_factory(),
+            deps.smoke.sources.get(run.source_key, []),
+            tau=deps.smoke.tau,
+            top_k=deps.smoke.top_k,
+        )
+    )
+    deadline.check()
+
+
+def _validate(
+    session: Session, run: IngestRun, deps: IngestDependencies, options: IngestOptions
+) -> None:
+    """VALIDATING — 게이트 전 항목 통과 시 READY, 아니면 리포트를 남기고 실패를 올린다."""
+    started = now_utc()
+    deadline = Deadline.after(options.validation_timeout_seconds)
+    previous = session.scalar(
+        select(IngestRun).where(
+            IngestRun.source_key == run.source_key, IngestRun.status == IngestStatus.ACTIVE
+        )
+    )
+    run.prev_chunk_count = previous.chunk_count if previous else None
+
+    checks: list[CheckResult] = []
+    timed_out = False
+    try:
+        _gate_checks(run, deps, deadline, checks)
+    except ValidationTimeoutError:
+        timed_out = True
+
+    passed = not timed_out and all(c.passed for c in checks)
+    run.validation_report = {
+        "passed": passed,
+        "timed_out": timed_out,
+        "duration_ms": int((now_utc() - started).total_seconds() * 1000),
+        "checks": [c.as_dict() for c in checks],
+        "snapshot_restore": "해당 없음 — RESTORING 경로에서만 검사 (정책서 §4.4)",
+    }
+    run.updated_at = now_utc()
+    session.commit()
+
+    if timed_out:
+        raise ValidationTimeoutError(
+            f"VALIDATION_TIMEOUT: {options.validation_timeout_seconds:.0f}초 안에 끝나지 않음"
+        )
+    if not passed:
+        failed = ", ".join(c.name for c in checks if not c.passed)
+        raise ValidationFailedError(f"VALIDATION_FAILED: {failed}")
+
+    completed = now_utc()
+    duration = completed - _as_utc(run.started_at or completed)
+    transition(
+        session,
+        run,
+        IngestStatus.READY,
+        completed_at=completed,
+        ingest_duration_ms=int(duration.total_seconds() * 1000),
+    )
+    session.commit()
+
+
 def run_ingest(
     session_factory: sessionmaker[Session],
     source_key: str,
@@ -228,6 +348,7 @@ def run_ingest(
 
             processed = _process(session, run, source, checkout.root, options)
             _embed(session, run, processed.chunks, deps)
+            _validate(session, run, deps, options)
         except Exception as exc:
             session.rollback()
             stage = run.status
