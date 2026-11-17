@@ -78,9 +78,9 @@ ContaminationRate@K = (1/|Q|) × Σ ContaminationRate@K(q)
 
 | 메트릭 | 정의 | 목표 |
 | --- | --- | --- |
-| **Recall_NC** | Q-oos 중 NO_CONTEXT 반환 비율 | ≥ 0.90 |
+| **Recall_NC** | Q-oos τ 표본(9문항) 중 NO_CONTEXT 반환 비율, 소스별 | ≥ 0.80 (소스별 9건 중 8건) |
 | **FPR_NC** | Q-ret 중 NO_CONTEXT 오발동 비율 | ≤ 0.05 |
-| **F1_NC** | 2 × (Recall_NC × (1−FPR_NC)) / (Recall_NC + (1−FPR_NC)) | 최대화 |
+| **F1_NC** | 2 × (Recall_NC × (1−FPR_NC)) / (Recall_NC + (1−FPR_NC)) | FPR_NC ≤ 0.05 범위에서 최대화 (τ 선택 기준) |
 
 τ 결정 절차: `docs/experiments/protocol.md` > 실험 E1 참조.
 
@@ -308,7 +308,7 @@ E1·E2는 평가 러너가 행 단위 결과와 요약을 함께 만든다(`make
 | 실험 | 메트릭 | 합격 기준 |
 | --- | --- | --- |
 | E1 | ContaminationRate@5 (E1-C) | ≤ 0.00 (컬렉션 분리 조건에서 혼입 0건) |
-| E1 | Recall_NC | ≥ 0.90 |
+| E1 | Recall_NC | ≥ 0.80 (소스별 τ 표본 9건 중 8건, 기획서 기준) |
 | E1 | FPR_NC | ≤ 0.05 |
 | E2 | Hit@5 (채택 전략) | ≥ 0.70 |
 | E2 | MRR@5 (채택 전략) | ≥ 0.60 |

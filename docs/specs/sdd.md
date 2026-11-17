@@ -113,7 +113,7 @@ data: {"event": "done", "status": "NO_CONTEXT", "statusReason": "LOW_SIMILARITY"
 ```
 
 **임계값 τ 결정:**
-- E1 실험 프로토콜(`docs/experiments/protocol.md` > 실험 E1)에 따라 Q-oos 질문셋으로 FPR ≤ 5% 조건에서 τ를 결정한다.
+- E1 실험 프로토콜(`docs/experiments/protocol.md` > 실험 E1)에 따라 Q-ret·Q-oos 최대 유사도 분포에서 FPR_NC ≤ 5%를 만족하는 τ 중 F1_NC 최대값을 source_key별로 정한다(`eval/decision_rules.md` §3).
 - τ는 `configs/retriever.yaml`에 버전별로 기록한다.
 
 **인수 기준 (RAG-06):**
@@ -367,7 +367,7 @@ Chroma는 Python-native PersistentClient로 설치 없이 프로세스 내 임�
 
 **Q4. NO_CONTEXT 임계값 τ를 어떻게 결정했는가?**
 
-Q-oos 질문셋(버전 범위 밖 주제 10문항)으로 FPR(정상 질문을 NO_CONTEXT로 오분류하는 비율) ≤ 5% 조건에서 precision-recall 커브를 그려 τ를 선택한다. τ가 낮으면 범위 밖 질문에도 LLM이 응답하고, τ가 너무 높으면 정상 질문도 차단된다. 버전별로 임베딩 분포가 다르므로 `configs/retriever.yaml`에 `tau_v03`, `tau_v1x`를 별도로 기록한다.
+Q-ret(질문 대상 버전 검색)과 Q-oos τ 표본 9문항(두 버전 검색)의 최대 유사도 분포에서, 정상 질문을 NO_CONTEXT로 오분류하는 비율(FPR_NC)이 5% 이하인 τ 중 F1_NC가 최대인 값을 고른다(`eval/decision_rules.md` §3). τ가 낮으면 범위 밖 질문에도 LLM이 응답하고, τ가 너무 높으면 정상 질문도 차단된다. 버전별로 임베딩 분포가 다르므로 source_key별 τ를 `ai-server/configs/rag.yaml` `retrieval.thresholds`에 기록한다(ADR-008).
 
 **Q5. 비교 모드에서 왜 SSE 스트리밍 대신 Structured Outputs를 사용하는가?**
 
