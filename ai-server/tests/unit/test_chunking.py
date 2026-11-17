@@ -8,7 +8,9 @@ from src.ingest.chunking import (
     ChunkingError,
     line_range,
     make_chunker,
+    merge_small,
     splits_code_fence,
+    visible_chars,
 )
 
 CONFIG = load_chunking_config()
@@ -28,10 +30,12 @@ def test_line_range_maps_chars_to_original_lines() -> None:
     assert line_range(section, 3, 5) == (121, 122)
 
 
-@pytest.mark.parametrize("fence", ["```python", "    ```", "~~~"])
-def test_splits_code_fence(fence: str) -> None:
-    assert splits_code_fence(f"text\n{fence}\ncode")
-    assert not splits_code_fence(f"{fence}\ncode\n{fence}")
+@pytest.mark.parametrize(
+    ("opening", "closing"), [("```python", "```"), ("    ```", "    ```"), ("~~~", "~~~")]
+)
+def test_splits_code_fence(opening: str, closing: str) -> None:
+    assert splits_code_fence(f"text\n{opening}\ncode")
+    assert not splits_code_fence(f"{opening}\ncode\n{closing}")
 
 
 @pytest.mark.parametrize("strategy", ["A", "B"])
@@ -55,7 +59,7 @@ def test_chunks_never_cross_sections_and_keep_line_bounds(strategy: str) -> None
     assert len(one) > 1
     for chunk in one:
         assert 120 <= chunk["line_start"] <= chunk["line_end"] <= first.line_end
-        assert len(chunk["content"]) <= 1000
+        assert len(chunk["content"]) <= 1100  # 50자 미만 꼬리 병합분만큼 상한을 넘을 수 있다
     assert [c["heading_path"] for c in chunks][-1] == "T > Two"
     assert chunks[-1]["line_start"] == 300
 
@@ -103,3 +107,32 @@ def test_strategy_c_never_splits_code_fences() -> None:
     assert len(fenced) == 1 and len(fenced[0]["content"]) > 1000  # 상한보다 큰 펜스도 한 청크
     assert [c["line_start"] for c in chunks] == sorted(c["line_start"] for c in chunks)
     assert chunks[0]["line_start"] == 10 and chunks[-1]["line_end"] == 10 + len(lines) - 1
+
+
+def test_backticks_inside_code_string_are_not_a_split() -> None:
+    content = '```python\ntemplate = """```python\n{x}\n```"""\nprint(template)\n```'
+    assert not splits_code_fence(content)
+    assert splits_code_fence("```python\nx = 1")
+    assert splits_code_fence("x = 1\n```\nafter")  # 펜스 중간에서 시작한 청크
+
+
+def test_merge_small_into_previous_or_next() -> None:
+    sizes = {(0, 10): 80, (10, 12): 2, (12, 40): 60, (0, 12): 82}
+    assert merge_small([(0, 10), (10, 12), (12, 40)], lambda s: sizes.get(s, 100)) == [
+        (0, 12),
+        (12, 40),
+    ]
+    first_small = {(0, 2): 2, (0, 30): 70, (30, 60): 60}
+    assert merge_small([(0, 2), (2, 30), (30, 60)], lambda s: first_small.get(s, 100)) == [
+        (0, 30),
+        (30, 60),
+    ]
+
+
+@pytest.mark.parametrize("strategy", ["A", "B", "C"])
+def test_no_chunk_below_minimum(strategy: str) -> None:
+    body = ("sentence " * 12 + "\n\n") * 12 + "tail"
+    section = _section("T > S", body.split("\n"), 1)
+    chunks = make_chunker(strategy, CONFIG.params(strategy)).chunk(_doc(section))  # type: ignore[arg-type]
+    assert all(visible_chars(c["content"]) >= 50 for c in chunks)
+    assert "tail" in chunks[-1]["content"]

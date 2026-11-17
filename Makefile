@@ -18,8 +18,8 @@ logs: ## Tail container logs
 # --- Index build (offline, local·staging only — ADR-005) ------------------
 # Requires INGEST_ENABLED=true and APP_PROFILE != prod; DB migrated (alembic upgrade head).
 
-ingest: ## Build a new index run for one source. Usage: make ingest SOURCE=langchain_v1x
-	cd ai-server && uv run python -m src.ingest.cli ingest --source $(SOURCE)
+ingest: ## Build a new index run for one source. Usage: make ingest SOURCE=langchain_v1x [STRATEGY=A|B|C]
+	cd ai-server && uv run python -m src.ingest.cli ingest --source $(SOURCE) $(if $(STRATEGY),--strategy $(STRATEGY),)
 
 activate-index: ## Activate a READY run (READY -> ACTIVE, pointer swap). Usage: make activate-index RUN=<id>
 	@echo "activate-index: not yet implemented"

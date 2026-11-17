@@ -37,12 +37,19 @@ def get_source(session: Session, source_key: str) -> Source:
     return source
 
 
-def create_run(session: Session, source_key: str, *, accept_drift: bool = False) -> IngestRun:
-    """PENDING run을 발급한다. 카탈로그에 있는 소스만 허용한다."""
+def create_run(
+    session: Session, source_key: str, *, accept_drift: bool = False, **params: Any
+) -> IngestRun:
+    """PENDING run을 발급하고 실행 파라미터(청킹 전략 등)를 기록한다 (정책서 §10.1)."""
     get_source(session, source_key)
     if not can_transition(None, IngestStatus.PENDING):  # pragma: no cover - 표 고정값
         raise InvalidTransitionError("None → PENDING")
-    run = IngestRun(source_key=source_key, status=IngestStatus.PENDING, accept_drift=accept_drift)
+    for name in params:
+        if not hasattr(IngestRun, name):
+            raise AttributeError(f"ingest_runs에 없는 컬럼입니다: {name}")
+    run = IngestRun(
+        source_key=source_key, status=IngestStatus.PENDING, accept_drift=accept_drift, **params
+    )
     session.add(run)
     session.flush()
     return run

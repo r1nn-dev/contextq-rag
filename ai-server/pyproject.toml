@@ -20,6 +20,7 @@ dependencies = [
     "psycopg[binary]>=3.2",        # PostgreSQL driver for SQLAlchemy (postgresql+psycopg)
     "alembic>=1.13",               # ai schema migrations (backend Flyway owns app schema)
     "langchain-text-splitters>=0.3",  # chunking strategies A/B/C
+    "tiktoken>=0.7",
 ]
 
 [dependency-groups]

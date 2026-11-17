@@ -32,6 +32,11 @@ def build_parser(settings: Settings) -> argparse.ArgumentParser:
         ingest = commands.add_parser("ingest", help="소스 하나를 새 run으로 수집한다")
         ingest.add_argument("--source", required=True, help="ai.sources.source_key")
         ingest.add_argument(
+            "--strategy",
+            choices=["A", "B", "C"],
+            help="청킹 전략 (기본: configs/ingest.yaml default_strategy)",
+        )
+        ingest.add_argument(
             "--accept-drift",
             action="store_true",
             help="검증 게이트의 청크 수 드리프트(±30%%) 초과를 허용한다 (정책서 §4.4)",
@@ -63,12 +68,14 @@ def main(argv: Sequence[str] | None = None, settings: Settings | None = None) ->
     try:
         if args.command == "ingest":
             options = IngestOptions(
-                data_dir=settings.ingest_data_dir, accept_drift=args.accept_drift
+                data_dir=settings.ingest_data_dir,
+                accept_drift=args.accept_drift,
+                strategy=args.strategy,
             )
             summary = run_ingest(session_factory, args.source, options)
             print(
                 f"run {summary.run_id} ({args.source}): {summary.status} — "
-                f"문서 {summary.documents}, 섹션 {summary.sections}, "
+                f"문서 {summary.documents}, 섹션 {summary.sections}, 청크 {summary.chunks}, "
                 f"누락 스니펫 {summary.missing_snippets}"
             )
         return 0

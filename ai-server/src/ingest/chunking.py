@@ -1,9 +1,13 @@
 """청킹 전략 A·B·C — interfaces.md §4 `DocumentChunker`, doc-source.md §6.
 
 청크는 섹션(전략 C는 H2 묶음) 경계를 넘지 않고, 원문 라인 범위를 가진다.
+공백 제외 50자 미만 청크는 만들지 않는다 — 같은 섹션의 바로 앞 청크(첫 청크면 다음 청크)에
+병합한다 (정책서 §4.3 "50자 미만 청크 0건").
 """
 
+import logging
 import re
+from collections.abc import Callable
 from typing import Any, Protocol, TypedDict
 
 from langchain_text_splitters import (
@@ -12,11 +16,19 @@ from langchain_text_splitters import (
     TextSplitter,
 )
 
-from src.adapters.markdown import fence_mask, to_lines
+from src.adapters.markdown import MIN_SECTION_CHARS, fence_mask, to_lines
 from src.config.ingest_config import Strategy
 from src.domain.documents import NormalizedDocument, Section
 
-_FENCE_LINE = re.compile(r"^\s*(`{3,}|~{3,})")
+# 전략 A는 문단이 상한보다 길면 청크마다 경고를 남긴다.
+# 크기 분포는 chunking.json(max_chars)으로 확인한다
+
+logging.getLogger("langchain_text_splitters.base").setLevel(logging.ERROR)
+
+MIN_CHUNK_CHARS = MIN_SECTION_CHARS
+_FENCE_OPEN = re.compile(r"^\s*(`{3,}|~{3,})")
+
+Span = tuple[int, int]  # 전략 A·B: 문자 [start, end) / 전략 C: 줄 [first, last]
 
 
 class Chunk(TypedDict):
@@ -34,6 +46,10 @@ class DocumentChunker(Protocol):
     def chunk(self, document: NormalizedDocument) -> list[Chunk]: ...
 
 
+def visible_chars(text: str) -> int:
+    return len("".join(text.split()))
+
+
 def line_range(section: Section, start: int, length: int) -> tuple[int, int]:
     """section.text의 문자 구간 [start, start+length)이 걸친 원문 라인 범위."""
     first = section.text.count("\n", 0, start)
@@ -42,8 +58,40 @@ def line_range(section: Section, start: int, length: int) -> tuple[int, int]:
 
 
 def splits_code_fence(content: str) -> bool:
-    """펜스 줄 수가 홀수면 청크 경계가 코드 펜스를 가른 것이다 (A·B 사후 검사)."""
-    return sum(1 for line in content.split("\n") if _FENCE_LINE.match(line)) % 2 == 1
+    """청크 끝에서 코드 펜스가 열려 있으면 청크 경계가 펜스를 가른 것이다 (A·B 사후 검사).
+
+    펜스 안 문자열에 든 ``` 는 닫는 펜스로 보지 않는다 (펜스 판정은 fence_mask와 같은 규칙).
+    """
+    marker: str | None = None
+    for line in content.split("\n"):
+        if marker is None:
+            match = _FENCE_OPEN.match(line)
+            if match:
+                marker = match.group(1)
+        else:
+            stripped = line.strip()
+            if stripped.startswith(marker[0] * len(marker)) and set(stripped) == {marker[0]}:
+                marker = None
+    return marker is not None
+
+
+def merge_small(spans: list[Span], size: Callable[[Span], int]) -> list[Span]:
+    """크기가 MIN_CHUNK_CHARS 미만인 구간을 바로 앞 구간(첫 구간이면 다음 구간)에 합친다."""
+    merged: list[Span] = []
+    carry: Span | None = None
+    for span in spans:
+        if carry is not None:
+            span = (carry[0], span[1])
+            carry = None
+        if size(span) >= MIN_CHUNK_CHARS:
+            merged.append(span)
+        elif merged:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], span[1]))
+        else:
+            carry = span
+    if carry is not None:  # 구간 전체가 작으면 하나로 남긴다 (섹션 자체는 50자 이상)
+        merged.append(carry)
+    return merged
 
 
 def _require_sections(document: NormalizedDocument) -> None:
@@ -57,23 +105,33 @@ class SplitterChunker:
     def __init__(self, splitter: TextSplitter) -> None:
         self.splitter = splitter
 
+    def _spans(self, document: NormalizedDocument, section: Section) -> list[Span]:
+        spans: list[Span] = []
+        cursor = 0
+        for piece in self.splitter.create_documents([section.text]):
+            content = piece.page_content
+            start = int(piece.metadata.get("start_index", -1))
+            if start < 0:
+                start = section.text.find(content, cursor)
+            if start < 0:
+                raise ChunkingError(f"청크 위치를 찾지 못했습니다: {document.file_path}")
+            cursor = start
+            spans.append((start, start + len(content)))
+        return spans
+
     def chunk(self, document: NormalizedDocument) -> list[Chunk]:
         _require_sections(document)
         chunks: list[Chunk] = []
         for section in document.sections:
-            cursor = 0
-            for piece in self.splitter.create_documents([section.text]):
-                content = piece.page_content
-                start = int(piece.metadata.get("start_index", -1))
-                if start < 0:
-                    start = section.text.find(content, cursor)
-                if start < 0:
-                    raise ChunkingError(f"청크 위치를 찾지 못했습니다: {document.file_path}")
-                cursor = start
-                line_start, line_end = line_range(section, start, len(content))
+            text = section.text
+            spans = merge_small(
+                self._spans(document, section), lambda s: visible_chars(text[s[0] : s[1]])
+            )
+            for start, end in spans:
+                line_start, line_end = line_range(section, start, end - start)
                 chunks.append(
                     Chunk(
-                        content=content,
+                        content=text[start:end],
                         heading_path=section.heading_path,
                         line_start=line_start,
                         line_end=line_end,
@@ -99,10 +157,10 @@ def group_sections(sections: tuple[Section, ...], header_depth: int) -> list[Sec
     return groups
 
 
-def _blocks(lines: list[str]) -> list[tuple[int, int]]:
-    """펜스 밖 빈 줄로 나눈 문단 블록 [start, end] 목록. 코드 펜스는 한 블록 안에 남는다."""
+def _blocks(lines: list[str]) -> list[Span]:
+    """펜스 밖 빈 줄로 나눈 문단 블록 [first, last] 목록. 코드 펜스는 한 블록 안에 남는다."""
     mask = fence_mask(to_lines("\n".join(lines)))
-    blocks: list[tuple[int, int]] = []
+    blocks: list[Span] = []
     start: int | None = None
     for i, (text, in_fence) in enumerate(zip(lines, mask, strict=True)):
         if not in_fence and not text.strip():
@@ -128,10 +186,14 @@ class StructureChunker:
         chunks: list[Chunk] = []
         for group in group_sections(document.sections, self.header_depth):
             lines = group.text.split("\n")
-            for first, last in self._pack(lines):
+
+            def joined(span: Span, lines: list[str] = lines) -> str:
+                return "\n".join(lines[span[0] : span[1] + 1])
+
+            for first, last in merge_small(self._pack(lines), lambda s: visible_chars(joined(s))):
                 chunks.append(
                     Chunk(
-                        content="\n".join(lines[first : last + 1]),
+                        content=joined((first, last)),
                         heading_path=group.heading_path,
                         line_start=group.line_numbers[first],
                         line_end=group.line_numbers[last],
@@ -139,17 +201,14 @@ class StructureChunker:
                 )
         return chunks
 
-    def _size(self, lines: list[str], first: int, last: int) -> int:
-        return len("\n".join(lines[first : last + 1]))
-
-    def _pack(self, lines: list[str]) -> list[tuple[int, int]]:
+    def _pack(self, lines: list[str]) -> list[Span]:
         """문단 블록을 상한까지 이어 담는다. 상한을 넘는 단일 블록은 그대로 한 청크다."""
-        ranges: list[tuple[int, int]] = []
-        current: tuple[int, int] | None = None
+        ranges: list[Span] = []
+        current: Span | None = None
         for first, last in _blocks(lines):
             if current is None:
                 current = (first, last)
-            elif self._size(lines, current[0], last) <= self.chunk_size:
+            elif len("\n".join(lines[current[0] : last + 1])) <= self.chunk_size:
                 current = (current[0], last)
             else:
                 ranges.append(current)
