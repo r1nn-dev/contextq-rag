@@ -75,6 +75,7 @@ ai-server/
 │   ├── eval/              # RAG 평가 — 질문셋 로더·검색 지표·평가 러너 (eval/ 데이터 사용)
 │   ├── ingest/            # 문서 파싱·청킹·Chroma 적재
 │   ├── pipeline/          # RAG 체인·LLM 호출 (LangChain LCEL)
+│   ├── retrieval/         # 버전 격리 검색 — 활성 인덱스 포인터·ACTIVE 컬렉션 검색·2차 검증 (ADR-004)
 │   ├── routers/           # FastAPI 라우터·엔드포인트
 │   └── main.py            # FastAPI 앱 엔트리포인트
 ├── configs/

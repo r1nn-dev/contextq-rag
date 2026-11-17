@@ -1,6 +1,6 @@
 # RAG 파이프라인 설계
 
-> **최종 수정**: 2026-11-06
+> **최종 수정**: 2026-11-17
 
 ---
 
@@ -30,7 +30,7 @@ Client
 [2. 임베딩]  EmbeddingClient → text-embedding-3-small
   │
   ▼
-[3. 벡터 검색]  Chroma langchain_{source_key}_run{active_id}  top_k=5
+[3. 벡터 검색]  Chroma {source_key}_run{active_run_id}  top_k=5  + 2차 메타데이터 검증(INV-02)
   │
   ├─ max_similarity < τ?
   │   └─ YES → [NO_CONTEXT 응답]  LLM 미호출, SSE meta→done 반환
@@ -139,7 +139,8 @@ user:
 | **컬렉션** | `{source_key}_run{active_run_id}` (ADR-004) |
 | **검색 방식** | cosine similarity |
 | **반환 수 k** | 5 (설정: `configs/retriever.yaml → top_k`) |
-| **버전 필터** | Chroma `where` 절: `{"source_key": {"$eq": "langchain_v03"}}` |
+| **버전 격리** | 1차: ACTIVE run 컬렉션 하나만 지정 (`where` 필터 미사용). 2차: 결과 청크의 `source_key`·`version`·`ingest_run_id`가 다르면 폐기 + ERROR 로그 (INV-02, ADR-004) |
+| **임베딩 모델 검사** | 컬렉션·청크의 `embedding_model` ≠ 질의 모델이면 검색 거부 (INV-03, `EMBEDDING_MODEL_MISMATCH`) |
 | **p95 목표** | 500ms (임베딩 포함, 8.3-1) |
 
 **컬렉션 조회 순서:**
@@ -432,6 +433,7 @@ yield SseEvent(event="error", data={
 | v0.1 | 최초 작성 |
 | v0.2 | §2.2 비교 모드 Structured Outputs 비스트리밍으로 재작성, §3.3 source_key로 통합(version 제거), §3.4 NormalizedDocument score→similarity/version→source_key, §3.6 seed=42 제거·channel 필드 제거·SINGLE 모드 명시, §4 NO_CONTEXT SSE로 수정, §5 asyncio queue+SSE→Structured Outputs로 전면 재작성, §6 active_collection.json 제거·seed 제거 |
 | v0.3 | §2.1 다이어그램 엔드포인트 `/api/chat` → `/api/v1/chat` 수정, §2.2 다이어그램 엔드포인트 `/api/chat (mode="COMPARE")` → `/api/v1/chat/compare` + 파라미터 snake_case 통일(source_key_a·source_key_b), §5 compare_pipeline 파라미터 주석 source_key_a·source_key_b로 정렬 |
+| v0.4 | §2.1 다이어그램 컬렉션 이름을 `{source_key}_run{active_run_id}`로 수정, §3.3 버전 필터(`where`) → 1차 컬렉션 지정 + 2차 메타데이터 검증·임베딩 모델 검사 (ADR-004, 정책서 §5.3) |
 
 ---
 
