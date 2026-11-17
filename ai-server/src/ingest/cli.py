@@ -13,9 +13,17 @@ from collections.abc import Sequence
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from src.config.ingest_config import load_embedding_config
 from src.config.settings import Settings
-from src.ingest.pipeline import IngestFailedError, IngestOptions, run_ingest
+from src.ingest.embedder import OpenAIEmbeddingClient
+from src.ingest.pipeline import (
+    IngestDependencies,
+    IngestFailedError,
+    IngestOptions,
+    run_ingest,
+)
 from src.ingest.runs import SourceNotFoundError
+from src.ingest.store import ChromaVectorStore
 
 FORBIDDEN_IN_PROFILE = "FORBIDDEN_IN_PROFILE"
 INGEST_COMMANDS = ("ingest",)
@@ -72,7 +80,13 @@ def main(argv: Sequence[str] | None = None, settings: Settings | None = None) ->
                 accept_drift=args.accept_drift,
                 strategy=args.strategy,
             )
-            summary = run_ingest(session_factory, args.source, options)
+            embedding = load_embedding_config()
+            deps = IngestDependencies(
+                embedder_factory=lambda: OpenAIEmbeddingClient(settings.openai_api_key, embedding),
+                store=ChromaVectorStore(settings.chroma_data_dir),
+                price_per_1m_tokens_usd=embedding.price_per_1m_tokens_usd,
+            )
+            summary = run_ingest(session_factory, args.source, options, deps)
             print(
                 f"run {summary.run_id} ({args.source}): {summary.status} — "
                 f"문서 {summary.documents}, 섹션 {summary.sections}, 청크 {summary.chunks}, "

@@ -5,3 +5,8 @@ llm:
 
 embedding:
   model: "text-embedding-3-small"  # 1536 dims (default)
+  dimensions: 1536                 # INV-03 검사 기준 (정책서 §4.4 임베딩 차원·모델)
+  batch_size: 100                  # 요청 1회당 입력 수
+  timeout_seconds: 60
+  max_retries: 3                   # OpenAI SDK 재시도 (지수 백오프)
+  price_per_1m_tokens_usd: 0.02    # text-embedding-3-small 단가 — 비용 기록용

@@ -46,9 +46,10 @@ services:
     environment:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       INTERNAL_TOKEN: ${INTERNAL_TOKEN}
-      CHROMA_DATA_PATH: ${CHROMA_DATA_PATH:-/app/chroma_db}
+      # 컨테이너 안 경로는 고정한다. .env의 CHROMA_DATA_DIR은 로컬(호스트) 실행용 상대 경로다
+      CHROMA_DATA_DIR: /app/chroma_db
     volumes:
-      - chroma_data:${CHROMA_DATA_PATH:-/app/chroma_db}
+      - chroma_data:/app/chroma_db
     networks:
       - contextq-net
 
