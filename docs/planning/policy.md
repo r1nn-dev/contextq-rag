@@ -166,7 +166,7 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 | 버전 의미 | `v1.x`는 "수집 커밋 시점의 main 문서"를 뜻하며 특정 마이너(1.0, 1.1)를 보장하지 않는다. UI는 버전명 옆에 커밋 SHA 앞 7자리와 수집일을 항상 함께 표시한다 |
 | 수집 언어 | Python 문서만. JS/TS 전용 페이지·코드 블록은 제외(1.x `:::js` 블록 제거) |
 | 포함 범위 | 개념·튜토리얼·how-to·마이그레이션 가이드(`migrate/langchain-v1` 포함 필수) |
-| 제외 범위 | `integrations/**`(수백 개 제공자 페이지, 버전 단절 학습과 무관하고 레이블링 비용 과다), `langgraph` 패키지 문서(별도 버전 체계, v0.3 ↔ v1.x 비교 프레이밍과 무관 — 관련 질문은 NO_CONTEXT 처리), 자동 생성 API Reference, LangSmith 문서, 블로그·릴리스 노트. 최종 경로 목록은 `docs/data-sources.md`에 커밋 SHA와 함께 고정. W1에서 Q-shared 초안에 integrations·langgraph가 gold인 질문이 있으면 해당 질문을 교체(제외 정책 변경 아님) |
+| 제외 범위 | `integrations/**`(수백 개 제공자 페이지, 버전 단절 학습과 무관하고 레이블링 비용 과다), `langgraph` 패키지 문서(별도 버전 체계, v0.3 ↔ v1.x 비교 프레이밍과 무관 — 관련 질문은 NO_CONTEXT 처리), 자동 생성 API Reference, LangSmith 문서, 블로그·릴리스 노트. 최종 경로 목록은 `docs/specs/data-sources.md`에 커밋 SHA와 함께 고정. W1에서 Q-shared 초안에 integrations·langgraph가 gold인 질문이 있으면 해당 질문을 교체(제외 정책 변경 아님) |
 | 활성 조건 | `enabled = true` AND ACTIVE run 존재. 둘 중 하나라도 거짓이면 메타 API에서 제외되고 신규 질문 불가 |
 | 비교 쌍 | `ai.compare_pairs`에 정의된 쌍만 허용. 현재 `(langchain_v03, langchain_v1x)` 1개. 순서는 항상 구버전 = A, 신버전 = B |
 | `compare_enabled` | 쌍의 양쪽 소스가 모두 활성 조건을 만족할 때만 true |

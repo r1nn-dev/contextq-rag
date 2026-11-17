@@ -62,7 +62,7 @@ The source of the document list is `docs/README.md`.
 | API contracts | `docs/specs/api-spec.md` |
 | DB schema | `docs/architecture/db-design.md` |
 | Service interfaces | `docs/specs/interfaces.md` |
-| Data sources | `docs/planning/data-sources.md` |
+| Data sources | `docs/specs/data-sources.md` |
 | Branches, commits, PRs | `CONTRIBUTING.md` §1.3 |
 | Code style, before a commit | `docs/ops/code-convention.md` |
 | Package structure | `docs/ops/package-structure.md` |

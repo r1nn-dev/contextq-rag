@@ -136,7 +136,7 @@ user:
 | 항목 | 값 |
 | --- | --- |
 | **구현체** | `ChromaRetriever` |
-| **컬렉션** | `langchain_{source_key}_run{active_id}` |
+| **컬렉션** | `{source_key}_run{active_run_id}` (ADR-004) |
 | **검색 방식** | cosine similarity |
 | **반환 수 k** | 5 (설정: `configs/retriever.yaml → top_k`) |
 | **버전 필터** | Chroma `where` 절: `{"source_key": {"$eq": "langchain_v03"}}` |
@@ -145,9 +145,9 @@ user:
 **컬렉션 조회 순서:**
 
 ```python
-# DB에서 ACTIVE 상태 ingest_run의 run_id를 조회
-active_id = db.query_active_run_id(source_key)   # ingest_runs WHERE status='ACTIVE' AND source_key=?
-collection_name = f"langchain_{source_key}_run{active_id}"
+# 활성 포인터에서 run id를 조회 (30초 캐시)
+active_run_id = db.query_active_run_id(source_key)   # ai.index_pointers WHERE source_key=?
+collection_name = f"{source_key}_run{active_run_id}"
 # source_key: "langchain_v03" | "langchain_v1x"
 ```
 

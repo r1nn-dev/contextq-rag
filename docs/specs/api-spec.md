@@ -939,7 +939,7 @@ data: {"event":"done", "status":"COMPLETED", ...}
 
 | 필드 | 타입 | 기본값 | 설명 |
 | --- | --- | --- | --- |
-| `acceptDrift` | boolean | false | VALIDATING 게이트에서 청크 수 드리프트(>10%) 허용 시 true |
+| `acceptDrift` | boolean | false | VALIDATING 게이트에서 청크 수 드리프트(직전 ACTIVE 대비 ±30% 초과, `policy.md` §4.4) 허용 시 true |
 
 **응답 202**
 
@@ -1138,7 +1138,7 @@ data: {"event":"done", "status":"NO_CONTEXT", "statusReason":"LOW_SIMILARITY", "
 | 필드 | 설명 |
 | --- | --- |
 | `runId` | `ai.ingest_runs`의 PK. backend가 INSERT 후 전달 |
-| `acceptDrift` | VALIDATING 게이트 청크 수 드리프트(>10%) 허용 여부 |
+| `acceptDrift` | VALIDATING 게이트 청크 수 드리프트(±30% 초과) 허용 여부 |
 
 **응답 202**
 

@@ -32,11 +32,11 @@
 
 | 케이스 | 조건 | 기대 결과 |
 | --- | --- | --- |
-| 빈 문서 | `document.content = ""` | `ChunkingError` 발생, 빈 리스트 반환 금지 |
+| 빈 문서 | `document.sections = ()` | `ChunkingError` 발생, 빈 리스트 반환 금지 |
 | 단일 청크 미만 | 전체 토큰 수 < `chunk_size` | 청크 1개, 원문과 동일 |
 | 코드 블록 보존 (전략 C) | 마크다운 코드 펜스 ```` ``` ```` 포함 문서 | 코드 블록이 단일 청크에 완전히 포함됨 (`span.start`~`span.end` 경계 검증) |
 | 오버랩 범위 | 연속 2개 청크 | 오버랩 토큰이 `0 ≤ overlap ≤ chunk_size` 범위 내 |
-| 메타데이터 전파 | `ParsedDocument(source_key="langchain_v03")` | 모든 `Chunk.metadata.source_key = "langchain_v03"` |
+| 라인 범위 전파 | 섹션 원문 라인 120~168 | 그 섹션의 모든 `Chunk`가 `120 ≤ line_start ≤ line_end ≤ 168` |
 | 이미 헤더 경계 (전략 C) | `##` 헤더 직전에서 분할 | 헤더가 다음 청크의 첫 줄 |
 
 **불변식 검증** (interfaces.md 7.4에서 발췌)

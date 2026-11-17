@@ -492,7 +492,7 @@ sequenceDiagram
             AI->>VDB: 청크 저장 (collection=sourceKey_runN)
             AI->>DB: UPDATE ingest_runs SET status=VALIDATING
 
-            AI->>AI: 검증 게이트 실행 (≤10분)<br/>① 청크 수 드리프트 <10% (acceptDrift=false 시)<br/>② 스모크 쿼리 5문항 통과<br/>③ permalink 100% 자동 검증
+            AI->>AI: 검증 게이트 실행 (≤10분)<br/>① 청크 수 드리프트 ±30% 이내 (acceptDrift=false 시)<br/>② 스모크 쿼리 5문항 통과<br/>③ permalink 100% 자동 검증
 
             alt 게이트 실패 또는 10분 초과 (VALIDATION_TIMEOUT)
                 AI->>DB: UPDATE ingest_runs SET status=FAILED,<br/>failure_stage=VALIDATING
