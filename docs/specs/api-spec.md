@@ -1068,7 +1068,7 @@ data: {"event":"done", "status":"NO_CONTEXT", "statusReason":"LOW_SIMILARITY", "
 4. 벡터 검색 — Chroma PersistentClient, top-K, cosine. INV-02 2차 메타데이터 검증
 5. 유사도 < τ → NO\_CONTEXT (meta + done 즉시 반환, LLM 미호출)
 6. 프롬프트 조립 + OpenAI 스트리밍 호출 (temperature 0, max\_tokens 1024)
-7. ai-server가 첫 16자 버퍼링 → sentinel `[[NO_ANSWER]]` 감지 시 NO\_CONTEXT 종결
+7. ai-server가 응답 앞부분을 보류해 sentinel `[[NO_ANSWER]]` 판정 — 맨 앞 또는 기준 버전 머리말 바로 뒤의 sentinel이면 토큰 없이 NO\_CONTEXT 종결 (보류 최대 머리말 길이 + 16자, 정책서 §5.4)
 8. token 이벤트 스트리밍 → done 이벤트
 9. Semaphore 해제
 
