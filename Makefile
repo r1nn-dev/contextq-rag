@@ -2,7 +2,7 @@
 # Shortcut commands for local development.
 # Prerequisites: Docker Desktop, uv, node/npm, lefthook
 
-.PHONY: up down logs ingest activate-index test hooks help
+.PHONY: up down logs ingest activate-index rollback-index test hooks help
 
 # --- Docker Compose -------------------------------------------------------
 
@@ -22,7 +22,10 @@ ingest: ## Build a new index run for one source. Usage: make ingest SOURCE=langc
 	cd ai-server && uv run python -m src.ingest.cli ingest --source $(SOURCE) $(if $(STRATEGY),--strategy $(STRATEGY),)
 
 activate-index: ## Activate a READY run (READY -> ACTIVE, pointer swap). Usage: make activate-index RUN=<id>
-	@echo "activate-index: not yet implemented"
+	cd ai-server && uv run python -m src.ingest.cli activate --run $(RUN)
+
+rollback-index: ## Roll back to the previous SUPERSEDED run (1 generation). Usage: make rollback-index SOURCE=<key>
+	cd ai-server && uv run python -m src.ingest.cli rollback --source $(SOURCE)
 
 # --- Tests ----------------------------------------------------------------
 
