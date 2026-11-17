@@ -72,7 +72,7 @@ async def test_rewritten_query_is_used_and_reported() -> None:
     assert call["messages"][0]["role"] == "user"
     assert "사용자: AgentExecutor는 어떻게 초기화하나요?" in prompt
     assert "어시스턴트: AgentExecutor(agent=..., tools=...)로 만듭니다." in prompt
-    assert prompt.rstrip().endswith("검색 질의:")
+    assert prompt.rstrip().endswith("검색 질의(한국어):")
     assert "그 메서드의 반환값은?" in prompt
 
 
@@ -128,6 +128,13 @@ async def test_english_question_keeps_an_english_rewrite() -> None:
         RewriteStatus.OK,
         "What does AgentExecutor return?",
     )
+
+
+def test_english_question_asks_for_an_english_query() -> None:
+    prompt = rewriter(FakeCompletions()).prompt("What does it return?", HISTORY)
+
+    assert "Write the search query in English only." in prompt
+    assert prompt.rstrip().endswith("Search query:")
 
 
 def test_normalize_keeps_only_the_query_line() -> None:

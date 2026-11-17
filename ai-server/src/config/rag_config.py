@@ -50,7 +50,7 @@ class StreamConfig(BaseModel):
 class RewriteConfig(BaseModel):
     """멀티턴 질의 재작성 규칙 (ADR-009, 정책서 §5.2)."""
 
-    prompt_version: str = Field(default="rewrite_v1", min_length=1)
+    prompt_version: str = Field(default="rewrite_v2", min_length=1)
     history_turns: int = Field(default=3, ge=1)
     assistant_max_chars: int = Field(default=500, gt=0)
     max_output_chars: int = Field(default=200, gt=0, le=200)  # rewritten_query VARCHAR(200)
