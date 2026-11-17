@@ -1,5 +1,6 @@
 package com.r1nn.contextq.chat.service;
 
+import com.r1nn.contextq.chat.dto.SourcesResponse;
 import com.r1nn.contextq.common.error.BusinessException;
 import com.r1nn.contextq.common.error.ErrorCode;
 import com.r1nn.contextq.global.config.AiServerProperties;
@@ -70,6 +71,23 @@ public class SourceCatalog {
         return current.data();
       }
     }
+  }
+
+  /**
+   * Public source list (api-spec §2.1).
+   *
+   * @throws BusinessException {@code INDEX_NOT_ACTIVE} when enabled sources exist but none has an
+   *     ACTIVE run; {@code AI_UNAVAILABLE} when ai-server fails and nothing is cached
+   */
+  public SourcesResponse publicSources() {
+    InternalSources catalog = current();
+    SourcesResponse response = SourcesResponse.from(catalog);
+    boolean anyEnabled = catalog.sources().stream().anyMatch(InternalSources.Source::enabled);
+    if (response.sources().isEmpty() && anyEnabled) {
+      log.error("index_not_active — enabled sources without an ACTIVE run");
+      throw new BusinessException(ErrorCode.INDEX_NOT_ACTIVE);
+    }
+    return response;
   }
 
   /** Drops the cache so the next call refetches (index activation, tests). */
