@@ -6,11 +6,11 @@
 """
 
 import asyncio
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -82,3 +82,27 @@ async def sources(
             return list_sources(session)
 
     return await asyncio.to_thread(query)
+
+
+class ReloadRequest(_Camel):
+    source_key: str = Field(min_length=1, max_length=50)
+
+
+class ReloadResponse(_Camel):
+    source_key: str
+    active_run_id: int
+    reloaded_at: str  # UTC ISO-8601
+
+
+@router.post("/index/reload", response_model=ReloadResponse, response_model_by_alias=True)
+async def reload_index(
+    body: ReloadRequest,
+    index: Annotated[IndexServices, Depends(get_index_services)],
+) -> ReloadResponse:
+    """포인터 캐시를 비우고 다시 읽는다. 없는 소스 404 · 비활성 409 · ACTIVE 없음 503."""
+    index.pointers.invalidate(body.source_key)
+    active = await asyncio.to_thread(index.pointers.get, body.source_key)
+    reloaded_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    return ReloadResponse(
+        source_key=body.source_key, active_run_id=active.run_id, reloaded_at=reloaded_at
+    )

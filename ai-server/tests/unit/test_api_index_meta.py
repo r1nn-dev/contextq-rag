@@ -77,3 +77,57 @@ def test_sources_requires_internal_token(index: IndexServices) -> None:
     response = client_with(index).get("/internal/v1/sources")
 
     assert response.status_code == 401
+
+
+def test_reload_switches_cached_pointer_immediately(
+    session_factory: sessionmaker[Session], index: IndexServices
+) -> None:
+    with session_factory() as db:
+        old = _active(db, V1X)
+    assert index.pointers.get(V1X).run_id == old  # 30초 캐시에 이전 run
+
+    with session_factory() as db:
+        new = _active(db, V1X)  # make activate-index
+    assert index.pointers.get(V1X).run_id == old  # 아직 캐시
+
+    response = client_with(index).post(
+        "/internal/v1/index/reload", json={"sourceKey": V1X}, headers=HEADERS
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert (body["sourceKey"], body["activeRunId"]) == (V1X, new)
+    assert body["reloadedAt"].endswith("Z")
+    assert index.pointers.get(V1X).run_id == new  # 다음 질의부터 새 run
+
+
+@pytest.mark.parametrize(
+    ("body", "status", "code"),
+    [
+        ({"sourceKey": "react_v18"}, 404, "SOURCE_NOT_FOUND"),
+        ({"sourceKey": V03}, 503, "INDEX_NOT_ACTIVE"),
+        ({}, 400, "INVALID_REQUEST"),
+    ],
+)
+def test_reload_errors(index: IndexServices, body: dict[str, str], status: int, code: str) -> None:
+    response = client_with(index).post("/internal/v1/index/reload", json=body, headers=HEADERS)
+
+    assert response.status_code == status
+    assert response.json()["code"] == code
+
+
+def test_reload_disabled_source_is_409(
+    session_factory: sessionmaker[Session], index: IndexServices
+) -> None:
+    with session_factory() as db:
+        _active(db, V03)
+        source = db.scalar(select(Source).where(Source.source_key == V03))
+        assert source is not None
+        source.enabled = False
+        db.commit()
+
+    response = client_with(index).post(
+        "/internal/v1/index/reload", json={"sourceKey": V03}, headers=HEADERS
+    )
+
+    assert (response.status_code, response.json()["code"]) == (409, "SOURCE_UNAVAILABLE")
