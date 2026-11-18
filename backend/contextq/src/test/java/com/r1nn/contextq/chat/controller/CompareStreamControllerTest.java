@@ -1,6 +1,7 @@
 package com.r1nn.contextq.chat.controller;
 
 import static com.r1nn.contextq.support.AiServerStub.StubResponse.frame;
+import static com.r1nn.contextq.support.ChatStreamTestSupport.COMPARE_CATALOG;
 import static com.r1nn.contextq.support.ChatStreamTestSupport.JSON;
 import static com.r1nn.contextq.support.ChatStreamTestSupport.events;
 import static com.r1nn.contextq.support.ChatStreamTestSupport.newUser;
@@ -50,21 +51,6 @@ class CompareStreamControllerTest {
   static final String STREAM = "/internal/v1/chat/stream";
   static final Duration GAP = Duration.ofMillis(20);
 
-  /** Both sources active and paired (A = v0.3, B = v1.x). */
-  static final String CATALOG =
-      """
-      {"sources":[
-        {"sourceKey":"langchain_v03","framework":"langchain","versionLabel":"v0.3",
-         "displayName":"LangChain v0.3","enabled":true,"activeRunId":7,
-         "commitSha":"0123456789abcdef0123456789abcdef01234567","ingestedAt":"2026-10-05",
-         "chunkCount":3842},
-        {"sourceKey":"langchain_v1x","framework":"langchain","versionLabel":"v1.x",
-         "displayName":"LangChain v1.x","enabled":true,"activeRunId":8,
-         "commitSha":"89abcdef0123456789abcdef0123456789abcdef","ingestedAt":"2026-10-05",
-         "chunkCount":5120}],
-       "comparePairs":[{"sourceKeyA":"langchain_v03","sourceKeyB":"langchain_v1x"}]}
-      """;
-
   static final String NO_CONTEXT_META =
       "{\"event\":\"meta\",\"requestId\":\"r\",\"sourceKeyA\":\"langchain_v03\","
           + "\"sourceKeyB\":\"langchain_v1x\",\"ingestRunIdA\":7,\"ingestRunIdB\":8,"
@@ -95,7 +81,7 @@ class CompareStreamControllerTest {
   void setUp() {
     STUB.reset();
     sourceCatalog.invalidate();
-    STUB.on("GET", "/internal/v1/sources", r -> StubResponse.json(200, CATALOG));
+    STUB.on("GET", "/internal/v1/sources", r -> StubResponse.json(200, COMPARE_CATALOG));
     userId = newUser(jdbc);
   }
 

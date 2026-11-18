@@ -36,6 +36,21 @@ public final class ChatStreamTestSupport {
        "comparePairs":[{"sourceKeyA":"langchain_v03","sourceKeyB":"langchain_v1x"}]}
       """;
 
+  /** Both sources active and paired (A = v0.3, B = v1.x) — compare mode. */
+  public static final String COMPARE_CATALOG =
+      """
+      {"sources":[
+        {"sourceKey":"langchain_v03","framework":"langchain","versionLabel":"v0.3",
+         "displayName":"LangChain v0.3","enabled":true,"activeRunId":7,
+         "commitSha":"0123456789abcdef0123456789abcdef01234567","ingestedAt":"2026-10-05",
+         "chunkCount":3842},
+        {"sourceKey":"langchain_v1x","framework":"langchain","versionLabel":"v1.x",
+         "displayName":"LangChain v1.x","enabled":true,"activeRunId":8,
+         "commitSha":"89abcdef0123456789abcdef0123456789abcdef","ingestedAt":"2026-10-05",
+         "chunkCount":5120}],
+       "comparePairs":[{"sourceKeyA":"langchain_v03","sourceKeyB":"langchain_v1x"}]}
+      """;
+
   private ChatStreamTestSupport() {}
 
   public static long newUser(JdbcTemplate jdbc) {
