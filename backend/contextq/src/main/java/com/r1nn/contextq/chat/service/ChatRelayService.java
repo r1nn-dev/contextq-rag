@@ -80,8 +80,8 @@ public class ChatRelayService {
   public record GuestStream(Flux<ServerSentEvent<String>> events, String setCookie) {}
 
   /**
-   * Logged-in user: validates, stores the question and opens the upstream stream. A {@code history}
-   * sent by the client is ignored (policy §5.1).
+   * Logged-in user: validates, stores the question and opens the upstream stream. The rewrite
+   * history comes from the DB; a {@code history} sent by the client is ignored (policy §5.1).
    *
    * @throws BusinessException pre-stream errors of api-spec §3.1
    */
@@ -104,7 +104,7 @@ public class ChatRelayService {
               new AcceptCommand(userId, request.conversationId(), question, sourceKey, requestId));
       Flux<ServerSentEvent<String>> upstream =
           open(
-              new ChatCall(requestId, sourceKey, question, List.of()),
+              new ChatCall(requestId, sourceKey, question, accepted.history()),
               reason ->
                   messages.finish(
                       accepted.answerId(),

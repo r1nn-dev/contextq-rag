@@ -5,6 +5,7 @@ import com.r1nn.contextq.chat.domain.AnswerSnapshot;
 import com.r1nn.contextq.chat.domain.Conversation;
 import com.r1nn.contextq.chat.domain.ConversationMode;
 import com.r1nn.contextq.chat.domain.Message;
+import com.r1nn.contextq.chat.domain.MessageRole;
 import com.r1nn.contextq.chat.domain.MessageSource;
 import com.r1nn.contextq.chat.domain.MessageStatus;
 import com.r1nn.contextq.chat.repository.ConversationRepository;
@@ -17,7 +18,10 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -37,6 +41,9 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class ChatMessageService {
+
+  /** Characters kept per history message sent to ai-server (api-spec §3.1·§6.1). */
+  static final int HISTORY_MAX_CHARS = 2000;
 
   /** USER + ASSISTANT inserted per question. */
   static final int MESSAGES_PER_QUESTION = 2;
@@ -75,7 +82,16 @@ public class ChatMessageService {
   public record AcceptCommand(
       Long userId, Long conversationId, String question, String sourceKey, String requestId) {}
 
-  public record Accepted(Long conversationId, Long questionId, Long answerId, String sourceKey) {}
+  /**
+   * @param history recent turns for the query rewrite, oldest first ({@code role}, {@code
+   *     content}); empty for a new conversation
+   */
+  public record Accepted(
+      Long conversationId,
+      Long questionId,
+      Long answerId,
+      String sourceKey,
+      List<Map<String, String>> history) {}
 
   /** One cited source copied from {@code meta.sources}. */
   public record SourceValue(
@@ -107,6 +123,7 @@ public class ChatMessageService {
   public Accepted accept(AcceptCommand cmd) {
     requireDailyQuota(cmd.userId(), SINGLE_QUOTA_COST);
     Conversation conversation;
+    List<Map<String, String>> history = List.of();
     if (cmd.conversationId() == null) {
       conversation =
           conversations.save(
@@ -121,15 +138,21 @@ public class ChatMessageService {
       if (messages.countInProgress(conversation.getId()) > 0) {
         throw new BusinessException(ErrorCode.CONVERSATION_BUSY);
       }
+      history = recentHistory(conversation.getId());
     }
     conversation.appendMessages(MESSAGES_PER_QUESTION);
     Message question =
         messages.save(
             Message.question(conversation, cmd.userId(), cmd.question(), SINGLE_QUOTA_COST));
     Message answer =
-        messages.save(Message.pendingAnswer(conversation, cmd.userId(), cmd.requestId()));
+        messages.save(
+            Message.pendingAnswer(conversation, cmd.userId(), cmd.requestId(), !history.isEmpty()));
     return new Accepted(
-        conversation.getId(), question.getId(), answer.getId(), conversation.getSourceKey());
+        conversation.getId(),
+        question.getId(),
+        answer.getId(),
+        conversation.getSourceKey(),
+        history);
   }
 
   /** Step 2 of policy §6.3: snapshot and sources as values (INV-13). */
@@ -202,6 +225,40 @@ public class ChatMessageService {
     if (messages.sumQuotaCostSince(userId, startOfDay) + cost > quota.daily()) {
       throw new BusinessException(ErrorCode.DAILY_QUOTA_EXCEEDED);
     }
+  }
+
+  /**
+   * Rewrite context from the DB (policy §5.1·§5.2): the newest 3 turns, oldest first. FAILED and
+   * NO_CONTEXT answers are left out while their questions stay; each message is cut to {@link
+   * #HISTORY_MAX_CHARS}. Runs under the conversation lock, so no answer is in progress (INV-11).
+   */
+  private List<Map<String, String>> recentHistory(Long conversationId) {
+    List<Message> recent =
+        new ArrayList<>(
+            messages.findTop6ByConversation_IdOrderByCreatedAtDescIdDesc(conversationId));
+    Collections.reverse(recent);
+    List<Map<String, String>> history = new ArrayList<>();
+    for (Message m : recent) {
+      if (m.getRole() == MessageRole.ASSISTANT && !usableAnswer(m)) {
+        continue;
+      }
+      String content = m.getContent();
+      if (content.length() > HISTORY_MAX_CHARS) {
+        content = content.substring(0, HISTORY_MAX_CHARS);
+      }
+      history.add(
+          Map.of(
+              "role", m.getRole() == MessageRole.USER ? "user" : "assistant", "content", content));
+    }
+    return history;
+  }
+
+  /** COMPLETED or PARTIAL answers with text; FAILED and the NO_CONTEXT notice are excluded. */
+  private static boolean usableAnswer(Message answer) {
+    return (answer.getStatus() == MessageStatus.COMPLETED
+            || answer.getStatus() == MessageStatus.PARTIAL)
+        && answer.getContent() != null
+        && !answer.getContent().isBlank();
   }
 
   private static Conversation owned(Conversation conversation, Long userId) {
