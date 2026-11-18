@@ -24,6 +24,8 @@
 | Conversation (대화) | 버전·모드 고정 학습 세션, 메시지·출처 영구 이력 | mode(SINGLE/COMPARE), source_key(s), message_count, status(파생) | app | backend |
 | Index (인덱스) | 소스 카탈로그, 수집 실행 이력, 활성 인덱스 포인터 | source_key, commit_sha, chunk_params, ACTIVE/SUPERSEDED/PURGED | ai | ai-server |
 
+- 관리자(`admin` 패키지)는 소유 테이블이 없다. 사용량은 app 테이블(`messages`·`guest_usage_logs`)을 읽기 전용으로 집계하고, 인덱스 정보는 ai-server 내부 API(API 명세 §6.6)로 받는다.
+
 ### 1.2 도메인 관계
 
 **스키마 소유권 및 쓰기 규칙:**
