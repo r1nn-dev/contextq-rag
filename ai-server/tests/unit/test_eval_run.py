@@ -18,9 +18,9 @@ from src.eval.run import (
     summarize,
     write_results,
 )
-from src.ingest.store import ChromaVectorStore
 from src.retrieval.pointers import ActiveIndex
 from src.retrieval.search import ChromaRetriever
+from tests.memory_store import MemoryVectorStore
 
 V03, V1X = "langchain_v03", "langchain_v1x"
 META = Metadata(created_by="t", created_at="2026-11-17T00:00:00Z")
@@ -139,8 +139,9 @@ def test_write_results_creates_jsonl_csv_and_env(tmp_path: Path) -> None:
 MODEL = "text-embedding-3-small"
 
 
-def _indexed_store(tmp_path: Path) -> ChromaVectorStore:
-    store = ChromaVectorStore(tmp_path / "chroma")
+def _indexed_store(tmp_path: Path) -> MemoryVectorStore:
+    # Chroma Windows 간헐 실패(#145)를 피해 조건 구성 로직만 본다 — tests/memory_store.py
+    store = MemoryVectorStore()
     for key, version in ((V03, "v0.3"), (V1X, "v1.x")):
         store.create_collection(f"{key}_run1", {"embedding_model": MODEL})
         store.add(
@@ -162,7 +163,7 @@ def _indexed_store(tmp_path: Path) -> ChromaVectorStore:
     return store
 
 
-def _inputs(store: ChromaVectorStore) -> E1Inputs:
+def _inputs(store: MemoryVectorStore) -> E1Inputs:
     indexes = {
         V03: ActiveIndex(V03, "v0.3", 1, "a" * 40, None, None, MODEL),
         V1X: ActiveIndex(V1X, "v1.x", 1, "b" * 40, None, None, MODEL),
@@ -191,8 +192,8 @@ def test_e1_c_only_does_not_build_merged_collection(tmp_path: Path) -> None:
     assert not any(name.startswith("eval_e1_merged") for name in _collections(store))
 
 
-def _collections(store: ChromaVectorStore) -> list[str]:
-    return [c.name for c in store.client.list_collections()]
+def _collections(store: MemoryVectorStore) -> list[str]:
+    return list(store.collections)
 
 
 def test_active_indexes_reports_missing_sources(session: Session) -> None:

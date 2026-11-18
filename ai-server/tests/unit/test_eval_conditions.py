@@ -1,7 +1,5 @@
 """E1 비교 조건 — 실험용 병합 컬렉션과 N·F 검색기 (protocol.md 실험 E1)."""
 
-from pathlib import Path
-
 import pytest
 
 from src.eval.conditions import (
@@ -10,7 +8,7 @@ from src.eval.conditions import (
     embed_queries,
     merged_collection_name,
 )
-from src.ingest.store import ChromaVectorStore
+from tests.memory_store import MemoryVectorStore
 from tests.unit.conftest import FakeEmbedder
 
 V03, V1X = "langchain_v03", "langchain_v1x"
@@ -27,8 +25,9 @@ def _meta(source_key: str, heading: str) -> dict[str, object]:
 
 
 @pytest.fixture()
-def store(tmp_path: Path) -> ChromaVectorStore:
-    store = ChromaVectorStore(tmp_path / "chroma", page_size=2)
+def store() -> MemoryVectorStore:
+    # Chroma Windows 간헐 실패(#145)를 피해 병합·검색 로직만 본다 — tests/memory_store.py
+    store = MemoryVectorStore(page_size=2)
     for source_key, vectors in {
         V03: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
         V1X: [[0.95, 0.05, 0.0], [0.0, 0.0, 1.0], [0.1, 0.9, 0.0]],
@@ -54,7 +53,7 @@ def test_merged_collection_name_includes_sorted_runs() -> None:
     assert name == "eval_e1_merged_langchain_v03_r1_langchain_v1x_r3"
 
 
-def test_build_merged_collection_copies_all_records_and_reuses(store: ChromaVectorStore) -> None:
+def test_build_merged_collection_copies_all_records_and_reuses(store: MemoryVectorStore) -> None:
     name = merged_collection_name({V03: 1, V1X: 1})
 
     assert build_merged_collection(store, SOURCES, name) == 5
@@ -63,14 +62,14 @@ def test_build_merged_collection_copies_all_records_and_reuses(store: ChromaVect
     assert record["metadata"]["heading_path"] == "Doc > S1"
 
 
-def test_build_merged_collection_rebuilds_incomplete_copy(store: ChromaVectorStore) -> None:
+def test_build_merged_collection_rebuilds_incomplete_copy(store: MemoryVectorStore) -> None:
     name = merged_collection_name({V03: 1, V1X: 1})
     store.create_collection(name, {})  # 중간에 끊긴 이전 시도
 
     assert build_merged_collection(store, SOURCES, name) == 5
 
 
-def test_no_filter_mixes_sources_and_filter_isolates(store: ChromaVectorStore) -> None:
+def test_no_filter_mixes_sources_and_filter_isolates(store: MemoryVectorStore) -> None:
     name = merged_collection_name({V03: 1, V1X: 1})
     build_merged_collection(store, SOURCES, name)
     embeddings = {"q": [1.0, 0.0, 0.0]}
