@@ -254,7 +254,7 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 | permalink 유효성 | 파일 단위 중복 제거 후 전수 HTTP 200 (GitHub 토큰 사용, 초당 5건 제한) |
 | 임베딩 차원·모델 | 전 청크 동일 모델·동일 차원(1536) |
 | 스모크 질문 | 버전당 5문항: 기대 파일이 Top-5 안에 있고 top-1 similarity ≥ τ. 5문항 중 5문항 통과 |
-| 스냅샷 복원 검증 | 복원 후 청크 수·checksum·스모크 결과가 manifest와 일치(RAG-11) |
+| 스냅샷 복원 검증 | 복원 후 청크 수·checksum·스모크 결과가 manifest와 일치(RAG-11). 복원 경로에서는 청크 수 드리프트·permalink 검사를 하지 않는다(빌드 게이트에서 통과했고 커밋 SHA가 고정이라 결과가 같다) |
 
 ### 4.5 활성화·롤백·스냅샷
 
@@ -264,7 +264,8 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 | 반영 | 활성화 CLI가 `POST /internal/v1/index/reload` 호출. 실패해도 30초 포인터 캐시 만료로 반영 |
 | 롤백 | `make rollback-index SOURCE=…` : 직전 SUPERSEDED를 다시 ACTIVE로, 현재 ACTIVE는 SUPERSEDED로. 롤백 대상은 1세대뿐 |
 | 정리 | 새 SUPERSEDED가 생기면 그 이전 SUPERSEDED는 PURGED(컬렉션 삭제). FAILED는 24시간 후 PURGED |
-| 스냅샷 구성 | `snapshot-{source_key}-run{id}.tar.gz` = Chroma 컬렉션 디렉터리 + `manifest.json`(run id, commit_sha, 청킹 파라미터, 임베딩 모델, 청크 수, sha256 checksum, 검증 리포트) |
+| 스냅샷 구성 | `snapshot-{source_key}-run{id}.tar.gz` = `records.jsonl`(컬렉션 레코드 덤프: id·본문·메타데이터·임베딩, id 순 정렬) + `manifest.json`(run id, commit_sha, 청킹 파라미터, 임베딩 모델·차원, 청크 수, `records.jsonl` sha256 checksum, 컬렉션 메타데이터, 검증 리포트). 임베디드 Chroma는 모든 컬렉션이 저장 파일 하나를 공유하므로 디렉터리를 run 단위로 떼어 내지 않는다. 전송 확인용 `.sha256` 파일을 함께 만든다 |
+| 스냅샷 복원 | `make restore-index SNAPSHOT=…` : 카탈로그·임베딩 모델·run id·컬렉션 중복을 먼저 확인하고 어긋나면 DB를 바꾸지 않고 거부한다. 통과하면 manifest의 run id로 RESTORING → 컬렉션 재적재 → VALIDATING(4.4 복원 검증) → READY → 활성화. 같은 run id는 다시 복원하지 않는다(run 레코드 보존) |
 | 스냅샷 보관 | S3 `s3://…/index-snapshots/`에 run별 보관. 최종 발표(12/10)까지 삭제하지 않음 |
 | 운영 수집 금지 | prod 프로필에서 수집·임베딩 명령과 재수집 API는 빈(bean) 자체를 등록하지 않음. 호출 시 `FORBIDDEN_IN_PROFILE`(403) |
 
@@ -538,7 +539,7 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 
 | 도메인 | 상태 |
 | --- | --- |
-| IngestRun (`ai.ingest_runs`) | `PENDING` → `COLLECTING` → `PROCESSING` → `EMBEDDING` → `VALIDATING` → `READY` → `ACTIVE` → `SUPERSEDED` → `PURGED` / 복원 경로 `RESTORING` → `VALIDATING` / 실패 `FAILED` → `PURGED` |
+| IngestRun (`ai.ingest_runs`) | `PENDING` → `COLLECTING` → `PROCESSING` → `EMBEDDING` → `VALIDATING` → `READY` → `ACTIVE` → `SUPERSEDED` → `PURGED` / 복원 경로 `RESTORING` → `VALIDATING` / 실패 `FAILED` → `PURGED` (`RESTORING`에서도 실패 가능) |
 | Assistant 메시지 — 단일 (`app.messages`) | `PENDING` → `STREAMING` → `COMPLETED` · `PARTIAL` · `NO_CONTEXT` · `FAILED` |
 | Assistant 메시지 — 비교 | `PENDING` → `PROCESSING` → `COMPLETED` · `NO_CONTEXT` · `FAILED` |
 | Refresh 토큰 (`app.refresh_tokens`) | `ACTIVE` → `USED` · `REVOKED` (만료는 시각 비교로 판정, 상태로 저장하지 않음) |
@@ -558,6 +559,7 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 | EMBEDDING | VALIDATING | 컬렉션 저장 완료 | 4.4 게이트 실행(10분 제한) |
 | — | RESTORING | `make restore-index` (모든 프로필) | tar 해제, checksum 검증 |
 | RESTORING | VALIDATING | checksum 일치 | 복원 검증 포함 게이트 실행 |
+| RESTORING | FAILED | checksum 불일치·컬렉션 적재 오류 | `failure_stage=RESTORING`, `failure_reason` 기록, 기존 ACTIVE 유지 |
 | VALIDATING | READY | 게이트 전 항목 통과 | 검증 리포트 저장 |
 | READY | ACTIVE | `make activate-index RUN=…` | 포인터 UPDATE, 기존 ACTIVE → SUPERSEDED, reload 호출(backend 메타 캐시는 60초 만료로 반영, 2.1) |
 | ACTIVE | SUPERSEDED | 다른 run 활성화 | 컬렉션 유지(롤백·in-flight 보호) |

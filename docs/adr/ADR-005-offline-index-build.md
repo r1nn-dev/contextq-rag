@@ -4,7 +4,7 @@
 Accepted
 
 ## Date
-2026-11-14 (2026-11-17 개정: 명령·코드 위치를 정책서 기준으로 정리, Accepted)
+2026-11-14 (2026-11-17 개정: 명령·코드 위치를 정책서 기준으로 정리, Accepted · 2026-11-18 개정: 스냅샷 구성을 레코드 덤프로 변경)
 
 ## Context
 
@@ -35,15 +35,16 @@ make ingest SOURCE=langchain_v03
 
 make activate-index RUN=<id>      # READY → ACTIVE, 포인터 교체
 make rollback-index SOURCE=<key>  # 직전 SUPERSEDED → ACTIVE (1세대)
+make snapshot-index RUN=<id>      # READY·ACTIVE·SUPERSEDED run → snapshot-{source_key}-run{id}.tar.gz
 
 [운영 — 모든 프로필]
-make restore-index                # 스냅샷 복원 → VALIDATING → READY → 활성화
+make restore-index SNAPSHOT=<path> # RESTORING → VALIDATING → READY → 활성화
 ```
 
 - 코드 위치: `ai-server/src/ingest/` (CLI 엔트리포인트 포함). Makefile 타깃은 이 CLI를 호출한다.
 - 상태 전이는 `docs/planning/policy.md` > §10.1 표를 따르며, 표에 없는 전이는 코드에서 거부한다.
 - prod 프로필에서는 수집·임베딩 명령을 등록하지 않는다. 활성화·롤백·복원만 사용할 수 있다.
-- 스냅샷은 `snapshot-{source_key}-run{id}.tar.gz`(Chroma 컬렉션 디렉터리 + `manifest.json`)이며 S3에 run별로 보관한다(`policy.md` > §4.5).
+- 스냅샷은 `snapshot-{source_key}-run{id}.tar.gz`(컬렉션 레코드 덤프 `records.jsonl` + `manifest.json`)이며 S3에 run별로 보관한다(`policy.md` > §4.5). 임베디드 Chroma(ADR-002)는 모든 컬렉션이 저장 파일 하나를 공유하므로 디렉터리 복사 대신 레코드를 내보내고 복원 시 새 컬렉션에 다시 적재한다(2026-11-18 개정).
 
 ## Consequences
 
