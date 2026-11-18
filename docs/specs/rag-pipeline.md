@@ -31,7 +31,7 @@ backend (POST /api/v1/chat/stream 중계)
 [2. 임베딩]  EmbeddingClient → text-embedding-3-small
   │
   ▼
-[3. 벡터 검색]  Chroma {source_key}_run{active_run_id}  top_k=5  + 2차 메타데이터 검증(INV-02)
+[3. 벡터 검색]  Chroma {source_key}_run{active_run_id}  top_k=8 (rag.yaml, E2)  + 2차 메타데이터 검증(INV-02)
   │
   ├─ max_similarity < τ?
   │   └─ YES → [NO_CONTEXT 응답]  LLM 미호출, SSE meta→done 반환

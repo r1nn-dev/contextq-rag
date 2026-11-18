@@ -168,10 +168,12 @@ ${INGEST_DATA_DIR}/            # 기본값 ./data (ai-server 기준). Git에 올
 - **보고서·발표 자료**에 LangChain 공식 문서를 출처로 표기한다.
 - ACTIVE로 활성화한 run의 커밋 SHA를 아래 표에 기록한다. SHA의 원본은 `ai.ingest_runs.commit_sha`다.
 
-| 저장소 | ref | ACTIVE run | 커밋 SHA | 수집일 | 청크(전략 B) | 임베딩 비용 |
+| 저장소 | ref | ACTIVE run | 커밋 SHA | 수집일 | 청크(전략 C) | 임베딩 비용 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `langchain-ai/langchain` | `v0.3` | 1 | `9971fd8caafcfddddc94492cdecb02ce67b82da6` | 2026-11-17 | 2,496 | $0.007449 |
-| `langchain-ai/docs` | `main` | 3 | `db05d5cbd803cb2dc962aa504650b15bdfcda778` | 2026-11-17 | 1,715 | $0.005472 |
+| `langchain-ai/langchain` | `v0.3` | 6 | `9971fd8caafcfddddc94492cdecb02ce67b82da6` | 2026-11-18 | 2,128 | $0.007008 |
+| `langchain-ai/docs` | `main` | 10 | `9d9747d0cf241e086c616a16d5ce230ad8f8f31d` | 2026-11-18 | 1,364 | $0.005130 |
+
+- 2026-11-18 E2 확정으로 전략 B run(1·3)에서 전략 C run(6·10)으로 교체했다. 이전 기록: run 1(`9971fd8`, 2,496청크)·run 3(`db05d5c`, 1,715청크).
 
 - 라인 앵커 확인(2026-11-17, ACTIVE run에서 `.md`·`.mdx` 청크 20건 표본): 섹션 일치 18/20. 나머지 2건은 내용 전체가 스니펫에서 펼쳐진 청크라 앵커가 원문의 스니펫 태그 줄을 가리킨다(`docs/specs/doc-source.md` §4.2 설계대로).
 

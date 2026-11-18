@@ -208,7 +208,7 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 | `ingest_run_id` | 단조 증가 정수. 로컬 빌드 시 발급되며 스냅샷 manifest에 포함되어 운영에 그대로 복원된다 |
 | 컬렉션 이름 | `{source_key}_run{ingest_run_id}` (예: `langchain_v03_run12`). run과 컬렉션은 1:1 |
 | `chunk_id` | `sha256(source_key, commit_sha, file_path, heading_path, chunk_index, chunk_strategy, chunk_params_hash)` 앞 32자. 같은 입력이면 같은 ID(INV-04, RAG-02) |
-| 청킹 파라미터 | `chunk_params`(JSON)와 그 해시를 run에 기록. E2 확정 전까지 전략 A·B·C는 서로 다른 run으로 생성 |
+| 청킹 파라미터 | `chunk_params`(JSON)와 그 해시를 run에 기록. 전략 A·B·C는 서로 다른 run으로 생성. 운영 기본 전략은 E2로 확정한 **C**(구조 인식, 2026-11-18, `eval/results/E2/decision.md`) |
 | 거리 함수 | cosine 고정(`hnsw:space = cosine`). similarity = 1 − distance |
 
 ### 4.2 청크 메타데이터 필수 필드
@@ -300,7 +300,7 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 | 항목 | 정책 |
 | --- | --- |
 | 대상 | 요청 source의 ACTIVE run 컬렉션 1개만 직접 지정(1차 격리) + 결과 메타데이터 재검증(INV-02, 2차) |
-| Top-K | 초기값 5. E2 결정 규칙으로 확정(K ∈ {3, 5, 8}) |
+| Top-K | 확정 **8** — E2(2026-11-18, `eval/results/E2/decision.md`): 채택 전략 C에서 Hit@3 0.55 → Hit@5 0.65 → Hit@8 0.775, 두 증가폭 모두 ≥ 2%p (`eval/decision_rules.md` §2) |
 | 임계값 τ | source_key별 값(ADR-008, `ai-server/configs/rag.yaml`, `TAU_{SOURCE_KEY}`로 덮어쓰기). 확정 — E1(2026-11-18, `eval/results/E1/analysis.md`): `langchain_v03` **0.29**, `langchain_v1x` **0.34** |
 | 컨텍스트 채택 | Top-K 중 similarity ≥ τ 인 청크만 컨텍스트에 넣음 |
 | 컨텍스트 예산 | 3,000 토큰 고정(성능 우선, `eval/decision_rules.md` §4). 초과 시 낮은 rank부터 제외(청크 중간 절단 금지) |
@@ -641,8 +641,6 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 
 | 항목 | 현재 가정값 | 결정 시점 | 결정 방법 |
 | --- | --- | --- | --- |
-| 청킹 전략 | 전략 B (초기 개발용) | **W3 (10/21)** | E2 사전 결정 규칙(`eval/decision_rules.md`, eval-v1 태그 이전 커밋으로 확정): Hit@5 최고 전략. 1·2위 차이 < 3%p이면 MRR@5가 높은 전략, 그래도 같으면 평균 토큰 수 적은 전략 |
-| Top-K | 5 (초기 개발용) | **W3 (10/21)** | E2 결정 규칙: Hit@K 증가폭 < 2%p인 최소 K |
 | 시스템 동시 생성 상한 | 20 | **W6 (11/11)** | E6 S2(ramp-up)·S3(sustained) 결과. 오류율 < 1% + `meta` p95 < 1초를 만족하는 최대 VU를 상한으로 설정 |
 | 1.x 스니펫 누락 허용 기준 | 누락 파일 비율 ≤ 5% | **W1 (10/7)** | 스파이크 측정으로 실제 누락 비율 확인. 5% 초과 시 허용 기준 상향하거나 해당 파일 제외 목록 작성. 제외된 파일은 VALIDATING 청크 수 기준 ±30% 판정에서 제외 |
 
