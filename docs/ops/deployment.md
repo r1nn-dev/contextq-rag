@@ -69,6 +69,29 @@ make up                         # 이미지 빌드 + 기동 → http://localhost
 - 로컬 오버레이는 backend 8080·ai-server 8000·postgres 포트를 열고, 호스트 `ai-server/data/chroma`·`ai-server/data/snapshots`를 연결한다.
 - 2026-11-18 로컬 확인: nginx 경유 SSE `meta` 0.41초, 첫 토큰 1.78초, 토큰 159개가 15.1초에 걸쳐 각각 다른 시각에 도착(버퍼링 없음).
 
+### 4.1 시연 전 점검 (`make demo-check`)
+
+로컬 시연 스택이 시연 가능한지 1분 안에 판정한다. `make`가 없으면 `bash scripts/demo-check.sh`로 실행한다.
+
+```bash
+make demo-check                  # 전체 점검 — 게스트 질문 1회(OpenAI 호출 1회)
+make demo-check ARGS=--no-llm    # 질문 생략(OpenAI 호출 없음)
+```
+
+| 항목 | 통과 조건 | 실패 시 조치(출력) |
+| --- | --- | --- |
+| 컨테이너 | nginx·backend·ai-server·postgres 모두 `running`·`healthy` | `make up`, 계속 실패하면 해당 서비스 로그 |
+| ai-server 헬스 | `GET :8000/internal/v1/health` 200 `ok` — Chroma 로드, DB 연결, 소스별 ACTIVE run | ACTIVE run 없음 → `make restore-index` 후 `make up`, DB 오류 → postgres 로그 |
+| 소스 목록 | nginx 경유 `GET /api/v1/sources` 200, 활성 소스 2개 이상 | backend·nginx 로그 |
+| 게스트 질문 | nginx 경유 `POST /api/v1/chat/stream`이 `meta` → `token` → `done(COMPLETED)` 순서, 첫 토큰 시간 출력 | 429 → 1분 뒤 재실행, `error` 이벤트 → ai-server 로그·OpenAI 사용 한도 |
+| 스냅샷 백업 | ACTIVE run마다 `ai-server/data/snapshots/snapshot-{source}-run{id}.tar.gz` | 경고만 — `make snapshot-index RUN=<id>` |
+
+- 종료 코드는 실패가 없으면 0(경고 허용), 실패가 1건 이상이면 1이다.
+- 로컬 오버레이 전용이다. ai-server 8000 포트는 로컬 오버레이만 연다.
+- 환경 파일을 읽지 않는다. 주소·질문은 `DEMO_CHECK_BASE_URL`·`DEMO_CHECK_AI_HEALTH_URL`·`DEMO_CHECK_SOURCE`·`DEMO_CHECK_QUESTION` 셸 변수로 바꾼다.
+- 게스트 쿠키를 저장하지 않으므로 실행할 때마다 게스트 세션 1개를 새로 쓴다(IP당 신규 세션 30개/시간, 정책서 §8.1).
+- 2026-11-18 확인: 정상 상태 26초(첫 토큰 2,987ms), backend 중지·ACTIVE run 없음 상태에서 해당 항목 실패와 종료 코드 1.
+
 ## 5. 프로덕션 배포
 
 운영 서버 스크립트는 `infra/scripts/`에 있고 모두 `infra/scripts/compose-prod.sh`(기본 파일 + `infra/docker-compose.prod.yml` + 운영 환경 파일)로 Compose를 부른다.
