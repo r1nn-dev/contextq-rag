@@ -4,7 +4,7 @@
 Draft
 
 ## Date
-2026-11-14
+2026-11-14 (2026-11-18 개정: 인스턴스 사양·볼륨 구성을 기획서 결정 6·운영 Compose 기준으로 정리)
 
 ## Context
 
@@ -26,27 +26,26 @@ Draft
 **인스턴스 사양**:
 | 항목 | 사양 |
 |------|------|
-| 인스턴스 타입 | `t3.medium` (기본) → `t3.large` (필요 시 수직 확장) |
+| 인스턴스 타입 | `t3.small` (기본, 크레딧 사양 standard) → `c7i-flex.large` (부하 테스트·최종 시연 기간 일시 증설) |
 | vCPU | 2 → 2 |
-| RAM | 4 GB → 8 GB |
-| 스토리지 | EBS gp3 30 GB (Chroma + 로그) |
+| RAM | 2 GiB → 4 GiB |
+| 스토리지 | EBS gp3 20 GiB (Chroma + PostgreSQL + 로그, 사용률 ≤ 70%) |
+
+근거: 기획서 결정 6(AWS 무료 플랜, `t3.small`)·부록 A 메모리 예산, 정책서 §11 "EBS 20GiB". 초안의 `t3.medium`·30GB는 무료 플랜 예산과 맞지 않아 2026-11-18에 고쳤다.
 
 **Chroma 볼륨 구성**:
 ```yaml
-# docker-compose.yml
+# infra/docker-compose.yml — 루트 EBS 볼륨의 Docker 볼륨에 둔다 (별도 EBS 마운트 없음)
 services:
   ai-server:
     volumes:
-      - chroma_data:/app/chroma_persist
+      - chroma_data:/app/chroma_db
 
 volumes:
   chroma_data:
-    driver: local
-    driver_opts:
-      type: none
-      device: /data/chroma   # EBS 마운트 포인트
-      o: bind
 ```
+
+인덱스는 스냅샷 복원으로 채우고(ADR-005), 볼륨이 사라지면 같은 스냅샷을 다시 복원한다.
 
 **수직 확장 트리거**:
 - CPU 평균 > 70% (5분 지속)

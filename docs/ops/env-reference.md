@@ -30,7 +30,7 @@ openssl rand -hex 16
 
 > **Docker Compose 주의:** `postgres` 서비스 컨테이너 이름을 `POSTGRES_HOST`로 사용할 때는 `postgres`로 설정한다.  
 > **ai-server**는 같은 `POSTGRES_*` 값으로 SQLAlchemy·Alembic 접속 URL을 만든다 (`ai` 스키마). `infra/docker-compose.yml`의 ai-server 서비스는 `POSTGRES_HOST=postgres`, `POSTGRES_PORT=5432`로 고정하고 DB 이름·사용자·비밀번호만 `.env`에서 받는다.  
-> **운영 환경**은 `POSTGRES_*` 대신 `DB_URL` · `DB_USERNAME` · `DB_PASSWORD`를 사용한다 (§2 GitHub Secrets 참고).
+> **운영 환경**(Compose)도 같은 `POSTGRES_*`를 쓴다. backend 접속 정보는 Compose가 `SPRING_DATASOURCE_URL`·`USERNAME`·`PASSWORD`로 만들어 넘기므로 `DB_URL` 등은 따로 두지 않는다(`application-prod.yaml`의 `${DB_URL}`보다 환경 변수가 우선, 2026-11-18 운영 프로필 기동 확인). 운영 서버의 값은 §4 운영 환경 파일에 둔다.
 
 ### 1.2 OpenAI
 
@@ -187,14 +187,11 @@ openssl rand -hex 32
 |---|---|---|
 | `OPENAI_API_KEY` | OpenAI API 키 | CI에서 LLM 테스트 불필요 → 현재는 미사용 |
 | `JWT_SECRET` | JWT 서명 키 | CI 통합 테스트용 |
-| `INTERNAL_TOKEN` | 서비스 간 내부 인증 토큰 | 배포 환경의 docker-compose에 주입 |
-| `DB_URL` | 운영 PostgreSQL JDBC URL | `application-prod.yml` → `${DB_URL}` |
-| `DB_USERNAME` | 운영 DB 사용자 이름 | `application-prod.yml` → `${DB_USERNAME}` |
-| `DB_PASSWORD` | 운영 DB 비밀번호 | `application-prod.yml` → `${DB_PASSWORD}` |
-| `EC2_HOST` | AWS EC2 퍼블릭 IP 또는 도메인 | 배포 대상 서버 |
-| `EC2_SSH_KEY` | EC2 SSH 비밀키 (PEM 파일 전체 내용) | deploy 잡에서 SSH 접속 |
+| `INTERNAL_TOKEN` | 서비스 간 내부 인증 토큰 | 현재 워크플로에서 미사용. 운영 값은 서버 운영 환경 파일(§4)에 둔다 |
 | `GHCR_TOKEN` | GitHub PAT (classic, `read:packages` 권한) | 운영 서버가 비공개 GHCR 이미지를 pull할 때 `docker login ghcr.io`에 쓴다. Actions Secret이 아니라 서버에서만 입력한다. 이미지 푸시는 `release.yml`이 워크플로 기본 `GITHUB_TOKEN`으로 한다 |
 | `DISCORD_WEBHOOK_URL` | Discord 알림 웹훅 URL | CI 완료·실패 알림 |
+
+> 배포는 워크플로가 서버에 접속하지 않고 운영 서버에서 `infra/scripts/deploy.sh <git-sha>`로 한다(`docs/ops/deployment.md` §5). 그래서 `EC2_HOST`·`EC2_SSH_KEY`·`DB_URL`·`DB_USERNAME`·`DB_PASSWORD` Secrets는 두지 않는다(2026-11-18 정리).
 
 ---
 
@@ -257,7 +254,28 @@ VITE_API_BASE_URL=          # 빈 값 = 동일 출처 /api (Vite 프록시·ngin
 
 ---
 
-## 4. 보안 주의사항
+## 4. 운영 서버 환경 파일 (`/opt/contextq/contextq.env`)
+
+운영 서버에만 두고(`chmod 600`, 저장소·Secrets에 올리지 않음) `infra/scripts/compose-prod.sh`가 Compose에 넘긴다. 배포 중인 이미지(`IMAGE_TAG`)는 `deploy.sh`가 `/opt/contextq/release.env`에 따로 기록한다.
+
+| 변수명 | 설명 | 예시 | 필수 |
+|---|---|---|---|
+| `IMAGE_REGISTRY` | 이미지 경로 앞부분 (`release.yml`이 올리는 위치) | `ghcr.io/<owner>/<repo>` | ✅ |
+| `DOMAIN` | 서비스 도메인. nginx `server_name`·인증서 경로 | `contextq.example.com` | ✅ |
+| `POSTGRES_DB` · `POSTGRES_USER` · `POSTGRES_PASSWORD` | §1.1과 같음 | `contextq_db` · `contextq` · `openssl rand -hex 16` | ✅ |
+| `OPENAI_API_KEY` · `JWT_SECRET` · `INTERNAL_TOKEN` | §1.2·§1.3·§1.5와 같음 | — | ✅ |
+| `ADMIN_EMAIL` · `ADMIN_PASSWORD_BCRYPT` | §1.3.1과 같음 | — | 선택 |
+| `SNAPSHOT_S3_URI` | 인덱스 스냅샷 S3 위치 (`restore-index.sh`) | `s3://<bucket>/index-snapshots` | ✅ |
+| `BACKUP_S3_URI` | DB 백업 S3 위치 (`pg-backup.sh`, 7일 보관) | `s3://<bucket>/pg-backups` | ✅ |
+| `SNAPSHOT_HOST_DIR` | 스냅샷 저장 디렉터리 | `/opt/contextq/snapshots` (기본값) | 선택 |
+| `NGINX_RATE_CHAT` · `NGINX_BURST_CHAT` · `GUEST_SESSIONS_PER_IP_PER_HOUR` | 전시회 전환 대상(`scripts/exhibition-profile.sh`가 바꿈) | `30r/m` · `10` · `30` | 선택 |
+
+> `APP_PROFILE`·`SPRING_PROFILES_ACTIVE`는 Compose 기본값이 `prod`라 두지 않는다. `INGEST_ENABLED`·`LLM_MOCK`을 `true`로 두면 ai-server가 기동하지 않는다(INV-17).
+> AWS 자격 증명은 이 파일에 넣지 않는다. EC2 인스턴스 역할(IAM)에 두 S3 위치의 읽기·쓰기 권한을 준다.
+
+---
+
+## 5. 보안 주의사항
 
 - `.env` 파일은 `.gitignore`에 등록되어 있다. **절대 커밋하지 않는다.**
 - `.mcp.json`도 커밋하지 않는다 (GitHub PAT 포함).
