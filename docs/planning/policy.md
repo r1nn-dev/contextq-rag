@@ -27,7 +27,7 @@
 | 항목 | 정책 |
 | --- | --- |
 | 로그인 실패 응답 | 계정 존재 여부와 무관하게 동일 메시지·동일 코드 `AUTH_INVALID_CREDENTIALS`(401). 미존재 계정도 더미 BCrypt 비교를 수행해 응답 시간 차이 제거 |
-| 계정 잠금 | 동일 계정 15분 내 5회 실패 → 15분 잠금(`AUTH_LOCKED`, 429, `Retry-After` 포함). 성공 시 실패 카운트 초기화 |
+| 계정 잠금 | 동일 계정 15분 내 5회 실패 → 15분 잠금(`AUTH_LOCKED`, 429, `Retry-After` 포함). 성공 시 실패 카운트 초기화. 관리자는 잠금을 즉시 해제할 수 있다(실패 카운트도 초기화, API 명세 §5.4) |
 | Access Token | JWT HS256, 30분. 클레임 `sub`(user_id), `role`, `iat`, `exp`, `jti`. 응답 본문으로 전달, 클라이언트는 **메모리에만 보관**(localStorage 금지, XSS 노출 차단). `Authorization: Bearer` 로 전송 |
 | 서명 키 | 환경 변수 `JWT_SECRET`(32바이트 이상). 키 교체 시 기존 Access 전부 무효(재로그인 유도)를 감수 |
 | 시계 오차 허용 | 30초 |
@@ -597,7 +597,7 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 | 게스트 세션 | ACTIVE | EXHAUSTED | used_count = 5 |
 | 게스트 세션 | EXHAUSTED | ACTIVE | 환불로 used_count < 5 (meta 이전 서버 오류) |
 | 사용자 | ACTIVE | LOCKED | 15분 내 5회 실패 |
-| 사용자 | LOCKED | ACTIVE | 잠금 15분 경과(조회 시 판정) |
+| 사용자 | LOCKED | ACTIVE | 잠금 15분 경과(조회 시 판정) 또는 관리자 잠금 해제(즉시, 실패 카운트 초기화) |
 
 ---
 

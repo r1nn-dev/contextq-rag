@@ -47,7 +47,7 @@ backend/contextq/src/main/java/com/r1nn/contextq/
 |---|---|
 | `auth` | 회원가입·로그인·로그아웃, JWT Access/Refresh 토큰 발급·검증, Spring Security 필터 |
 | `chat` | 질의 요청·AI 서버 호출·SSE 중계, 대화 이력 저장·조회, 게스트 쿼터 관리 |
-| `admin` | 관리자 API(`/api/v1/admin/**`). 인덱스 현황은 ai-server 내부 API로, 사용량은 자체 읽기 전용 SQL로 app 테이블을 집계한다(다른 도메인 저장소를 import하지 않음, §1.3) |
+| `admin` | 관리자 API(`/api/v1/admin/**`). 인덱스 현황은 ai-server 내부 API로, 사용량·사용자 목록·요청 로그는 자체 읽기 전용 SQL로 app 테이블을 읽는다(다른 도메인 저장소를 import하지 않음, §1.3). 계정 잠금 해제처럼 다른 도메인 테이블을 바꾸는 일은 `common/`의 인터페이스(`AccountUnlocker`)로 그 도메인(auth)에 맡긴다 |
 | `domain` | 여러 도메인에서 공통으로 사용하는 JPA Base 엔티티 |
 | `infra` | DataSource 설정, Flyway, WebClient (ai-server 연동) |
 | `common` | 글로벌 예외 핸들러, 표준 응답 래퍼 (`ApiResponse<T>`), 유틸리티 |
