@@ -25,7 +25,7 @@
 | 3 | 개발 및 커밋 (lefthook이 포맷·메시지 형식 검사) |
 | 4 | 원격 브랜치 push |
 | 5 | Draft PR 생성 (base: `develop`) |
-| 6 | 자동 검사 통과 (`ci-gate` / `pr-title` / `branch-name` / `linked-issue`) |
+| 6 | 필수 검사 통과 (`ci-gate` / `lint` — §4.1) |
 | 7 | `Ready for review` 전환 (`gh pr ready`) |
 | 8 | 셀프 리뷰 |
 | 9 | `develop` 병합 (Squash and merge) → 이슈 자동 종료, 브랜치 자동 삭제 |
@@ -73,7 +73,7 @@ chore/3-ci-github-actions-setup
 | `scope` | 아래 1.3 확정 표의 값만 사용 |
 | `summary` | 영문 소문자 kebab-case, 2~4단어 |
 
-> 이 규칙은 `pr-lint.yml`의 `branch-name` 체크가 정규식으로 검사한다. 어기면 PR 병합이 막힌다.
+> 이 규칙은 `pr-lint.yml`의 `lint` 잡(브랜치명 형식 검사 단계)이 정규식으로 검사한다. 어기면 PR 병합이 막힌다.
 
 > **scope를 넣는 이유:** `git log --oneline | grep "(rag)"` 만으로 RAG 파이프라인 변경 이력 전체를 추출할 수 있다. scope는 로그를 질의 가능한 데이터로 만드는 키다.
 
@@ -195,12 +195,24 @@ perf(rag): faithfulness 0.71 → 0.83 — 시스템 프롬프트 개선
 
 ### 4.1 PR 규칙
 
-| 규칙 | 강제 방식 |
+| 규칙 | 강제 방식 (GitHub 체크 > 단계) |
 | --- | --- |
-| base는 `develop` (릴리즈·hotfix만 `main`) | `branch-name` 체크 |
-| 제목은 `<type>(<scope>): <subject>` | `pr-title` 체크 |
-| 본문에 `Closes #이슈번호` | `linked-issue` 체크 |
-| 빌드·테스트·린트 통과 | `ci-gate` 체크 |
+| 브랜치명 `<type>/<issue-number>-<scope>-<summary>` | `lint` > 브랜치명 형식 검사 |
+| 제목은 `<type>(<scope>): <subject>` | `lint` > PR 제목 형식 검사 |
+| 본문에 `Closes #이슈번호` | `lint` > 연결된 이슈 검사 |
+| 빌드·테스트·린트·비밀값 스캔 통과 | `ci-gate` (`rag`·`backend`·`frontend`·`secret-scan` 결과 종합) |
+
+- base는 `develop`이다. 릴리즈·hotfix만 `main`을 base로 한다(검사로 강제하지 않음).
+- 릴리즈 PR(`develop` → `main`)과 역병합 PR(`main` → `develop`)은 이슈 없이 여는 PR이라 `lint`가 브랜치명·연결 이슈 검사를 건너뛴다. 제목 검사는 그대로 한다.
+
+**브랜치 보호 (2026-11-18 적용)**
+
+| 브랜치 | 필수 검사 | 최신 브랜치 요구 | 공통 |
+| --- | --- | --- | --- |
+| `develop` | `ci-gate` · `lint` | 예 | 관리자 포함 적용, force push·삭제 금지 |
+| `main` | `ci-gate` | 아니오 | 관리자 포함 적용, force push·삭제 금지 |
+
+- `main` 필수 검사에 `lint`를 추가하는 것은 릴리즈 예외가 머지된 뒤 적용한다.
 
 - Draft로 먼저 연다. CI를 Draft 상태에서 통과시키고 `Ready for review`로 전환한다.
 - PR 크기: 변경 300줄 이내 권장 (lock 파일, 자동 생성 파일 제외).
@@ -470,7 +482,7 @@ gh pr create --draft --base develop --web
 
 **Draft 단계:**
 
-1. 필수 체크 4개 통과 확인. 실패하면 `Details`에서 로그 확인 후 같은 브랜치에 수정 커밋.
+1. 필수 검사 2개(`ci-gate`·`lint`) 통과 확인. 실패하면 `Details`에서 로그 확인 후 같은 브랜치에 수정 커밋.
 2. 프롬프트·검색 파라미터·임베딩 모델을 바꿨다면 `eval` 라벨을 붙여 평가 결과를 받는다.
 3. 준비되면 `Ready for review` (`gh pr ready`)
 

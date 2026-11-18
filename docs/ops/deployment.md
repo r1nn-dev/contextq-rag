@@ -92,6 +92,53 @@ make demo-check ARGS=--no-llm    # 질문 생략(OpenAI 호출 없음)
 - 게스트 쿠키를 저장하지 않으므로 실행할 때마다 게스트 세션 1개를 새로 쓴다(IP당 신규 세션 30개/시간, 정책서 §8.1).
 - 2026-11-18 확인: 정상 상태 26초(첫 토큰 2,987ms), backend 중지·ACTIVE run 없음 상태에서 해당 항목 실패와 종료 코드 1.
 
+### 4.2 로컬 시연 운영
+
+HTTPS 도메인이 없어 v0.3은 로컬 Docker Compose로 시연한다(2026-11-18 결정, 기획서 §9.4·§9.5). 시연 노트북 한 대에서 발표자가 조작하고, `http://localhost`는 보안 쿠키(`Secure`) 예외라 로그인·게스트 한도가 그대로 동작한다.
+
+**`make`가 없을 때** (Windows Git Bash 등) — Makefile과 같은 명령을 직접 실행한다.
+
+| make 타깃 | 직접 실행 |
+| --- | --- |
+| `make up` | `docker compose --env-file .env -f infra/docker-compose.yml -f infra/docker-compose.local.yml up -d --build` |
+| `make down` | 위 명령에서 `up -d --build` 대신 `down` |
+| `make logs` | `docker compose -p contextq logs -f` |
+| `make demo-check` | `bash scripts/demo-check.sh` |
+| `make snapshot-index RUN=<id>` | `cd ai-server && uv run python -m src.ingest.cli snapshot --run <id>` |
+| `make restore-index SNAPSHOT=<path>` | `cd ai-server && uv run python -m src.ingest.cli restore --snapshot <path> --activate` |
+
+- 인덱스 CLI(스냅샷·복원)는 호스트에서 돌고 `ai-server/`의 환경 파일만 읽는다. 루트 환경 파일의 DB 접속 값을 셸에 올린 뒤 실행한다: `(set -a; . ../.env; set +a; uv run python -m src.ingest.cli …)` (`ai-server/`에서, 값은 출력하지 않는다).
+
+**시연 전날**
+
+1. 다른 Compose 스택을 멈춘다(`docker compose ls`로 확인). 같은 호스트 포트(postgres 등)를 쓰면 contextq 컨테이너가 시작하지 못한다.
+2. `make up` → 4개 healthy (2026-11-18 콜드 스타트 39초, 이미지 빌드 제외).
+3. 인덱스 백업: ACTIVE run마다 `make snapshot-index RUN=<id>` (2026-11-18: run 6 18MB·17초, run 10 12MB·13초).
+4. `make demo-check` → "시연 가능".
+5. 시연 질문을 한 번씩 실행해 본다 — 질문과 기대 결과는 `eval/demo/questions.yaml`, 시연 계정 기준은 `eval/demo/README.md`.
+
+**시연 당일 체크리스트**
+
+- [ ] 전원 연결, 절전·화면 꺼짐 해제, 알림 끄기
+- [ ] 인터넷: 장소 와이파이 + 휴대폰 핫스팟(예비). OpenAI 호출에 인터넷이 필요하다
+- [ ] OpenAI 대시보드 사용 한도·잔액 확인 (월 하드 한도 20달러, 정책서 §8.2)
+- [ ] `make up` → `make demo-check` 전체 실행(예열 질문 1회 포함) → "시연 가능"
+- [ ] 브라우저: 일반 창에 시연 계정 로그인, 시크릿 창은 게스트 시연용으로만
+- [ ] 백업 영상 파일을 바로 열 수 있는 위치에 둔다
+
+**시연 중 주의**
+
+- 페이지를 연속으로 새로고침하지 않는다. 새로 열 때마다 인증 요청 2회(refresh·me)가 나가고, 인증 경로는 IP당 10회/분·burst 5다(API 명세 §0.7).
+- 비교 질문은 일일 한도에서 2회로 계산한다. 게스트 시크릿 창은 24시간 5회다.
+
+**장애 대응 순서** — 한 단계에서 해결되면 멈춘다.
+
+1. `make demo-check` — 실패 항목과 조치 한 줄을 본다(§4.1).
+2. 해당 서비스 로그: `docker compose -p contextq logs --tail 100 <서비스>`.
+3. 스택 재기동: `make down && make up` → `make demo-check`. 포트 충돌로 시작에 실패한 컨테이너는 `up`만으로 다시 쓰이므로 `down`부터 한다.
+4. ACTIVE run이 없으면: `make restore-index SNAPSHOT=data/snapshots/snapshot-<소스>-run<id>.tar.gz`(소스마다) → `make up`.
+5. 복구가 안 되면 백업 영상으로 시연을 이어 간다.
+
 ## 5. 프로덕션 배포
 
 운영 서버 스크립트는 `infra/scripts/`에 있고 모두 `infra/scripts/compose-prod.sh`(기본 파일 + `infra/docker-compose.prod.yml` + 운영 환경 파일)로 Compose를 부른다.
