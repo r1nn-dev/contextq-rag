@@ -1,0 +1,7 @@
+# 빌드 컨텍스트에서 제외 — 로컬 Gradle 산출물·IDE 파일
+build/
+.gradle/
+.idea/
+*.iml
+bin/
+out/
