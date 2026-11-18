@@ -1,6 +1,6 @@
 # ContextQ-RAG 로컬 개발 환경 세팅
 
-> **최종 수정일**: 2026-11-17
+> **최종 수정일**: 2026-11-18
 
 ---
 
@@ -109,7 +109,7 @@ make ingest SOURCE=langchain_v1x STRATEGY=C COMMIT=<40자 커밋 SHA>
 > 수집 원본은 `ai-server/data/raw/{source_key}/`에 run마다 새로 받는다 (`INGEST_DATA_DIR`, `docs/specs/data-sources.md` §2).
 > `INGEST_ENABLED`가 꺼져 있거나 `APP_PROFILE=prod`이면 `FORBIDDEN_IN_PROFILE`로 거부된다.
 
-> 인덱스 스냅샷(`.tar.gz`)을 팀 공유 스토리지에서 받아 `make restore-index`로 복원하면 빌드를 생략할 수 있다.
+> 인덱스 스냅샷(`.tar.gz`)을 받아 `make restore-index SNAPSHOT=<경로>`로 복원하면 빌드를 생략할 수 있다. 스냅샷은 `make snapshot-index RUN=<id>`로 만들고 `infra/scripts/index-snapshot-s3.sh`로 S3에 올리고 받는다(`SNAPSHOT_S3_URI`, `docs/ops/env-reference.md` §1.11). 복원은 같은 run id로 RESTORING → VALIDATING → READY → 활성화까지 진행하며, 같은 run id가 이미 있으면 거부한다(`docs/planning/policy.md` > §4.5).
 
 **전체 스택을 컨테이너로 띄우는 경우** (`make up` 또는 `make -C infra up` = 기본 파일 + `infra/docker-compose.local.yml`)
 

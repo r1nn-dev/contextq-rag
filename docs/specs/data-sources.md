@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| **최종 수정** | 2026-11-17 |
+| **최종 수정** | 2026-11-18 |
 | **관련** | `docs/planning/policy.md` §3 소스·버전 정책 · §4 인덱스 정책 · §10.1 IngestRun, `docs/specs/doc-source.md` (전처리 규칙), `docs/experiments/protocol.md` E1·E2 |
 
 ---
@@ -46,6 +46,9 @@ ${INGEST_DATA_DIR}/            # 기본값 ./data (ai-server 기준). Git에 올
       src/snippets/            # 스니펫 확장용 (Mintlify)
   reports/
     run{id}/                   # run별 산출 리포트 (예: missing_snippets.csv)
+  snapshots/                   # make snapshot-index 산출물 — S3에 run별 보관 (정책서 §4.5)
+    snapshot-{source_key}-run{id}.tar.gz
+    snapshot-{source_key}-run{id}.tar.gz.sha256
 ```
 
 - `data/`는 `.gitignore` 대상이다. 코드(`ai-server/src/ingest/`)만 커밋한다.
