@@ -32,7 +32,8 @@ smoke-index: ## Re-run smoke questions on ACTIVE runs with configs/rag.yaml τ (
 
 # --- Evaluation (docs/experiments/evaluation.md §4) -----------------------
 # Needs DB (ACTIVE pointers), CHROMA_DATA_DIR index, OPENAI_API_KEY for query embeddings.
-# E1-C uses the service Retriever (ChromaRetriever). E2 needs per-strategy index runs (R-7-3).
+# E1-C uses the service Retriever (ChromaRetriever). E2 searches one READY/ACTIVE/SUPERSEDED run
+# per strategy (A, B, C) and source: build them first with `make ingest STRATEGY=...`.
 
 eval: ## Run retrieval eval -> eval/results/{E1,E2}/. Usage: make eval [EXP="E1 E2"] [CONDITIONS="N F C"]
 	cd ai-server && uv run python -m src.eval.run --exp $(or $(EXP),E1 E2) $(if $(CONDITIONS),--conditions $(CONDITIONS),)

@@ -205,12 +205,5 @@ def test_cli_check_reports_repository_question_sets(capsys: pytest.CaptureFixtur
     assert "Q-ret" in capsys.readouterr().out
 
 
-def test_cli_exits_2_for_e2_until_strategy_indexes_exist(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    assert main(["--exp", "E2"]) == 2
-    assert "R-7-3" in capsys.readouterr().err
-
-
 def test_cli_rejects_non_positive_k() -> None:
     assert main(["--exp", "E1", "--conditions", "N", "--k", "0"]) == 2
