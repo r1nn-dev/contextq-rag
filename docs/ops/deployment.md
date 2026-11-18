@@ -7,7 +7,7 @@
 | 환경 | 목적 | 접근 방법 |
 |---|---|---|
 | local | 개발·테스트 | `make up` (기본 파일 + `infra/docker-compose.local.yml`, 이미지 로컬 빌드) |
-| production | 서비스 운영 (EC2 단일 인스턴스, ADR-011) | GHCR 이미지 pull + `docker compose up --no-build` (§4) |
+| production | 서비스 운영 (EC2 단일 인스턴스, ADR-011) | GHCR 이미지 pull + `deploy.sh <git-sha>` (§5) |
 
 ## 2. 컨테이너 구성
 
@@ -71,4 +71,107 @@ make up                         # 이미지 빌드 + 기동 → http://localhost
 
 ## 5. 프로덕션 배포
 
-(추후 작성 — EC2 초기 설정·`deploy.sh <git-sha>`·백업은 배포 스크립트 작업에서 작성)
+운영 서버 스크립트는 `infra/scripts/`에 있고 모두 `infra/scripts/compose-prod.sh`(기본 파일 + `infra/docker-compose.prod.yml` + 운영 환경 파일)로 Compose를 부른다.
+
+| 경로 (서버) | 내용 |
+|---|---|
+| `/opt/contextq/app` | 저장소 체크아웃 — `deploy.sh`가 배포 SHA로 맞춘다 |
+| `/opt/contextq/contextq.env` | 운영 환경 파일 (`chmod 600`, `docs/ops/env-reference.md` §4) |
+| `/opt/contextq/release.env` | 배포 중인 `IMAGE_REGISTRY`·`IMAGE_TAG` (`deploy.sh`가 쓴다) |
+| `/opt/contextq/deployments.log` | 배포 이력 `<UTC 시각> <sha> <ok\|failed\|waiting-index>` |
+| `/opt/contextq/{snapshots,backups,logs}` | 인덱스 스냅샷 · DB 백업(최근 2개) · 크론 로그 |
+
+### 5.1 AWS 사전 확인 (콘솔, 사용자)
+
+- 계정 조건(개설일·플랜·잔여 크레딧) 확인, AWS Budgets 알림 50%·80% (기획서 §9.5).
+- EC2 `t3.small`(서울 리전, Ubuntu 24.04 LTS), 크레딧 사양 **standard**, EBS gp3 20GiB, Elastic IP (기획서 결정 6, ADR-011). 부하 테스트·최종 시연 기간에만 `c7i-flex.large`로 일시 증설.
+- 보안 그룹 인바운드: 22(관리자 IP만) · 80 · 443.
+- IAM 인스턴스 역할: S3 버킷의 `index-snapshots/`·`pg-backups/` 읽기·쓰기.
+- 도메인 A 레코드 → Elastic IP (Let's Encrypt 발급에 필요).
+- CloudWatch `CPUCreditBalance` 알림 (기획서 §9.5).
+
+### 5.2 초기 설정 (1회)
+
+```bash
+sudo git clone https://github.com/<owner>/<repo>.git /opt/contextq/app   # ec2-setup 후 소유자를 ubuntu로
+sudo bash /opt/contextq/app/infra/scripts/ec2-setup.sh                    # 시간대·스왑·Docker·AWS CLI·certbot·크론
+sudo chown -R ubuntu:ubuntu /opt/contextq/app
+# 다시 로그인(docker 그룹) 후 운영 환경 파일 작성 — 값은 별도 터미널에서 입력
+install -m 600 /dev/null /opt/contextq/contextq.env && vi /opt/contextq/contextq.env
+echo "<read:packages PAT>" | docker login ghcr.io -u <github-user> --password-stdin   # GHCR 패키지가 비공개일 때
+```
+
+### 5.3 HTTPS 인증서 (1회, 첫 배포 전)
+
+```bash
+sudo bash /opt/contextq/app/infra/scripts/tls-init.sh <도메인> <알림 이메일>
+```
+
+- nginx가 80 포트를 쓰기 전에 standalone으로 발급한다. 갱신은 certbot 타이머가 하고, 갱신할 때만 nginx를 잠시 멈췄다 띄운다(60일마다 수 초).
+- 배포 nginx는 HTTP → HTTPS 301, HSTS 1년(`infra/nginx/prod/default.conf.template`, 정책서 §11).
+
+### 5.4 배포·롤백
+
+```bash
+/opt/contextq/app/infra/scripts/deploy.sh <40자 git SHA>      # release.yml이 그 SHA로 이미지를 올린 뒤
+/opt/contextq/app/infra/scripts/deploy.sh --previous           # 직전 성공 SHA
+/opt/contextq/app/infra/scripts/deploy.sh "$(/opt/contextq/app/infra/scripts/deploy.sh --previous)"   # 롤백
+```
+
+1. 저장소를 같은 SHA로 체크아웃(Compose·nginx 설정 일치) → `release.env` 기록 → 이미지 pull. pull이 실패하면 이전 기록으로 되돌리고 멈춘다(컨테이너 변경 없음).
+2. postgres·ai-server 기동(ai 스키마 마이그레이션) → 헬스체크.
+3. 전체 기동 → 4개 헬스체크 → 이력 `ok`. 실패하면 이력 `failed`와 롤백 명령을 출력한다.
+4. 첫 배포처럼 인덱스가 없으면 ai-server가 503이라 `waiting-index`로 멈춘다(종료 코드 3) → §5.5 복원 후 같은 명령을 다시 실행한다.
+
+### 5.5 인덱스 스냅샷 복원
+
+```bash
+# 로컬: make snapshot-index RUN=<id> → infra/scripts/index-snapshot-s3.sh upload <파일>
+/opt/contextq/app/infra/scripts/restore-index.sh snapshot-langchain_v03-run<id>.tar.gz
+/opt/contextq/app/infra/scripts/restore-index.sh snapshot-langchain_v1x-run<id>.tar.gz
+```
+
+- S3에서 받아 sha256을 확인하고, ai-server 컨테이너 안에서 같은 run id로 RESTORING → VALIDATING → READY → 활성화한다(정책서 §4.5). 스모크 질문 임베딩에 OpenAI 키를 쓴다.
+- 같은 run id가 이미 있으면 거부된다. 실패 run은 FAILED로 남고 기존 ACTIVE는 그대로다.
+
+### 5.6 백업·복구 (RPO 24시간, RTO 1시간)
+
+- 크론(`/etc/cron.d/contextq`)이 매일 03:00 KST에 `pg-backup.sh`를 실행한다: `pg_dump -Fc` → `BACKUP_S3_URI`, 7일 지난 백업 삭제, 서버에는 최근 2개.
+- 인덱스는 스냅샷 자체가 백업이다(정책서 §9.4).
+
+```bash
+/opt/contextq/app/infra/scripts/pg-backup.sh                                   # 수동 백업
+/opt/contextq/app/infra/scripts/pg-restore.sh contextq-YYYYMMDD-HHMM.dump       # 리허설 — 임시 DB, 운영 DB 변경 없음
+/opt/contextq/app/infra/scripts/pg-restore.sh contextq-YYYYMMDD-HHMM.dump --live --yes   # 실제 복원
+```
+
+- 리허설은 임시 DB `contextq_restore_check`에 복원해 주요 테이블 행 수와 소요 시간을 출력하고 지운다. 배포 후 1회 실행해 결과를 §5.9에 기록한다.
+- 실제 복원은 nginx·backend·ai-server를 멈추고 운영 DB를 백업 시점으로 되돌린 뒤 다시 기동한다. 백업 이후 데이터는 사라진다.
+
+### 5.7 전시회 한도 전환 (정책서 §8.1)
+
+```bash
+/opt/contextq/app/scripts/exhibition-profile.sh apply    # 채팅 60r/m(burst 20), 게스트 신규 세션 IP당 60개/시간
+/opt/contextq/app/scripts/exhibition-profile.sh reset    # 다음 날 00:00 원복
+/opt/contextq/app/scripts/exhibition-profile.sh status
+```
+
+- 운영 환경 파일 값만 바꾸고 nginx·backend를 다시 만든다(backend 재기동 약 1분). 리허설 결과가 부족하면 `EXHIBITION_CHAT_RATE`·`EXHIBITION_CHAT_BURST`·`EXHIBITION_GUEST_SESSIONS`로 값을 바꿔 `apply`한다.
+
+### 5.8 메모리 실측
+
+```bash
+/opt/contextq/app/infra/scripts/mem-report.sh    # docker stats + free → 마크다운 표
+```
+
+- 배포 직후 실행해 기획서 부록 A 예산표를 실측값으로 바꾼다. 기준: 상주 합계 ≤ 1.75GB, 평시 스왑 ≤ 256MB(정책서 §11).
+
+### 5.9 운영 기록
+
+| 항목 | 값 | 측정일 |
+|---|---|---|
+| 배포 URL | | |
+| 첫 배포 SHA | | |
+| 메모리 실측 (컨테이너 합계 / 스왑) | | |
+| 백업 복원 리허설 소요 시간 | | |
+| 인덱스 복원 (소스별 run · 소요 시간) | | |
