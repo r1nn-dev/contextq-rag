@@ -44,12 +44,39 @@ public class AiServerChatClient {
   }
 
   /**
-   * One single-mode question.
+   * One question (api-spec §6.1).
    *
+   * @param mode {@code SINGLE} or {@code COMPARE}
+   * @param sourceKey SINGLE source, null for COMPARE
+   * @param sourceKeyA COMPARE older source (A), null for SINGLE
+   * @param sourceKeyB COMPARE newer source (B), null for SINGLE
    * @param history recent turns ({@code role}, {@code content}); empty for the first question
    */
   public record ChatCall(
-      String requestId, String sourceKey, String question, List<Map<String, String>> history) {}
+      String requestId,
+      String mode,
+      String sourceKey,
+      String sourceKeyA,
+      String sourceKeyB,
+      String question,
+      List<Map<String, String>> history) {
+
+    /** Single-mode question. */
+    public ChatCall(
+        String requestId, String sourceKey, String question, List<Map<String, String>> history) {
+      this(requestId, "SINGLE", sourceKey, null, null, question, history);
+    }
+
+    /** Compare-mode question (A = older, B = newer). */
+    public static ChatCall compare(
+        String requestId,
+        String sourceKeyA,
+        String sourceKeyB,
+        String question,
+        List<Map<String, String>> history) {
+      return new ChatCall(requestId, "COMPARE", null, sourceKeyA, sourceKeyB, question, history);
+    }
+  }
 
   /**
    * Sends the request and waits for the response headers.
@@ -62,8 +89,13 @@ public class AiServerChatClient {
   public Flux<ServerSentEvent<String>> open(ChatCall call) {
     Map<String, Object> body = new LinkedHashMap<>();
     body.put("requestId", call.requestId());
-    body.put("mode", "SINGLE");
-    body.put("sourceKey", call.sourceKey());
+    body.put("mode", call.mode());
+    if ("COMPARE".equals(call.mode())) {
+      body.put("sourceKeyA", call.sourceKeyA());
+      body.put("sourceKeyB", call.sourceKeyB());
+    } else {
+      body.put("sourceKey", call.sourceKey());
+    }
     body.put("question", call.question());
     body.put("history", call.history());
 

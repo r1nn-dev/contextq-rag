@@ -150,7 +150,8 @@ class ChatMessageServiceTest {
 
     assertCode(
         () ->
-            service.accept(new AcceptCommand(otherUser, mine.conversationId(), "q", null, "req-2")),
+            service.accept(
+                AcceptCommand.single(otherUser, mine.conversationId(), "q", null, "req-2")),
         ErrorCode.CONVERSATION_NOT_FOUND);
     assertCode(
         () ->
@@ -252,15 +253,15 @@ class ChatMessageServiceTest {
   }
 
   private AcceptCommand followUpWith(Long conversationId, String question) {
-    return new AcceptCommand(userId, conversationId, question, null, "req-" + System.nanoTime());
+    return AcceptCommand.single(userId, conversationId, question, null, "req-" + System.nanoTime());
   }
 
   private AcceptCommand newQuestion(String question) {
-    return new AcceptCommand(userId, null, question, "langchain_v03", "req-1");
+    return AcceptCommand.single(userId, null, question, "langchain_v03", "req-1");
   }
 
   private AcceptCommand followUp(Long conversationId, String sourceKey) {
-    return new AcceptCommand(userId, conversationId, "다음 질문", sourceKey, "req-2");
+    return AcceptCommand.single(userId, conversationId, "다음 질문", sourceKey, "req-2");
   }
 
   private static void assertCode(Runnable call, ErrorCode code) {

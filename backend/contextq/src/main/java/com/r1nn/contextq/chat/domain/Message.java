@@ -21,8 +21,9 @@ import org.hibernate.type.SqlTypes;
  * USER question or ASSISTANT answer (db-design §3.7).
  *
  * <p>ASSISTANT status changes only through {@link #transitionTo}, which enforces policy §10.2
- * (INV-12). Retrieval and generation values are copied, not referenced (INV-13). Compare-mode
- * columns are mapped by the compare issue.
+ * (INV-12). Retrieval and generation values are copied, not referenced (INV-13). Compare answers
+ * keep both sides' snapshots ({@code *_a}·{@code *_b}) and the result JSON instead of {@code
+ * content}.
  */
 @Entity
 @Table(name = "messages")
@@ -72,15 +73,41 @@ public class Message extends BaseTimeEntity {
   @Column(name = "ingest_run_id")
   private Long ingestRunId;
 
+  @Column(name = "ingest_run_id_a")
+  private Long ingestRunIdA;
+
+  @Column(name = "ingest_run_id_b")
+  private Long ingestRunIdB;
+
   @JdbcTypeCode(SqlTypes.CHAR)
   @Column(name = "commit_sha", length = 40)
   private String commitSha;
 
+  @JdbcTypeCode(SqlTypes.CHAR)
+  @Column(name = "commit_sha_a", length = 40)
+  private String commitShaA;
+
+  @JdbcTypeCode(SqlTypes.CHAR)
+  @Column(name = "commit_sha_b", length = 40)
+  private String commitShaB;
+
   @Column(name = "ingested_at")
   private LocalDate ingestedAt;
 
+  @Column(name = "ingested_at_a")
+  private LocalDate ingestedAtA;
+
+  @Column(name = "ingested_at_b")
+  private LocalDate ingestedAtB;
+
   @Column(name = "top1_similarity", precision = 5, scale = 4)
   private BigDecimal top1Similarity;
+
+  @Column(name = "top1_similarity_a", precision = 5, scale = 4)
+  private BigDecimal top1SimilarityA;
+
+  @Column(name = "top1_similarity_b", precision = 5, scale = 4)
+  private BigDecimal top1SimilarityB;
 
   @Column(length = 50)
   private String model;
@@ -97,6 +124,10 @@ public class Message extends BaseTimeEntity {
   @JdbcTypeCode(SqlTypes.JSON)
   @Column(name = "invalid_citations", columnDefinition = "JSONB")
   private String invalidCitations;
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "compare_result", columnDefinition = "JSONB")
+  private String compareResult;
 
   @Column(name = "rewrite_ms")
   private Integer rewriteMs;
@@ -173,6 +204,30 @@ public class Message extends BaseTimeEntity {
     }
   }
 
+  /** Compare question sent and accepted by ai-server: PENDING → PROCESSING (policy §10.2). */
+  public void startProcessing() {
+    requireAssistant();
+    transitionTo(MessageStatus.PROCESSING);
+  }
+
+  /** Compare {@code meta} received: both sides' snapshots (INV-13). The status stays PROCESSING. */
+  public void applyCompareMeta(CompareSnapshot snapshot) {
+    requireAssistant();
+    this.ingestRunIdA = snapshot.ingestRunIdA();
+    this.ingestRunIdB = snapshot.ingestRunIdB();
+    this.commitShaA = snapshot.commitShaA();
+    this.commitShaB = snapshot.commitShaB();
+    this.ingestedAtA = snapshot.ingestedAtA();
+    this.ingestedAtB = snapshot.ingestedAtB();
+    this.top1SimilarityA = snapshot.top1SimilarityA();
+    this.top1SimilarityB = snapshot.top1SimilarityB();
+    this.rewrittenQuery = snapshot.rewrittenQuery();
+    if (rewriteStatus == null) {
+      this.rewriteStatus =
+          snapshot.rewrittenQuery() != null ? RewriteStatus.OK : RewriteStatus.FALLBACK;
+    }
+  }
+
   /** Single terminal UPDATE (policy §6.3 step 4). */
   public void finish(MessageStatus terminal, AnswerOutcome outcome) {
     requireAssistant();
@@ -188,6 +243,7 @@ public class Message extends BaseTimeEntity {
     this.promptTokens = outcome.promptTokens();
     this.completionTokens = outcome.completionTokens();
     this.invalidCitations = outcome.invalidCitationsJson();
+    this.compareResult = outcome.compareResultJson();
     this.rewriteMs = outcome.rewriteMs();
     this.embedMs = outcome.embedMs();
     this.retrieveMs = outcome.retrieveMs();
@@ -316,5 +372,42 @@ public class Message extends BaseTimeEntity {
 
   public Integer getTotalMs() {
     return totalMs;
+  }
+
+  public Long getIngestRunIdA() {
+    return ingestRunIdA;
+  }
+
+  public Long getIngestRunIdB() {
+    return ingestRunIdB;
+  }
+
+  public String getCommitShaA() {
+    return commitShaA;
+  }
+
+  public String getCommitShaB() {
+    return commitShaB;
+  }
+
+  public LocalDate getIngestedAtA() {
+    return ingestedAtA;
+  }
+
+  public LocalDate getIngestedAtB() {
+    return ingestedAtB;
+  }
+
+  public BigDecimal getTop1SimilarityA() {
+    return top1SimilarityA;
+  }
+
+  public BigDecimal getTop1SimilarityB() {
+    return top1SimilarityB;
+  }
+
+  /** Post-validated compare result JSON (policy §5.6); null for single answers. */
+  public String getCompareResult() {
+    return compareResult;
   }
 }

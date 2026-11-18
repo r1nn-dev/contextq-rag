@@ -33,12 +33,15 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Single-mode relay: browser ⇄ backend ⇄ ai-server SSE (ADR-003 방식 X, api-spec §3.1).
+ * Chat relay: browser ⇄ backend ⇄ ai-server SSE (ADR-003 방식 X, api-spec §3.1).
  *
  * <p>Members and guests share the relay; only the {@link AnswerRecorder} differs (stored messages
  * vs. guest usage log and refund). Pre-stream failures throw {@link BusinessException} (plain
  * JSON). Once the stream starts every failure becomes an {@code error} event (INV-09). Not
  * transactional: persistence happens in short transactions, the ai-server call outside them.
+ *
+ * <p>Compare questions (members only) are processed to the end even when the browser leaves (policy
+ * §2.3): the upstream is consumed independently and the browser only watches a replay.
  */
 @Service
 public class ChatRelayService {
@@ -100,28 +103,38 @@ public class ChatRelayService {
               : request.requestedTarget();
       if (target.isCompare()) {
         sourceCatalog.requireComparable(target.sourceKeyA(), target.sourceKeyB(), followUp);
-        throw BusinessException.invalidField("mode", "비교 모드 중계는 아직 지원하지 않습니다.");
+      } else {
+        sourceCatalog.requireAskable(target.sourceKey(), followUp);
       }
-      String sourceKey = target.sourceKey();
-      sourceCatalog.requireAskable(sourceKey, followUp);
 
       String question = request.trimmedQuestion();
       Accepted accepted =
           messages.accept(
-              new AcceptCommand(userId, request.conversationId(), question, sourceKey, requestId));
+              new AcceptCommand(userId, request.conversationId(), question, target, requestId));
+      ChatCall call =
+          target.isCompare()
+              ? ChatCall.compare(
+                  requestId, target.sourceKeyA(), target.sourceKeyB(), question, accepted.history())
+              : new ChatCall(requestId, target.sourceKey(), question, accepted.history());
       Flux<ServerSentEvent<String>> upstream =
           open(
-              new ChatCall(requestId, sourceKey, question, accepted.history()),
+              call,
               reason ->
                   messages.finish(
                       accepted.answerId(),
                       MessageStatus.FAILED,
-                      AnswerOutcome.interrupted("", reason)));
+                      AnswerOutcome.interrupted(target.isCompare() ? null : "", reason)));
       AnswerRecorder recorder =
           new MemberAnswerRecorder(
               messages, persistFailures, accepted.conversationId(), accepted.answerId(), requestId);
-      return relay(upstream, new RelaySession(recorder, JSON, requestId, sourceKey))
-          .doFinally(signal -> slot.release());
+      Flux<ServerSentEvent<String>> events =
+          relay(upstream, new RelaySession(recorder, JSON, requestId, target))
+              .doFinally(signal -> slot.release());
+      if (!target.isCompare()) {
+        return events;
+      }
+      messages.startProcessing(accepted.answerId()); // ai-server accepted: PENDING → PROCESSING
+      return detached(events);
     } catch (RuntimeException e) {
       slot.release(); // pre-stream failure: the stream never started
       throw e;
@@ -201,6 +214,15 @@ public class ChatRelayService {
       onFailure.accept(ErrorCode.AI_UNAVAILABLE.name());
       throw new BusinessException(ErrorCode.AI_UNAVAILABLE);
     }
+  }
+
+  /**
+   * Starts consuming {@code events} now and lets the browser watch a replay of them, so a browser
+   * cancel does not cancel the processing (policy §2.3 비교 모드 대기 중 이탈). The relay's own timeouts
+   * still end a stuck upstream.
+   */
+  static Flux<ServerSentEvent<String>> detached(Flux<ServerSentEvent<String>> events) {
+    return events.replay().autoConnect(0);
   }
 
   /**
