@@ -1,6 +1,6 @@
 # 테스트 계획서
 
-> **최종 수정일:** 2026-11-17
+> **최종 수정일:** 2026-11-18
 
 ---
 
@@ -108,20 +108,22 @@ assert result.answer.startswith("[NO_CONTEXT]")
 assert stub_gen.call_count == 0  # LLM 호출 없음
 ```
 
-### 8.1-4: 인용 검증 — `cited_chunks` 메타데이터 정합성
+### 8.1-4: 인용 검증 — 출처 순번과 범위 밖 인용
 
 | 항목 | 내용 |
 | --- | --- |
-| **목적** | 최종 답변에 첨부되는 인용 청크가 실제 검색 결과와 일치하는지 검증 |
-| **관련** | interfaces.md `AnswerResult`, `api-spec.md` `meta` SSE 이벤트 |
+| **목적** | 답변의 인용 번호가 `meta.sources`의 순번 범위 안에 있는지, 범위 밖 번호가 기록되는지 검증 (INV-08) |
+| **관련** | `api-spec.md` 부록 B(`meta.sources[].rank`, `done.invalidCitations`, `done.compareResult`), `policy.md` §5.5·§5.6, `rag-pipeline.md` §5.3 |
 
 **검증 케이스**
 
 | 케이스 | 조건 | 기대 결과 |
 | --- | --- | --- |
-| 정상 인용 | Top-5 청크로 답변 생성 | `AnswerResult.cited_chunks`가 입력 청크 ID와 일치 |
-| 중복 인용 없음 | 동일 `chunk_id` 중복 | `cited_chunks`에서 중복 제거 |
-| `meta` SSE 이벤트 | 스트리밍 모드 | `meta.sources`의 `heading_path` 형식이 계층 경로 패턴 준수 |
+| 출처 순번 | 단일 모드, 컨텍스트 청크 n개 | `meta.sources[].rank`가 컨텍스트 순서대로 1..n |
+| 범위 밖 인용 | 단일 모드 본문에 `[n+1]` | `done.invalidCitations`에 n+1 기록, 코드 펜스 안 `arr[0]`은 인용 아님 |
+| 비교 모드 번호 | A측 k개·B측 m개 | `meta.sources[].rank`가 `A1..Ak`·`B1..Bm`, 근거 없는 측 출처는 없음 |
+| 비교 모드 후처리 | 없는 번호·반대 측 번호·한쪽 인용만 있는 변경점 | 인용 배열·본문에서 제거하고 `done.invalidCitations`에 기록, 그 변경점은 폐기 |
+| `meta` SSE 이벤트 | 스트리밍 모드 | `meta.sources`의 `headingPath` 형식이 계층 경로 패턴 준수 |
 
 ### 8.1-5: Spring Boot JWT 발급·갱신·재사용 거부
 
@@ -461,6 +463,7 @@ SDD.md 각 기능의 인수 기준을 SP1·SP2 발표 전 점검하는 목록이
 | 버전 | 변경 내용 |
 | --- | --- |
 | v0.3 | §8.1-5 Access Token TTL 15분 → 30분 수정 |
+| v0.4 | §8.1-4 인용 검증을 실제 계약(`meta.sources` rank, `done.invalidCitations`, 비교 모드 후처리) 기준으로 재작성 — 없는 `AnswerResult.cited_chunks` 참조 제거 (R-8-5) |
 
 ---
 
