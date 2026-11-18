@@ -1,5 +1,7 @@
 """내부 소스 조회·포인터 reload — api-spec.md §6.3·§6.5."""
 
+from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -8,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.config.settings import Settings
-from src.domain.tables import ComparePair, Source
+from src.domain.tables import ComparePair, IndexPointer, IngestRun, Source
 from src.ingest.store import ChromaVectorStore
 from src.main import create_app
 from src.retrieval.pointers import PointerCache
@@ -133,3 +135,79 @@ def test_reload_disabled_source_is_409(
     )
 
     assert (response.status_code, response.json()["code"]) == (409, "SOURCE_UNAVAILABLE")
+
+
+def _run(db: Session, status: str, day: int, **extra: object) -> int:
+    run = IngestRun(
+        source_key=V1X,
+        status=status,
+        accept_drift=False,
+        created_at=datetime(2026, 11, day, 1, 0, tzinfo=UTC),
+        started_at=datetime(2026, 11, day, 2, 0, tzinfo=UTC),
+        **extra,
+    )
+    db.add(run)
+    db.flush()
+    return run.id
+
+
+def test_index_status_lists_active_run_details_and_recent_runs(
+    session_factory: sessionmaker[Session], index: IndexServices
+) -> None:
+    with session_factory() as db:
+        old = [_run(db, "SUPERSEDED", day) for day in (1, 2, 3)]
+        failed = _run(db, "FAILED", 10, failure_stage="VALIDATING", failure_reason="drift")
+        superseded = _run(db, "SUPERSEDED", 11)
+        active = _run(
+            db,
+            "ACTIVE",
+            12,
+            commit_sha=SHA,
+            chunk_strategy="C",
+            chunk_count=700,
+            prev_chunk_count=650,
+            embedding_model="text-embedding-3-small",
+            embedding_tokens=2_150_000,
+            embedding_cost_usd=Decimal("0.043000"),
+            ingest_duration_ms=48_500,
+            completed_at=datetime(2026, 11, 12, 2, 1, tzinfo=UTC),
+        )
+        db.add(IndexPointer(source_key=V1X, active_run_id=active))
+        db.commit()
+
+    response = client_with(index).get("/internal/v1/index/status", headers=HEADERS)
+
+    assert response.status_code == 200
+    v03, v1x = response.json()["sources"]
+    assert v03 == {
+        "sourceKey": V03,
+        "displayName": "LangChain v0.3",
+        "enabled": True,
+        "activeRun": None,
+        "recentRuns": [],
+    }
+    assert v1x["activeRun"] == {
+        "ingestRunId": active,
+        "status": "ACTIVE",
+        "commitSha": SHA,
+        "chunkStrategy": "C",
+        "chunkCount": 700,
+        "prevChunkCount": 650,
+        "embeddingModel": "text-embedding-3-small",
+        "embeddingTokens": 2_150_000,
+        "embeddingCostUsd": 0.043,
+        "ingestDurationMs": 48_500,
+        "startedAt": "2026-11-12T02:00:00Z",
+        "completedAt": "2026-11-12T02:01:00Z",
+    }
+    runs = v1x["recentRuns"]
+    assert [r["ingestRunId"] for r in runs] == [active, superseded, failed, old[2], old[1]]
+    assert runs[2] == {
+        "ingestRunId": failed, "status": "FAILED", "startedAt": "2026-11-10T02:00:00Z",
+        "failureStage": "VALIDATING",
+    }  # fmt: skip
+    assert "failureStage" not in runs[0]  # FAILED만 실패 단계를 넣는다
+
+
+def test_index_status_requires_internal_token(index: IndexServices) -> None:
+    assert client_with(index).get("/internal/v1/index/status").status_code == 401
