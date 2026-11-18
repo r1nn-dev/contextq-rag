@@ -92,7 +92,7 @@
 | --- | --- | --- | --- |
 | F1 | docker-compose.yml 변경 시 `docs/ops/deployment.md`에 반영됐는가 | diff ↔ 문서 | `docs/ops/deployment.md` |
 | F2 | 환경 변수 추가·변경 시 `docs/ops/env-reference.md`와 `.env.example`에 반영됐는가 | diff ↔ 문서 ↔ `.env.example` | `docs/ops/env-reference.md` |
-| F3 | nginx SSE 설정 (`proxy_buffering off`)이 유지되고 `proxy_read_timeout`이 정책서 값(150초)과 같은가 | `infra/nginx/conf.d/default.conf` diff | ADR-003, `docs/planning/policy.md` > §2.1 |
+| F3 | nginx SSE 설정 (`proxy_buffering off`)이 유지되고 `proxy_read_timeout`이 정책서 값(150초)과 같은가 | `infra/nginx/snippets/proxy-backend.conf` diff | ADR-003, `docs/planning/policy.md` > §2.1 |
 | F4 | 서비스 간 의존 순서 (`depends_on: service_healthy`)가 유지됐는가 | docker-compose.yml diff | ADR-002 |
 
 ---
