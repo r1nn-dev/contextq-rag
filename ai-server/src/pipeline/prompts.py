@@ -1,7 +1,8 @@
-"""단일 모드 프롬프트 — `configs/prompts/{prompt_version}.j2` (정책서 §5.5, rag-pipeline.md §3.5).
+"""생성 프롬프트 — `configs/prompts/{prompt_version}.j2` (정책서 §5.5·§5.6, rag-pipeline §3.5·§5).
 
 - 파일명(확장자 제외)이 `prompt_version`이다. 문구 변경은 새 버전 파일로만 한다.
 - 컨텍스트 번호(`rank`)가 인용 번호 [n]이고 SSE meta.sources rank와 같다(INV-08).
+  비교 모드는 측마다 `A1…`·`B1…`이다(정책서 §5.6).
 - 프롬프트 문구는 템플릿에만 둔다. 코드에는 변수만 있다 (CONTRIBUTING.md §9.5).
 """
 
@@ -57,19 +58,45 @@ def build_messages(
     prompts_dir: Path = PROMPTS_DIR,
 ) -> list[dict[str, str]]:
     """system = 규칙 + 번호 붙은 [참고 문서], user = 질문 원문."""
-    documents = [
+    system = load_template(prompt_version, prompts_dir).render(
+        display_name=display_name,
+        header=version_header(display_name),
+        documents=_documents(chunks),
+        sentinel=NO_ANSWER_SENTINEL,
+    )
+    return [{"role": "system", "content": system}, {"role": "user", "content": question}]
+
+
+def _documents(chunks: Sequence[RetrievedChunk], prefix: str = "") -> list[dict[str, object]]:
+    return [
         {
-            "rank": rank,
+            "rank": f"{prefix}{rank}",
             "heading_path": chunk["heading_path"],
             "file_path": chunk["file_path"],
             "content": chunk["content"],
         }
         for rank, chunk in enumerate(chunks, start=1)
     ]
+
+
+def build_compare_messages(
+    prompt_version: str,
+    *,
+    display_name_a: str,
+    display_name_b: str,
+    question: str,
+    chunks_a: Sequence[RetrievedChunk],
+    chunks_b: Sequence[RetrievedChunk],
+    prompts_dir: Path = PROMPTS_DIR,
+) -> list[dict[str, str]]:
+    """비교 모드: system = 규칙 + [버전 A 문서](A1…)·[버전 B 문서](B1…), user = 질문 원문.
+
+    근거가 없는 측은 빈 시퀀스로 넘긴다 — 템플릿이 "근거 문서 없음"을 적는다.
+    """
     system = load_template(prompt_version, prompts_dir).render(
-        display_name=display_name,
-        header=version_header(display_name),
-        documents=documents,
-        sentinel=NO_ANSWER_SENTINEL,
+        display_name_a=display_name_a,
+        display_name_b=display_name_b,
+        documents_a=_documents(chunks_a, "A"),
+        documents_b=_documents(chunks_b, "B"),
     )
     return [{"role": "system", "content": system}, {"role": "user", "content": question}]
