@@ -55,7 +55,7 @@ openssl rand -hex 16
 openssl rand -hex 32
 ```
 
-> 기본값은 정책서 §2.1(Access 30분, Refresh 패밀리 7일)이다. 바꾸면 정책서와 달라지므로 실험·부하 테스트 외에는 설정하지 않는다. 시계 오차 허용(30초)과 회전 경합 유예(5초)는 `application.yaml`에 고정한다.
+> 기본값은 정책서 §2.1(Access 30분, Refresh 패밀리 7일)이다. 바꾸면 정책서와 달라지므로 실험·부하 테스트 외에는 설정하지 않는다. Compose(`infra/docker-compose.yml`)는 두 값을 backend 컨테이너에 그대로 넘기고, 비어 있으면 같은 기본값을 쓴다. 시계 오차 허용(30초)과 회전 경합 유예(5초)는 `application.yaml`에 고정한다.
 
 ### 1.3.1 관리자 시드
 
