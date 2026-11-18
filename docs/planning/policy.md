@@ -331,12 +331,13 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 | 항목 | 정책 |
 | --- | --- |
 | 검색 | A·B 각각 5.3 규칙으로 독립 검색(K는 각각 적용) |
-| 한쪽 근거 없음 | 해당 측 top-1 < τ 이면 그 측은 "해당 버전 문서에서 근거 없음"으로 고정하고 다른 측만 요약. 변경점 목록은 생성하지 않음 |
+| 한쪽 근거 없음 | 해당 측 top-1 < τ 이면 그 측은 "해당 버전 문서에서 근거 없음"으로 고정(`no_evidence: true`, `summary` 빈 문자열, 인용 없음)하고 다른 측만 요약. 그 측 출처는 `meta`에 넣지 않는다. 변경점 목록은 생성하지 않음. τ를 통과한 측도 모델이 근거 부족을 선언하면(`no_evidence: true`) 같은 규칙을 적용 |
 | 양쪽 근거 없음 | NO_CONTEXT(`LOW_SIMILARITY`), 생성 LLM 미호출 |
 | 인용 번호 체계 | A측 `A1…Ak`, B측 `B1…Bk`로 접두어를 분리해 버전 간 번호 혼동 차단 |
-| 출력 | OpenAI Structured Outputs(JSON Schema) 사용, `max_tokens` 1,500 |
-| 후처리 검증 | 존재하지 않는 인용 번호 제거. 변경점 항목에 A·B 인용이 모두 없으면 해당 항목 폐기("양쪽 근거 인용 필수") |
-| 파싱 실패 | 1회 재시도 후에도 실패하면 `FAILED(COMPARE_PARSE_ERROR)` |
+| 출력 | OpenAI Structured Outputs(JSON Schema) 사용, temperature 0, `max_tokens` 1,500. 프롬프트는 `ai-server/configs/prompts/compare_v{n}.j2`(파일명 = `prompt_version`, 5.5와 같은 변경 규칙) |
+| 후처리 검증 | 존재하지 않는 인용 번호와 반대 측 번호(A측 항목의 `B…` 등)를 인용 배열과 본문 `[A1]` 표시에서 모두 제거하고 `done.invalidCitations`에 기록. 변경점 항목은 A·B 인용이 모두 남아 있을 때만 유지("양쪽 근거 인용 필수") |
+| 파싱 실패 | 스키마 불일치·출력 상한 도달(`finish_reason=length`)·거절을 파싱 실패로 본다. 1회 재시도 후에도 실패하면 `FAILED(COMPARE_PARSE_ERROR)`. OpenAI 호출 오류는 재시도하지 않고 `LLM_ERROR` |
+| 제한 시간 | 요청부터 30초(2.1). ai-server가 처리 전체에 적용하고 넘으면 `UPSTREAM_TIMEOUT` 오류로 끝낸다 |
 | 멀티턴 | 허용. 재작성 규칙(5.2)을 동일하게 적용하며 재작성 질의 1개로 양쪽을 검색 |
 
 ```json

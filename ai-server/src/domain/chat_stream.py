@@ -7,12 +7,26 @@
 
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 from pydantic.alias_generators import to_camel
 
 from src.domain.retrieval import RetrievedChunk
+
+
+class ActiveIndexLike(Protocol):
+    """meta가 읽는 run 스냅샷 필드 (`retrieval.pointers.ActiveIndex`)."""
+
+    @property
+    def source_key(self) -> str: ...
+    @property
+    def run_id(self) -> int: ...
+    @property
+    def commit_sha(self) -> str | None: ...
+    @property
+    def ingested_at(self) -> date | None: ...
+
 
 Question = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
 
@@ -30,17 +44,24 @@ class ChatStreamRequest(BaseModel):
     request_id: str | None = Field(default=None, min_length=1, max_length=100)
     mode: Literal["SINGLE", "COMPARE"] = "SINGLE"
     source_key: str | None = Field(default=None, min_length=1, max_length=50)
-    source_key_a: str | None = None
-    source_key_b: str | None = None
+    source_key_a: str | None = Field(default=None, min_length=1, max_length=50)
+    source_key_b: str | None = Field(default=None, min_length=1, max_length=50)
     question: Question
     history: list[HistoryMessage] = Field(default_factory=list, max_length=6)
     prompt_version: str | None = Field(default=None, min_length=1, max_length=50)
 
     @model_validator(mode="after")
-    def _single_mode_only(self) -> "ChatStreamRequest":
+    def _mode_fields(self) -> "ChatStreamRequest":
+        """SINGLE은 `sourceKey`, COMPARE는 서로 다른 `sourceKeyA`·`sourceKeyB` (api-spec §6.1).
+
+        허용된 비교 쌍인지는 DB가 필요해 라우터가 확인한다.
+        """
         if self.mode == "COMPARE":
-            raise ValueError("비교 모드(COMPARE)는 아직 지원하지 않습니다")
-        if not self.source_key:
+            if not (self.source_key_a and self.source_key_b):
+                raise ValueError("COMPARE 모드에는 sourceKeyA와 sourceKeyB가 필요합니다")
+            if self.source_key_a == self.source_key_b:
+                raise ValueError("비교할 두 소스가 같습니다")
+        elif not self.source_key:
             raise ValueError("SINGLE 모드에는 sourceKey가 필요합니다")
         return self
 
@@ -48,8 +69,8 @@ class ChatStreamRequest(BaseModel):
 # --- SSE 이벤트 (upstream 구간: ai-server → backend) -----------------------------
 
 
-def source_payload(rank: int, chunk: RetrievedChunk) -> dict[str, Any]:
-    """meta.sources 항목. rank = 컨텍스트 순서 = 인용 번호 (INV-08)."""
+def source_payload(rank: int | str, chunk: RetrievedChunk) -> dict[str, Any]:
+    """meta.sources 항목. rank = 컨텍스트 순서 = 인용 번호 (INV-08). 비교 모드는 "A1"·"B1"."""
     return {
         "rank": rank,
         "headingPath": chunk["heading_path"],
@@ -87,6 +108,39 @@ class MetaEvent:
         return data
 
 
+@dataclass(frozen=True)
+class CompareMetaEvent:
+    """비교 모드 meta (부록 B.4) — A·B run 스냅샷 + τ를 통과한 측의 출처(A1…·B1…)."""
+
+    request_id: str
+    index_a: ActiveIndexLike
+    index_b: ActiveIndexLike
+    no_context: bool
+    sources: list[dict[str, Any]] = field(default_factory=list)
+    rewritten_query: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        data: dict[str, Any] = {
+            "event": "meta",
+            "requestId": self.request_id,
+            "sourceKeyA": self.index_a.source_key,
+            "sourceKeyB": self.index_b.source_key,
+            "ingestRunIdA": self.index_a.run_id,
+            "ingestRunIdB": self.index_b.run_id,
+            "rewrittenQuery": self.rewritten_query,
+            "noContext": self.no_context,
+            "sources": [] if self.no_context else self.sources,
+        }
+        # 계약: A·B 필드는 쌍으로만 온다 (metaRules dependentRequired)
+        if self.index_a.commit_sha and self.index_b.commit_sha:
+            data["commitShaA"] = self.index_a.commit_sha
+            data["commitShaB"] = self.index_b.commit_sha
+        if self.index_a.ingested_at and self.index_b.ingested_at:
+            data["ingestedAtA"] = self.index_a.ingested_at.isoformat()
+            data["ingestedAtB"] = self.index_b.ingested_at.isoformat()
+        return data
+
+
 def token_event(text: str) -> dict[str, Any]:
     return {"event": "token", "t": text}
 
@@ -116,12 +170,13 @@ class DoneEvent:
     status_reason: str | None = None
     finish_reason: str | None = None
     usage: dict[str, int] | None = None
-    invalid_citations: list[int] = field(default_factory=list)
+    invalid_citations: list[int] | list[str] = field(default_factory=list)  # 비교 모드는 "A9" 등
     model: str | None = None
     prompt_version: str | None = None
+    compare_result: dict[str, Any] | None = None  # 비교 모드만 (후처리 뒤, snake_case 그대로)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data: dict[str, Any] = {
             "event": "done",
             "status": self.status,
             "statusReason": self.status_reason,
@@ -132,6 +187,9 @@ class DoneEvent:
             "model": self.model,
             "promptVersion": self.prompt_version,
         }
+        if self.compare_result is not None:
+            data["compareResult"] = self.compare_result
+        return data
 
 
 def error_event(code: str, message: str, request_id: str, *, partial: bool) -> dict[str, Any]:

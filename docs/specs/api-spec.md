@@ -1059,11 +1059,12 @@ data: {"event":"done", "status":"COMPLETED", ...}
 | 필드 | 설명 |
 | --- | --- |
 | `requestId` | 선택. 없으면 `X-Request-Id` 헤더, 그것도 없으면 ai-server가 UUID v4 생성 |
-| `mode` | `SINGLE`. `COMPARE`는 비교 모드 구현(R-8) 전까지 400 `INVALID_REQUEST` |
+| `mode` | `SINGLE` \| `COMPARE` |
 | `sourceKey` | `SINGLE`이면 필수 |
+| `sourceKeyA`·`sourceKeyB` | `COMPARE`이면 둘 다 필수. `ai.compare_pairs`에 같은 순서(A = 구버전, B = 신버전)로 있는 쌍만 허용하고, 아니면 400 `INVALID_REQUEST`(정책서 §3.2). 두 소스 각각에 `sourceKey`와 같은 스트림 전 검사(404·409·500·503)를 적용한다 |
 | `question` | trim 후 1~1,000자 (정책서 §5.1) |
 | `history` | 최근 3턴, 오래된 것부터. 첫 질문이면 빈 배열 `[]`. 최대 6개, 메시지당 2,000자. 실패·근거 부족 답변은 보내는 쪽(backend)이 뺀다. 비어 있지 않으면 질의를 재작성한다(정책서 §5.2) — `assistant` 항목은 앞 500자만 쓴다. 재작성 성공이면 `meta.rewrittenQuery`에 재작성 질의, 빈 배열·폴백이면 null. `done.latency.rewriteMs`는 재작성을 시도했으면 걸린 시간, 빈 배열이면 null |
-| `promptVersion` | 선택. `ai-server/configs/prompts/` 파일명(확장자 제외). backend가 환경 변수로 주입. 없으면 `ai-server/configs/rag.yaml` `generation.prompt_version`. 없는 버전이면 400 |
+| `promptVersion` | 선택. `ai-server/configs/prompts/` 파일명(확장자 제외). backend가 환경 변수로 주입. 없으면 `ai-server/configs/rag.yaml`의 `generation.prompt_version`(SINGLE)·`generation.compare_prompt_version`(COMPARE). 없는 버전이면 400 |
 
 **응답**: `200 OK`, `text/event-stream`
 
@@ -1091,7 +1092,7 @@ data: {"event":"done", "status":"NO_CONTEXT", "statusReason":"LOW_SIMILARITY", "
 
 | 코드 | HTTP | 조건 |
 | --- | --- | --- |
-| `INVALID_REQUEST` | 400 | 필드 검증 실패 (Pydantic), 없는 `promptVersion`, `mode=COMPARE`(R-8 전) |
+| `INVALID_REQUEST` | 400 | 필드 검증 실패 (Pydantic), 없는 `promptVersion`, 허용되지 않은 비교 쌍 |
 | `INTERNAL_UNAUTHORIZED` | 401 | `X-Internal-Token` 누락·불일치 (ADR-012) |
 | `SOURCE_NOT_FOUND` | 404 | `sourceKey`가 소스 카탈로그에 없음 |
 | `SOURCE_UNAVAILABLE` | 409 | 비활성 소스 |
@@ -1112,6 +1113,23 @@ data: {"event":"done", "status":"NO_CONTEXT", "statusReason":"LOW_SIMILARITY", "
 | 질의 임베딩·OpenAI 생성 실패 | `error` `LLM_ERROR` (`partial` = 토큰 수신 여부) |
 | 스트림 중 인덱스 오류(컬렉션 삭제 등) | `error` + 해당 코드(`INDEX_NOT_ACTIVE` 등) |
 | 그 밖의 예기치 않은 서버 오류 | `error` `INTERNAL_ERROR` (종결 이벤트 1회 보장, INV-06) |
+
+**비교 모드 (`COMPARE`, 부록 B.2·B.4, 정책서 §5.6)**
+
+- 재작성 질의 1개로 A·B를 각각 검색하고, 각 소스의 τ로 근거 여부를 따로 판정한다.
+- `meta.sources`는 τ를 통과한 측의 컨텍스트 청크만 담는다. rank는 A측 `A1…`, B측 `B1…`이다. 근거가 없는 측의 출처는 넣지 않는다.
+- `meta`에는 두 소스의 `sourceKeyA/B`·`ingestRunIdA/B`·`commitShaA/B`·`ingestedAtA/B`를 넣고 단일 모드 필드(`sourceKey` 등)는 넣지 않는다.
+- token 이벤트를 보내지 않는다. 생성은 OpenAI Structured Outputs 1회 호출이며, 후처리한 결과를 `done.compareResult`로 보낸다.
+- `done`: `finishReason`은 `stop`, `usage`는 생성 호출 합계(재시도 포함), `latency.ttftMs`는 null, `invalidCitations`는 후처리에서 지운 인용 번호(`"A9"` 등), `promptVersion`은 비교 프롬프트 버전이다.
+
+| 조건 | 종결 이벤트 |
+| --- | --- |
+| 양쪽 top-1 < τ | `meta(noContext=true, sources=[])` → `done` NO_CONTEXT, `LOW_SIMILARITY` (생성 LLM 미호출) |
+| 한쪽 top-1 < τ | `meta`(통과한 측 출처만) → `done` COMPLETED. 근거 없는 측은 `no_evidence=true`·`summary=""`·`citations=[]`, `changes=[]` |
+| 정상 | `meta` → `done` COMPLETED, `compareResult` |
+| 구조화 출력 파싱 실패(스키마 불일치·`finish_reason=length`·거절) 2회 | `error` `COMPARE_PARSE_ERROR` (`partial=false`) |
+| OpenAI 호출 실패·질의 임베딩 실패 | `error` `LLM_ERROR` (`partial=false`, 재시도 없음) |
+| 요청부터 30초 초과 (정책서 §2.1 비교 모드 전체 타임아웃) | `error` `UPSTREAM_TIMEOUT` (`partial=false`) |
 
 **에러 (스트림 후)**: `event: error` SSE 이벤트
 
@@ -1335,6 +1353,7 @@ meta (noContext=true)      → done (status: NO_CONTEXT)
 ```
 
 비교 모드는 token 이벤트 없음. OpenAI Structured Outputs 결과를 검증 후 한 번에 done으로 반환.
+`meta` 뒤 오류(파싱 2회 실패·30초 초과·LLM 오류)는 `error`(partial=false)로 끝난다. 종결 조건은 §6.1 "비교 모드" 표를 따른다.
 
 ### B.3 이벤트 필드 요약
 

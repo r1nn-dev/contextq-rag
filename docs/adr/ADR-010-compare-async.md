@@ -1,10 +1,10 @@
 # ADR-010: 비교 모드 비동기 병렬 질의
 
 ## Status
-Draft
+Accepted
 
 ## Date
-2026-11-14 (2026-11-17 SSE 계약에 맞춰 Decision 수정)
+2026-11-14 (2026-11-17 SSE 계약에 맞춰 Decision 수정, 2026-11-18 R-8-1 구현과 함께 Accepted)
 
 ## Context
 
@@ -34,7 +34,8 @@ async def compare_stream(req: CompareRequest):
         retrieve(req.query, source_key=req.source_key_b),
     )
 
-    # meta: 양측 출처를 먼저 보낸다 (UI는 결과 전에 출처 카드를 그린다)
+    # 측별 τ 판정 — 양쪽 미달이면 meta(noContext) → done(NO_CONTEXT), 한쪽 미달이면 그 측 출처 제외
+    # meta: 통과한 측 출처를 먼저 보낸다 (UI는 결과 전에 출처 카드를 그린다)
     yield meta_event(result_a, result_b)
 
     # 생성: Structured Outputs로 비교 JSON 1회 생성 → 후처리 검증 (policy §5.6)
@@ -47,6 +48,7 @@ async def compare_stream(req: CompareRequest):
 - `token` 이벤트는 비교 모드에서 쓰지 않는다. 계약 스키마의 `token`은 `t` 외 필드를 허용하지 않는다.
 - 생성은 OpenAI Structured Outputs(JSON Schema) 1회 호출이다. 버전별 LLM 스트림을 병합하지 않는다.
 - `compareResult` 형식과 후처리 규칙(존재하지 않는 인용 제거, 양쪽 인용 없는 변경점 폐기)은 `docs/planning/policy.md` > §5.6을 따른다.
+- 검색은 측마다 질의 임베딩을 1회씩 하고 두 검색을 병렬로 돌린다(`Retriever` 계약 그대로). 30초 상한·파싱 재시도·후처리 세부는 `docs/specs/rag-pipeline.md` > §5를 따른다.
 
 ## Consequences
 

@@ -17,16 +17,20 @@ from sqlalchemy.orm import Session, sessionmaker
 from src.config.ingest_config import load_embedding_config
 from src.config.rag_config import (
     RagConfig,
+    load_compare_model_config,
     load_llm_config,
     load_rag_config,
     load_rewrite_model_config,
 )
 from src.config.settings import Settings
 from src.ingest.store import ChromaVectorStore, VectorStore
+from src.pipeline.compare import ComparePipeline
+from src.pipeline.compare_generator import OpenAICompareGenerator
 from src.pipeline.generator import OpenAIAnswerGenerator
 from src.pipeline.rewriter import OpenAIQueryRewriter
 from src.pipeline.single import SingleModePipeline
 from src.retrieval.embedding import OpenAIQueryEmbedder
+from src.retrieval.pairs import ComparePairCatalog, PairSource
 from src.retrieval.pointers import PointerCache
 from src.retrieval.search import ChromaRetriever
 from src.routers.errors import ApiError
@@ -62,7 +66,9 @@ class ChatServices:
     pointers: PointerCache | None  # reload가 무효화한다 (R-4-5)
     retriever: ChromaRetriever
     pipeline: SingleModePipeline
-    slots: asyncio.Semaphore  # 시스템 전체 동시 처리 상한 (정책서 §8.1)
+    slots: asyncio.Semaphore  # 시스템 전체 동시 처리 상한 (정책서 §8.1) — 비교 모드도 1개
+    compare: ComparePipeline | None = None  # 비교 모드 (R-8-1). 없으면 COMPARE 요청은 500
+    pairs: PairSource | None = None  # 허용 비교 쌍 (정책서 §3.2)
 
 
 def build_services(settings: Settings, index: IndexServices) -> ChatServices:
@@ -86,8 +92,23 @@ def build_services(settings: Settings, index: IndexServices) -> ChatServices:
         tau_overrides=settings.tau_overrides(),
         rewriter=rewriter,
     )
+    compare = ComparePipeline(
+        retriever,
+        OpenAICompareGenerator(
+            settings.openai_api_key, load_compare_model_config(), model_override=settings.llm_model
+        ),
+        config.retrieval,
+        tau_overrides=settings.tau_overrides(),
+        rewriter=rewriter,
+    )
     return ChatServices(
-        config, pointers, retriever, pipeline, asyncio.Semaphore(config.stream.max_concurrency)
+        config,
+        pointers,
+        retriever,
+        pipeline,
+        asyncio.Semaphore(config.stream.max_concurrency),
+        compare,
+        ComparePairCatalog(index.session_factory),
     )
 
 

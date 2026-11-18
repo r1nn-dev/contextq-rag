@@ -1,6 +1,6 @@
 # 컴포넌트 인터페이스 명세
 
-> **최종 수정**: 2026-11-17
+> **최종 수정**: 2026-11-18
 
 ---
 
@@ -99,7 +99,8 @@ class SourceKey(str, Enum):
 | 인터페이스명 | 설명 | 초안 | 확정 | 상태 |
 | --- | --- | --- | --- | --- |
 | `Retriever` | 쿼리로 관련 청크 검색 | r1nn-dev | - | 설계 |
-| `AnswerGenerator` | 컨텍스트 기반 답변 생성 | r1nn-dev | - | 설계 |
+| `AnswerGenerator` | 컨텍스트 기반 단일 모드 답변 스트리밍 생성 | r1nn-dev | - | 설계 |
+| `CompareGenerator` | 두 버전 컨텍스트로 비교 결과 구조화 생성 (비교 모드) | r1nn-dev | - | 구현 |
 | `QueryRewriter` | 멀티턴 후속 질문을 단독 검색 질의로 재작성 | r1nn-dev | - | 구현 |
 | `DocumentChunker` | 문서를 청크로 분할 | r1nn-dev | - | 설계 |
 | `EmbeddingClient` | 텍스트를 임베딩 벡터로 변환 | r1nn-dev | - | 설계 |
@@ -211,32 +212,9 @@ class Retriever(Protocol):
 
 | 메서드명 | 설명 | 동기/비동기 | 용도 |
 | --- | --- | --- | --- |
-| `generate` | 단일 답변 생성 (비스트리밍) | async | COMPARE 모드 (Structured Outputs) |
 | `generate_stream` | SSE 스트리밍 답변 생성 | async | SINGLE 모드 |
 
 ---
-
-#### `generate`
-
-**입력 파라미터**
-
-| 파라미터 | 타입 | 필수 | 설명 | 제약 |
-| --- | --- | --- | --- | --- |
-| `query` | `str` | Y | 사용자 질문 | 비어 있으면 안 됨 |
-| `chunks` | `list[RetrievedChunk]` | Y | 검색된 컨텍스트 청크 | 빈 리스트 허용 — 안내 메시지 반환 |
-
-**반환값**
-
-| 타입 | 설명 |
-| --- | --- |
-| `AnswerResult` | 생성된 답변 및 메타데이터 |
-
-**예외**
-
-| 예외 클래스 | 발생 조건 |
-| --- | --- |
-| `LLMCallError` | OpenAI API 호출 실패 (rate limit, timeout 등) |
-| `ContextTooLongError` | 청크 합산 토큰이 모델 컨텍스트 한도를 초과한 경우 |
 
 **코드 예시**
 
@@ -244,29 +222,6 @@ class Retriever(Protocol):
 from typing import Protocol, AsyncIterator
 
 class AnswerGenerator(Protocol):
-    async def generate(
-        self,
-        query: str,
-        chunks: list[RetrievedChunk],
-    ) -> AnswerResult:
-        """
-        검색된 청크를 컨텍스트로 LLM 답변을 생성한다.
-        COMPARE 모드: OpenAI Structured Outputs로 비스트리밍 호출 후 한 번에 반환.
-
-        Args:
-            query: 사용자 질문
-            chunks: Retriever가 반환한 청크 목록.
-                    빈 리스트이면 "검색된 문서 없음" 안내 메시지를 반환한다.
-
-        Returns:
-            AnswerResult — 답변, 출처 청크, 토큰 사용량 포함
-
-        Raises:
-            LLMCallError: OpenAI API 호출 실패
-            ContextTooLongError: 컨텍스트 토큰 초과
-        """
-        ...
-
     def generate_stream(
         self,
         query: str,
@@ -311,11 +266,78 @@ class GenerationStream(Protocol):
 ```
 
 **구현 노트**
-- `chunks`가 빈 리스트이면 `"검색된 문서가 없어 답변할 수 없습니다."` 형태의 안내를 담은 `AnswerResult`를 반환한다. 예외를 발생시키지 않는다.
 - 프롬프트 템플릿은 `configs/prompts/{prompt_version}.j2`(Jinja2)로 버전 관리한다. 하드코딩 금지.
 - `generate_stream` 파라미터: temperature 0, `max_tokens` 1,024, 첫 토큰 10초, 재시도 없음 (`configs/models.yaml` `llm`, 정책서 §5.5·§2.1). 모델은 `LLM_MODEL` 환경 변수가 우선한다.
 - sentinel(`[[NO_ANSWER]]`) 감지와 인용 번호 검증은 생성기가 아니라 라우터 조립 단계가 한다 (정책서 §5.4·§5.5).
-- COMPARE 모드는 `generate()`를 사용하며, OpenAI Structured Outputs JSON 스키마를 적용해 비스트리밍으로 호출한다. token 이벤트 없이 `done` 이벤트 1회만 발생한다.
+- COMPARE 모드는 이 인터페이스가 아니라 `CompareGenerator`를 쓴다.
+
+---
+
+### CompareGenerator
+
+| 항목 | 값 |
+| --- | --- |
+| **목적** | 두 버전의 컨텍스트로 비교 결과(`compareResult`)를 한 번에 생성한다 (ADR-010, 정책서 §5.6) |
+| **초안** | r1nn-dev |
+| **확정** | - |
+| **상태** | 구현 |
+| **구현체** | `OpenAICompareGenerator` |
+| **소비자** | 비교 모드 파이프라인 (`POST /internal/v1/chat/stream`, `mode=COMPARE`) |
+
+#### 메서드 목록
+
+| 메서드명 | 설명 | 동기/비동기 | 용도 |
+| --- | --- | --- | --- |
+| `generate_compare` | Structured Outputs 비스트리밍 1회 호출(파싱 실패 시 1회 재시도) | async | COMPARE 모드 |
+
+**입력 파라미터**
+
+| 파라미터 | 타입 | 필수 | 설명 | 제약 |
+| --- | --- | --- | --- | --- |
+| `query` | `str` | Y | 사용자 원래 질문 (재작성 질의는 검색에만 쓴다) | 비어 있으면 안 됨 |
+| `chunks_a` · `chunks_b` | `Sequence[RetrievedChunk]` | Y | 측별 컨텍스트. 순서가 인용 번호 `A1…`·`B1…` | 근거 없는 측은 빈 시퀀스. 둘 다 비면 호출하지 않는다(INV-07) |
+| `display_name_a` · `display_name_b` | `str` | Y | 버전 표시명. 예: "LangChain v0.3" | |
+| `prompt_version` | `str` | Y | `configs/prompts/` 파일명(확장자 제외). 예: `compare_v1` | |
+
+**반환값**
+
+| 타입 | 설명 |
+| --- | --- |
+| `CompareGeneration` | 모델 출력(`CompareResult`, 후처리 전) + `model`·`usage`(재시도 포함 합계)·`attempts` |
+
+**예외**
+
+| 예외 클래스 | 발생 조건 |
+| --- | --- |
+| `PromptNotFoundError` | `prompt_version` 파일이 없음 (호출 즉시) |
+| `CompareParseError` | 파싱 실패(스키마 불일치·`finish_reason=length`·거절·빈 결과)가 재시도 후에도 남음 → `error` `COMPARE_PARSE_ERROR` |
+| `LLMCallError` | OpenAI 호출 실패·호출 제한 시간 초과 (재시도 없음) → `error` `LLM_ERROR` |
+
+```python
+@dataclass(frozen=True)
+class CompareGeneration:
+    result: CompareResult          # rag-pipeline.md §5.2 출력 스키마 (후처리 전)
+    model: str | None              # 실제 응답 모델명 (INV-13)
+    usage: TokenUsage | None       # 재시도 포함 합계
+    attempts: int                  # 1 또는 2
+
+
+class CompareGenerator(Protocol):
+    async def generate_compare(
+        self,
+        query: str,
+        chunks_a: Sequence[RetrievedChunk],
+        chunks_b: Sequence[RetrievedChunk],
+        *,
+        display_name_a: str,
+        display_name_b: str,
+        prompt_version: str,
+    ) -> CompareGeneration: ...
+```
+
+**구현 노트**
+- 파라미터: temperature 0, `max_tokens` 1,500, 호출 제한 시간·파싱 재시도 1회 (`configs/models.yaml` `compare`). 모델은 `LLM_MODEL` 환경 변수가 우선한다.
+- 인용 후처리(없는·반대 측 번호 제거, 양쪽 인용 없는 변경점 폐기)와 `no_evidence` 고정은 생성기가 아니라 파이프라인이 한다 (rag-pipeline.md §5.3).
 
 ---
 
@@ -517,8 +539,9 @@ class EmbeddingClient(Protocol):
 | `IndexNotActiveError` | `Retriever` | ACTIVE run 포인터 또는 컬렉션 없음 (INV-01 위반) | 503 | INDEX_NOT_ACTIVE 반환 |
 | `EmbeddingModelMismatchError` | `Retriever` | 인덱스 임베딩 모델 ≠ 질의 임베딩 모델 (INV-03) | 500 | EMBEDDING_MODEL_MISMATCH 반환 |
 | `EmbeddingError` | `Retriever`, `EmbeddingClient` | 임베딩 API 호출 실패 | 503 | 로그 후 503 반환 |
-| `LLMCallError` | `AnswerGenerator` | LLM API 호출 실패, 첫 토큰 10초 초과 | 503 | 스트림 시작 후에는 `error` 이벤트 `LLM_ERROR` (INV-09) |
-| `PromptNotFoundError` | `AnswerGenerator` | `prompt_version`에 해당하는 프롬프트 파일 없음 | 400 | INVALID_REQUEST 반환 |
+| `LLMCallError` | `AnswerGenerator`, `CompareGenerator` | LLM API 호출 실패, 첫 토큰 10초 초과(단일)·호출 제한 시간 초과(비교) | 503 | 스트림 시작 후에는 `error` 이벤트 `LLM_ERROR` (INV-09) |
+| `CompareParseError` | `CompareGenerator` | 구조화 출력 파싱 실패가 재시도 후에도 남음 | 502 | `error` 이벤트 `COMPARE_PARSE_ERROR` |
+| `PromptNotFoundError` | `AnswerGenerator`, `CompareGenerator` | `prompt_version`에 해당하는 프롬프트 파일 없음 | 400 | INVALID_REQUEST 반환 |
 | `ContextTooLongError` | `AnswerGenerator` | 컨텍스트 토큰 초과 | 422 | top_k 줄여 재시도 |
 | `ChunkingError` | `DocumentChunker` | 청킹 처리 실패 | - | 해당 문서 건너뜀 후 로그 |
 
@@ -545,6 +568,10 @@ class EmbeddingError(Exception):
 
 class LLMCallError(Exception):
     """LLM API 호출 실패 또는 첫 토큰 타임아웃"""
+    pass
+
+class CompareParseError(Exception):
+    """비교 구조화 출력 파싱 실패 — 재시도 후에도 실패 (COMPARE_PARSE_ERROR)"""
     pass
 
 class PromptNotFoundError(Exception):
@@ -574,12 +601,12 @@ class ChunkingError(Exception):
 
 - `Retriever.retrieve()`는 `None`을 반환하지 않는다. 결과 없으면 빈 리스트를 반환한다.
 - `EmbeddingClient.embed()`의 반환 벡터 수는 항상 입력 텍스트 수와 같다.
-- `AnswerGenerator.generate()`는 `chunks`가 빈 리스트여도 예외를 발생시키지 않는다.
+- 비교 모드 `done.compareResult`의 인용 번호는 후처리 뒤 항상 그 측 출처 범위 안에 있다 (`CompareGenerator` 출력은 후처리 전, rag-pipeline.md §5.3).
 
 ### 6.3 성능 제약
 
 - `Retriever.retrieve()` p95: 500ms 이내 (임베딩 생성 포함)
-- `AnswerGenerator.generate()` p95: 10,000ms 이내 (LLM 응답 포함)
+- `CompareGenerator.generate_compare()`: 비교 모드 전체 p50 ≤ 12초, 상한 30초 (정책서 §11·§2.1)
 - `EmbeddingClient.embed()` 단일 텍스트 p95: 200ms 이내
 
 ### 6.4 불변식
@@ -589,7 +616,6 @@ class ChunkingError(Exception):
 [항상 참] RetrievedChunk.similarity는 0.0 ≤ similarity ≤ 1.0이다.
 [항상 참] len(EmbeddingClient.embed(texts)) == len(texts)이다.
 [항상 참] Chunk.line_end >= Chunk.line_start이다.
-[항상 참] AnswerResult.source_chunks는 generate()에 전달된 chunks의 부분집합이다.
 ```
 
 ---
@@ -604,6 +630,7 @@ class ChunkingError(Exception):
 | v0.4 | `RetrievedChunk`에 `file_path`·`token_count` 추가 (평가 러너의 gold 판정·평균 컨텍스트 토큰, 정책서 §5.3 컨텍스트 예산). 기존 필드 변경 없음 |
 | v0.5 | `RetrievedChunk`에 `site_url` 추가 (SSE meta 출처 카드). `Retriever` 예외에 `IndexNotActiveError`·`EmbeddingModelMismatchError` 추가, `SourceNotFoundError`·`SourceUnavailableError` 조건 구체화. 구현 노트: `where` 필터 → ACTIVE 컬렉션 지정 + 2차 메타데이터 검증 (ADR-004) |
 | v0.6 | `AnswerGenerator.generate_stream`: 키워드 입력 `display_name`·`prompt_version` 추가, 반환을 `GenerationStream`(토큰 + 종료 후 `model`·`finish_reason`·`usage`)으로 구체화, `PromptNotFoundError` 추가 |
+| v0.7 | 비교 모드 생성을 `AnswerGenerator.generate`(미구현)에서 `CompareGenerator.generate_compare`로 분리 — 두 측 청크·표시명 입력, `CompareGeneration` 반환, `CompareParseError` 추가 (R-8-1) |
 
 ---
 *end.*

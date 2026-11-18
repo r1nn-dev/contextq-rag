@@ -17,12 +17,16 @@ retrieval:
 generation:
   # 요청에 promptVersion이 없을 때 쓰는 단일 모드 프롬프트 (configs/prompts/{prompt_version}.j2)
   prompt_version: single_v2
+  # 요청에 promptVersion이 없을 때 쓰는 비교 모드 프롬프트 (정책서 §5.6, rag-pipeline.md §5)
+  compare_prompt_version: compare_v1
 
 stream:
   # 정책서 §2.1 SSE 하트비트 · 단일 스트림 최대 시간, §8.1 ai-server 동시 생성 (E6에서 확정)
   heartbeat_seconds: 10
   max_duration_seconds: 120
   max_concurrency: 20
+  # 정책서 §2.1 비교 모드 전체 타임아웃 — 요청~결과 30초, 넘으면 error(UPSTREAM_TIMEOUT)
+  compare_max_duration_seconds: 30
 
 rewrite:
   # 멀티턴 질의 재작성 (ADR-009, 정책서 §5.2) — 이력이 비면 재작성하지 않는다(SKIPPED)

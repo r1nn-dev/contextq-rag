@@ -5,8 +5,9 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from src.config.rag_config import load_rag_config
+from src.config.rag_config import load_compare_model_config, load_rag_config
 from src.config.settings import Settings
+from src.pipeline.prompts import load_template
 
 
 def test_repository_config_uses_confirmed_values() -> None:
@@ -21,9 +22,26 @@ def test_repository_stream_and_generation_values_follow_policy() -> None:
     config = load_rag_config()
 
     assert config.generation.prompt_version == "single_v2"
+    assert config.generation.compare_prompt_version == "compare_v1"
     stream = config.stream
     assert (stream.heartbeat_seconds, stream.max_duration_seconds) == (10, 120)
     assert stream.max_concurrency == 20
+    assert stream.compare_max_duration_seconds == 30  # 정책서 §2.1 비교 모드 전체 타임아웃
+
+
+def test_repository_compare_model_follows_policy() -> None:
+    compare = load_compare_model_config()
+
+    # 정책서 §5.6: temperature 0 · max_tokens 1,500 · 파싱 실패 1회 재시도, 호출 오류는 재시도 없음
+    assert (compare.temperature, compare.max_tokens) == (0, 1500)
+    assert (compare.max_retries, compare.parse_retries) == (0, 1)
+    assert compare.timeout_seconds < load_rag_config().stream.compare_max_duration_seconds
+    assert compare.resolve_model(" gpt-x ") == "gpt-x"
+    assert compare.resolve_model("") == "gpt-4o-mini"
+
+
+def test_default_compare_prompt_exists() -> None:
+    load_template(load_rag_config().generation.compare_prompt_version)
 
 
 def test_tau_prefers_env_override() -> None:
