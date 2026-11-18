@@ -10,10 +10,8 @@
 #   release.env     배포 중인 이미지 (IMAGE_REGISTRY·IMAGE_TAG, deploy.sh가 쓴다)
 set -euo pipefail
 
-CONTEXTQ_HOME="${CONTEXTQ_HOME:-/opt/contextq}"
-APP_DIR="${CONTEXTQ_HOME}/app"
-ENV_FILE="${CONTEXTQ_HOME}/contextq.env"
-RELEASE_FILE="${CONTEXTQ_HOME}/release.env"
+# shellcheck source=infra/scripts/lib.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 [ -f "$ENV_FILE" ] || { echo "운영 환경 파일이 없습니다: $ENV_FILE" >&2; exit 1; }
 [ -f "$RELEASE_FILE" ] || { echo "배포 기록이 없습니다: $RELEASE_FILE (deploy.sh <git-sha>를 먼저 실행)" >&2; exit 1; }
