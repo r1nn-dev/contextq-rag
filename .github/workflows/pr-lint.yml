@@ -36,7 +36,14 @@ jobs:
       - name: 브랜치명 형식 검사
         env:
           BRANCH_NAME: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
+          # 릴리즈(develop → main)·역병합(main → develop) PR은 작업 브랜치가 아니므로 건너뛴다
+          if { [ "$BRANCH_NAME" = "develop" ] && [ "$BASE_REF" = "main" ]; } ||              { [ "$BRANCH_NAME" = "main" ] && [ "$BASE_REF" = "develop" ]; }; then
+            echo "⏭️ 릴리즈·역병합 PR — 브랜치명 검사 생략: $BRANCH_NAME → $BASE_REF"
+            exit 0
+          fi
+
           scopes="api|rag|retrieval|ingest|shared|backend|frontend|scripts|configs|infra|ci|deps|docs|setup|auth|chat|eval"
           pattern="^(feat|fix|refactor|perf|test|docs|chore|style|hotfix)/[0-9]+-($scopes)-[a-z0-9][a-z0-9-]*$"
 
@@ -55,7 +62,15 @@ jobs:
       - name: 연결된 이슈 검사
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
+          # 릴리즈·역병합 PR은 이슈 없이 연다 (CONTRIBUTING §4.1)
+          if { [ "$HEAD_REF" = "develop" ] && [ "$BASE_REF" = "main" ]; } ||              { [ "$HEAD_REF" = "main" ] && [ "$BASE_REF" = "develop" ]; }; then
+            echo "⏭️ 릴리즈·역병합 PR — 연결된 이슈 검사 생략: $HEAD_REF → $BASE_REF"
+            exit 0
+          fi
+
           if echo "$PR_BODY" | grep -Eq "(Closes|Fixes|Resolves|Related to) #[0-9]+"; then
             echo "✅ 연결된 이슈 검사 통과"
           else
