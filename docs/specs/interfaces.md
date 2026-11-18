@@ -72,13 +72,6 @@ class RetrievedChunk(TypedDict):
     token_count: int      # 청크 토큰 수 (ChunkMetadata.token_count). 컨텍스트 예산·평균 컨텍스트 토큰 계산
     site_url: str         # 공식 문서 사이트 URL (ChunkMetadata.site_url). SSE meta.sources[].siteUrl
     similarity: float     # 유사도 점수. 범위: 0.0~1.0. 높을수록 관련성 높음
-
-class AnswerResult(TypedDict):
-    answer: str                          # 생성된 답변 텍스트
-    source_chunks: list[RetrievedChunk]  # 답변 근거 청크 목록
-    model: str                           # 사용된 LLM 모델명
-    prompt_tokens: int                   # 프롬프트 토큰 수
-    completion_tokens: int               # 답변 토큰 수
 ```
 
 ### 2.2 공통 Enum
@@ -631,6 +624,7 @@ class ChunkingError(Exception):
 | v0.5 | `RetrievedChunk`에 `site_url` 추가 (SSE meta 출처 카드). `Retriever` 예외에 `IndexNotActiveError`·`EmbeddingModelMismatchError` 추가, `SourceNotFoundError`·`SourceUnavailableError` 조건 구체화. 구현 노트: `where` 필터 → ACTIVE 컬렉션 지정 + 2차 메타데이터 검증 (ADR-004) |
 | v0.6 | `AnswerGenerator.generate_stream`: 키워드 입력 `display_name`·`prompt_version` 추가, 반환을 `GenerationStream`(토큰 + 종료 후 `model`·`finish_reason`·`usage`)으로 구체화, `PromptNotFoundError` 추가 |
 | v0.7 | 비교 모드 생성을 `AnswerGenerator.generate`(미구현)에서 `CompareGenerator.generate_compare`로 분리 — 두 측 청크·표시명 입력, `CompareGeneration` 반환, `CompareParseError` 추가 (R-8-1) |
+| v0.8 | §2.1 쓰는 곳이 없는 `AnswerResult` 삭제 — 단일 모드 결과는 `GenerationStream`, 비교 모드는 `CompareGeneration` (R-8-5) |
 
 ---
 *end.*
