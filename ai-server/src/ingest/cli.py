@@ -28,6 +28,7 @@ from src.ingest.activation import (
     purge_expired_failed,
     rollback,
 )
+from src.ingest.collect import is_commit_sha
 from src.ingest.embedder import OpenAIEmbeddingClient
 from src.ingest.permalinks import PermalinkChecker
 from src.ingest.pipeline import (
@@ -50,6 +51,13 @@ def ingest_allowed(settings: Settings) -> bool:
     return settings.app_profile != "prod" and settings.ingest_enabled
 
 
+def _commit_sha(value: str) -> str:
+    """argparse 타입 — 40자 소문자 SHA만 받는다(브랜치 이름은 permalink 규칙 INV-05 위반)."""
+    if not is_commit_sha(value):
+        raise argparse.ArgumentTypeError(f"40자 소문자 커밋 SHA가 아닙니다: {value!r}")
+    return value
+
+
 def build_parser(settings: Settings) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m src.ingest.cli", description="인덱스 관리")
     commands = parser.add_subparsers(dest="command", metavar="COMMAND")
@@ -60,6 +68,11 @@ def build_parser(settings: Settings) -> argparse.ArgumentParser:
             "--strategy",
             choices=["A", "B", "C"],
             help="청킹 전략 (기본: configs/ingest.yaml default_strategy)",
+        )
+        ingest.add_argument(
+            "--commit",
+            type=_commit_sha,
+            help="수집할 커밋 SHA(40자). 소스 ref 이력에 있어야 한다 (기본: ref의 최신 커밋)",
         )
         ingest.add_argument(
             "--accept-drift",
@@ -86,7 +99,10 @@ def _ingest(
     store: VectorStore,
 ) -> None:
     options = IngestOptions(
-        data_dir=settings.ingest_data_dir, accept_drift=args.accept_drift, strategy=args.strategy
+        data_dir=settings.ingest_data_dir,
+        accept_drift=args.accept_drift,
+        strategy=args.strategy,
+        commit=args.commit,
     )
     embedding = load_embedding_config()
     deps = IngestDependencies(

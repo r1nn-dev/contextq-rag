@@ -71,6 +71,7 @@ class IngestOptions:
     data_dir: Path
     accept_drift: bool = False
     strategy: Strategy | None = None  # None이면 configs/ingest.yaml 기본 전략
+    commit: str | None = None  # 수집할 커밋 SHA. None이면 소스 ref의 최신 커밋
     remote_base: str = GITHUB
     validation_timeout_seconds: float = VALIDATION_TIMEOUT_SECONDS
 
@@ -339,7 +340,7 @@ def run_ingest(
             session.commit()
 
             checkout = sparse_checkout(
-                checkout_spec(source),
+                checkout_spec(source, options.commit),
                 options.data_dir / "raw" / source_key,
                 remote_base=options.remote_base,
             )

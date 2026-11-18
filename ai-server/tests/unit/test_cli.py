@@ -37,3 +37,13 @@ def test_main_rejects_ingest_with_forbidden_message(
 ) -> None:
     assert main(["ingest", "--source", "langchain_v03"], _settings(profile, enabled)) == 2
     assert "FORBIDDEN_IN_PROFILE" in capsys.readouterr().err
+
+
+def test_ingest_commit_option_accepts_only_full_shas() -> None:
+    parser = build_parser(_settings("local", True))
+    sha = "9d9747d0cf241e086c616a16d5ce230ad8f8f31d"
+
+    assert parser.parse_args(["ingest", "--source", "k", "--commit", sha]).commit == sha
+    assert parser.parse_args(["ingest", "--source", "k"]).commit is None
+    with pytest.raises(SystemExit):
+        parser.parse_args(["ingest", "--source", "k", "--commit", "9d9747d"])

@@ -102,6 +102,8 @@ cd ..
 # APP_PROFILE=local, INGEST_ENABLED=true, POSTGRES_* 접속 정보를 환경 변수로 준비한다
 make ingest SOURCE=langchain_v03
 make ingest SOURCE=langchain_v1x
+# 같은 문서로 다시 빌드할 때(실험 비교·재현): 커밋을 지정한다. 소스 ref 이력에 있는 40자 SHA만 받는다
+make ingest SOURCE=langchain_v1x STRATEGY=C COMMIT=<40자 커밋 SHA>
 ```
 
 > 수집 원본은 `ai-server/data/raw/{source_key}/`에 run마다 새로 받는다 (`INGEST_DATA_DIR`, `docs/specs/data-sources.md` §2).
