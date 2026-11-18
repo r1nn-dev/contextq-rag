@@ -116,7 +116,7 @@ async def test_completed_answer_streams_meta_tokens_done() -> None:
 
     meta, *tokens, done = await run(searcher, generator)
 
-    assert searcher.calls == [(REQUEST.question, "langchain_v1x", 5, INDEX)]
+    assert searcher.calls == [(REQUEST.question, "langchain_v1x", 8, INDEX)]  # rag.yaml top_k
     assert meta["noContext"] is False and meta["ingestRunId"] == 3
     assert (meta["commitSha"], meta["ingestedAt"]) == (SHA, "2026-11-17")
     assert [s["rank"] for s in meta["sources"]] == [1, 2]  # τ 미만(0.2) 제외

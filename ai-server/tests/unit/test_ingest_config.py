@@ -5,7 +5,7 @@ from src.config.ingest_config import embedding_model_name, load_chunking_config,
 
 def test_chunking_config_matches_e2_protocol() -> None:
     config = load_chunking_config()
-    assert config.default_strategy == "B"
+    assert config.default_strategy == "C"  # E2 확정
     assert config.params("A") == {"chunk_size": 1000, "chunk_overlap": 200, "separator": "\n\n"}
     assert config.params("B")["separators"] == ["\n\n", "\n", " "]
     assert config.params("C")["header_levels"] == ["#", "##"]

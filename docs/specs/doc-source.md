@@ -117,7 +117,7 @@ class SourceAdapter(Protocol):
 - 청크의 `line_start`·`line_end`는 청크 첫 줄·마지막 줄의 `Section.line_numbers` 값이다.
 - 공백 제외 50자 미만 청크는 만들지 않는다. 같은 섹션(전략 C는 묶음)의 바로 앞 청크에, 첫 청크면 다음 청크에 병합한다(정책서 §4.3 "50자 미만 청크 0건"). 병합으로 상한을 조금 넘을 수 있다.
 - 코드 펜스 분할 판정은 청크 끝에서 펜스가 열려 있는지로 한다(펜스 안 문자열의 ```` ``` ````는 닫는 펜스가 아니다).
-- 기본 전략은 정책서 미결정 사항의 가정값(전략 B)이며 `make ingest SOURCE=… STRATEGY=…`로 바꿀 수 있다. 전략별 결과는 서로 다른 run이다(정책서 §4.1).
+- 기본 전략은 E2로 확정한 전략 C다(`configs/ingest.yaml` `default_strategy`, `eval/results/E2/decision.md`). `make ingest SOURCE=… STRATEGY=…`로 바꿀 수 있고, 전략별 결과는 서로 다른 run이다(정책서 §4.1).
 - A·B의 코드 펜스 분할 건수와 전략별 청크 통계는 `reports/run{id}/chunking.json`에 남긴다(E2 보고 항목).
 
 ---

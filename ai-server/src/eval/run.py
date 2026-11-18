@@ -7,7 +7,8 @@
   E1-N·E1-F는 실험용 병합 컬렉션 검색기를 쓴다(conditions.py).
 - E1-C는 서비스 검색기(`ChromaRetriever`)를 그대로 쓴다. 실행 시작 때 확정한 ACTIVE run으로
   고정하고, 질의 임베딩은 N·F와 같은 값을 넣는다(조건 간 임베딩 차이 제거).
-- E2는 전략별 인덱스(R-7-3)가 생기기 전까지 `RetrieverUnavailableError`로 끝난다.
+- E2는 전략(A·B·C)·버전마다 검색할 수 있는 run을 하나씩 고정해 서비스 검색기로 Q-ret만 검색하고,
+  결정 규칙(e2.py)을 적용한 결과를 `decision.md`로 남긴다.
 - Q-ret는 질문의 target_version 컬렉션에서, Q-oos는 두 버전 컬렉션에서 각각 검색한다.
 """
 
@@ -39,6 +40,16 @@ from src.eval.conditions import (
     build_merged_collection,
     embed_queries,
     merged_collection_name,
+)
+from src.eval.e2 import (
+    STRATEGIES,
+    Decision,
+    FenceStats,
+    StrategyRunsMissingError,
+    StrategyScore,
+    decide,
+    fence_stats,
+    strategy_indexes,
 )
 from src.eval.metrics import (
     contamination_at_k,
@@ -126,6 +137,7 @@ def evaluate(
     def emit(
         question_id: str,
         question_set: str,
+        question_type: str,
         source_key: str,
         chunks: list[RetrievedChunk],
         flags: list[bool] | None,
@@ -137,6 +149,7 @@ def evaluate(
                     **base,
                     "question_id": question_id,
                     "question_set": question_set,
+                    "question_type": question_type,
                     "version": _SOURCE_VERSIONS[source_key],
                     "top_k": k,
                     "max_score": max_score(head),
@@ -155,11 +168,12 @@ def evaluate(
 
     for q in ret:
         chunks = searcher.retrieve(q.query, q.source_key, top)
-        emit(q.question_id, "Q-ret", q.source_key, chunks, gold_flags(chunks, q.gold.sections))
+        flags = gold_flags(chunks, q.gold.sections)
+        emit(q.question_id, "Q-ret", q.type, q.source_key, chunks, flags)
     for oq in oos:
         for source_key in VERSION_SOURCE_KEYS.values():
             chunks = searcher.retrieve(oq.query, source_key, top)
-            emit(oq.question_id, "Q-oos", source_key, chunks, None)
+            emit(oq.question_id, "Q-oos", oq.type, source_key, chunks, None)
     return rows
 
 
@@ -332,8 +346,181 @@ def run_e1(
     return write_results(out_dir, "E1", rows, env)
 
 
-def run_e2() -> tuple[Path, Path]:
-    raise RetrieverUnavailableError("E2는 전략별 인덱스(R-7-3)가 있어야 실행할 수 있다.")
+# --- E2 -----------------------------------------------------------------------
+
+E2_KS = (3, 5, 8)  # decision_rules.md §2 K 후보
+
+
+def strategy_scores(rows: Sequence[Mapping[str, Any]]) -> list[StrategyScore]:
+    """전략별 Q-ret 전체 지표 — Hit@K·MRR@5·Top-5 청크 평균 토큰."""
+    by: dict[str, dict[int, list[Mapping[str, Any]]]] = defaultdict(lambda: defaultdict(list))
+    for row in rows:
+        if row["question_set"] == "Q-ret":
+            by[row["strategy"]][row["top_k"]].append(row)
+    scores = []
+    for strategy, per_k in sorted(by.items()):
+        five = per_k[5]
+        per_chunk = [
+            r["context_tokens"] / len(r["chunks_returned"]) for r in five if r["chunks_returned"]
+        ]
+        scores.append(
+            StrategyScore(
+                strategy=strategy,
+                hit={k: mean([r["hit_at_k"] for r in per_k[k]]) or 0.0 for k in E2_KS},
+                mrr5=mean([r["rr_at_k"] for r in five]) or 0.0,
+                avg_chunk_tokens5=mean(per_chunk) or 0.0,
+            )
+        )
+    return scores
+
+
+def _breakdown(rows: Sequence[Mapping[str, Any]], key: str) -> dict[tuple[str, str], float | None]:
+    """(전략, 키 값) → Hit@5. 키는 `question_type` 또는 `version`."""
+    groups: dict[tuple[str, str], list[Any]] = defaultdict(list)
+    for row in rows:
+        if row["question_set"] == "Q-ret" and row["top_k"] == 5:
+            groups[(row["strategy"], row[key])].append(row["hit_at_k"])
+    return {k: mean(v) for k, v in groups.items()}
+
+
+def _num(value: float | None) -> str:
+    return "-" if value is None else f"{value:.4f}"
+
+
+def decision_markdown(
+    decision: Decision,
+    scores: Sequence[StrategyScore],
+    rows: Sequence[dict[str, Any]],
+    fences: Mapping[str, FenceStats],
+    runs: Mapping[str, Mapping[str, ActiveIndex]],
+    run_date: str,
+) -> str:
+    """`eval/results/E2/decision.md` — 결정·규칙 적용 근거·비교표·하위 분석·사용 run."""
+    summary = {
+        (line["condition"], line["version"], line["top_k"]): line
+        for line in summarize(rows)
+        if line["question_set"] == "Q-ret"
+    }
+    lines = [
+        "# E2 결정 기록 — 청킹 전략·운영 Top-K",
+        "",
+        f"> 실행일 {run_date} · 질문셋 eval-v1 Q-ret · 규칙 `eval/decision_rules.md` §1·§2"
+        " (적용 코드 `ai-server/src/eval/e2.py`)",
+        "",
+        "## 결정",
+        "",
+        f"- 채택 전략: **{decision.strategy}**",
+        f"- 운영 Top-K: **{decision.top_k}**",
+        "",
+        "### 규칙 적용",
+        "",
+        *[f"{i}. {reason}" for i, reason in enumerate(decision.reasons, start=1)],
+        "",
+        "## 전략 × K 비교 (Q-ret, 두 버전 합계)",
+        "",
+        "| 전략 | Hit@3 | Hit@5 | Hit@8 | MRR@3 | MRR@5 | Precision@5"
+        " | Top-5 청크 평균 토큰 | 코드 블록 보존율 |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for score in scores:
+        s = score.strategy
+        cond = f"E2-{s}"
+        lines.append(
+            f"| {s} | {_num(score.hit[3])} | {_num(score.hit[5])} | {_num(score.hit[8])}"
+            f" | {_num(summary[(cond, 'all', 3)]['mrr_at_k'])} | {_num(score.mrr5)}"
+            f" | {_num(summary[(cond, 'all', 5)]['precision_at_k'])}"
+            f" | {score.avg_chunk_tokens5:.1f} | {_num(fences[s].preservation)} |"
+        )
+    by_version = _breakdown(rows, "version")
+    by_type = _breakdown(rows, "question_type")
+    columns = sorted({v for _, v in by_version}) + sorted({t for _, t in by_type})
+    merged = {**by_version, **by_type}
+    lines += [
+        "",
+        "## 하위 분석 — Hit@5 (버전·질문 유형)",
+        "",
+        "| 전략 | " + " | ".join(columns) + " |",
+        "| --- |" + " --- |" * len(columns),
+    ]
+    for score in scores:
+        cells = [_num(merged.get((score.strategy, c))) for c in columns]
+        lines.append(f"| {score.strategy} | " + " | ".join(cells) + " |")
+    sources = sorted(next(iter(runs.values())))
+    lines += [
+        "",
+        "## 사용한 run",
+        "",
+        "| 전략 | " + " | ".join(sources) + " |",
+        "| --- |" + " --- |" * len(sources),
+    ]
+    for s in sorted(runs):
+        cells = [f"run {runs[s][k].run_id} ({runs[s][k].chunk_count}청크)" for k in sources]
+        lines.append(f"| {s} | " + " | ".join(cells) + " |")
+    lines += [
+        "",
+        "- 코드 블록 보존율: 펜스 수가 짝수인 청크의 완결 펜스 수"
+        " ÷ (완결 펜스 + 펜스 수가 홀수인 청크 ÷ 2).",
+        "- Top-5 청크 평균 토큰: 질문별 Top-5 `token_count` 평균의 평균(결정 규칙 §1 동률 기준).",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def run_e2(settings: Settings, sets: QuestionSets, out_dir: Path) -> tuple[Path, Path]:
+    engine = create_engine(settings.database_url)
+    try:
+        with Session(engine) as session:
+            runs = strategy_indexes(session, list(VERSION_SOURCE_KEYS.values()))
+    finally:
+        engine.dispose()
+    store = ChromaVectorStore(settings.chroma_data_dir)
+    embedding_config = load_embedding_config()
+    embedder = OpenAIEmbeddingClient(settings.openai_api_key, embedding_config)
+    embeddings = asyncio.run(embed_queries(embedder, [q.query for q in sets.ret]))
+    query_embedder = PrecomputedQueryEmbedder(embeddings, embedding_config.model)
+    run_date = date.today().isoformat()
+    rows: list[dict[str, Any]] = []
+    fences: dict[str, FenceStats] = {}
+    for strategy in STRATEGIES:
+        retriever = ChromaRetriever(store, StaticPointers(runs[strategy]), query_embedder)
+        for row in evaluate(
+            retriever,
+            sets.ret,
+            [],
+            experiment_id="e2",
+            condition=f"E2-{strategy}",
+            ks=E2_KS,
+            run_date=run_date,
+        ):
+            rows.append({**row, "strategy": strategy})
+        fences[strategy] = fence_stats(
+            record["document"]
+            for index in runs[strategy].values()
+            for record in store.iter_records(index.collection)
+        )
+    scores = strategy_scores(rows)
+    decision = decide(scores)
+    env = {
+        "experiment": "E2",
+        "date": run_date,
+        "git_commit": _git_commit(),
+        "python": platform.python_version(),
+        "embedding_model": embedding_config.model,
+        "runs": ", ".join(
+            f"{s}:{k}=run{i.run_id}" for s in STRATEGIES for k, i in sorted(runs[s].items())
+        ),
+        "top_k": ", ".join(str(k) for k in E2_KS),
+        "questions": f"Q-ret={len(sets.ret)}",
+        "unreviewed_questions": len(unreviewed(sets)),
+        "decision": f"strategy={decision.strategy}, top_k={decision.top_k}",
+    }
+    paths = write_results(out_dir, "E2", rows, env)
+    (out_dir / "E2" / "decision.md").write_text(
+        decision_markdown(decision, scores, rows, fences, runs, run_date),
+        encoding="utf-8",
+        newline="\n",
+    )
+    return paths
 
 
 # --- CLI ----------------------------------------------------------------------
@@ -381,9 +568,9 @@ def main(argv: Sequence[str] | None = None, settings: Settings | None = None) ->
                     settings, sets, args.conditions, args.out_dir, sorted(set(args.ks))
                 )
             else:
-                rows_path, summary_path = run_e2()
+                rows_path, summary_path = run_e2(settings, sets, args.out_dir)
             print(f"{experiment}: {rows_path} · {summary_path}")
-    except RetrieverUnavailableError as exc:
+    except (RetrieverUnavailableError, StrategyRunsMissingError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
     except LookupError as exc:

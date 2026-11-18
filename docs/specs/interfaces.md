@@ -135,7 +135,7 @@ class SourceKey(str, Enum):
 | --- | --- | --- | --- | --- |
 | `query` | `str` | Y | 사용자 질문 | 비어 있으면 안 됨 |
 | `source_key` | `str` | Y | 소스 식별자 | `SourceKey` Enum 값. 예: `"langchain_v03"` |
-| `top_k` | `int` | N | 반환할 청크 수 | 1 ≤ top_k ≤ 20. 기본값 5 |
+| `top_k` | `int` | N | 반환할 청크 수 | 1 ≤ top_k ≤ 20. 시그니처 기본값 5(직접 호출용). 서비스는 `configs/rag.yaml` `retrieval.top_k`(8, E2 확정)를 넘긴다 |
 
 **반환값**
 
@@ -171,7 +171,7 @@ class Retriever(Protocol):
         Args:
             query: 사용자 질문 텍스트
             source_key: SourceKey Enum 값. 예: "langchain_v03"
-            top_k: 반환할 최대 청크 수 (기본 5)
+            top_k: 반환할 최대 청크 수 (시그니처 기본 5, 서비스는 rag.yaml retrieval.top_k = 8)
 
         Returns:
             similarity 내림차순 정렬된 RetrievedChunk 목록.

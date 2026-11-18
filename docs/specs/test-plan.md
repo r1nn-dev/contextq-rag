@@ -63,7 +63,7 @@ assert all(document.content[c.span.start:c.span.end] == c.content
 
 | 케이스 | 조건 | 기대 결과 |
 | --- | --- | --- |
-| 올바른 source_key | `retrieve(query, source_key="langchain_v03", top_k=5)` | 반환 청크 전부 `metadata.source_key = "langchain_v03"` |
+| 올바른 source_key | `retrieve(query, source_key="langchain_v03", top_k=8)` | 반환 청크 전부 `metadata.source_key = "langchain_v03"` |
 | 미지원 source_key | `source_key="langchain_v2x"` | `SourceNotFoundError` 발생 |
 | 존재하지 않는 컬렉션 | 해당 source_key 컬렉션 미존재 | `IndexNotActiveError` 발생 |
 | `top_k=0` | 경계값 | `ValueError` 또는 빈 리스트 (interfaces.md 불변식에 따라) |

@@ -31,7 +31,7 @@ backend (POST /api/v1/chat/stream 중계)
 [2. 임베딩]  EmbeddingClient → text-embedding-3-small
   │
   ▼
-[3. 벡터 검색]  Chroma {source_key}_run{active_run_id}  top_k=5  + 2차 메타데이터 검증(INV-02)
+[3. 벡터 검색]  Chroma {source_key}_run{active_run_id}  top_k=8 (rag.yaml, E2)  + 2차 메타데이터 검증(INV-02)
   │
   ├─ max_similarity < τ?
   │   └─ YES → [NO_CONTEXT 응답]  LLM 미호출, SSE meta→done 반환
@@ -317,8 +317,8 @@ async def compare_pipeline(
 
     # 1. 두 소스 동시 벡터 검색
     chunks_a, chunks_b = await asyncio.gather(
-        retriever.retrieve(query=question, source_key=source_key_a, top_k=5),
-        retriever.retrieve(query=question, source_key=source_key_b, top_k=5),
+        retriever.retrieve(query=question, source_key=source_key_a, top_k=retrieval.top_k),  # rag.yaml (8)
+        retriever.retrieve(query=question, source_key=source_key_b, top_k=retrieval.top_k),
     )
 
     # 2. meta 이벤트 먼저 전송

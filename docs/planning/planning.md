@@ -412,7 +412,7 @@ agent = create_agent(model=..., tools=[...])
 #### 5.2.1 버전별 공식 문서 기반 RAG 검색
 
 - 문제: 기존 LLM은 버전을 구조적으로 분리하지 않고 답변을 생성한다.
-- 동작 방식: 활성 인덱스(`ingest_run_id`)를 기준으로, 선택한 framework + version 조건에서만 벡터 검색한다. 유사도 임계값 τ 미만이면 LLM을 호출하지 않고 NO_CONTEXT 응답을 반환한다. Top-K는 E2 결과로 확정(초기값 5).
+- 동작 방식: 활성 인덱스(`ingest_run_id`)를 기준으로, 선택한 framework + version 조건에서만 벡터 검색한다. 유사도 임계값 τ 미만이면 LLM을 호출하지 않고 NO_CONTEXT 응답을 반환한다. Top-K는 E2 결과로 확정(8, 청킹 전략 C — `eval/results/E2/decision.md`).
 - 입력 데이터: 질문 텍스트, framework, version, 대화 이력(멀티턴 시), ingest_run_id
 - 출력 데이터: Top-K 청크(text + heading_path + permalink + cosine similarity)
 - 예외 상황: 상위 유사도 < τ → NO_CONTEXT (LLM 미호출, 안내 메시지 반환)
