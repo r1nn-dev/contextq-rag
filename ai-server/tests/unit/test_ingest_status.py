@@ -27,6 +27,7 @@ POLICY_TABLE = {
     (S.PROCESSING, S.FAILED),
     (S.EMBEDDING, S.FAILED),
     (S.VALIDATING, S.FAILED),
+    (S.RESTORING, S.FAILED),  # 스냅샷 checksum 불일치·컬렉션 적재 오류 (R-9-1)
     (S.FAILED, S.PURGED),
 }
 
@@ -56,6 +57,7 @@ def test_purged_is_terminal(terminal: S) -> None:
     assert not any(can_transition(terminal, target) for target in S)
 
 
-def test_restoring_failure_is_not_in_policy() -> None:
-    # 정책서 표에 RESTORING → FAILED가 없다. 복원 실패 처리는 스냅샷 작업(R-9-1)에서 정한다
-    assert not can_transition(S.RESTORING, S.FAILED)
+def test_restoring_can_fail_but_not_be_retried() -> None:
+    # 복원 실패 run은 FAILED로 남고 다시 RESTORING이 되지 않는다(run 레코드 보존, 정책서 §4.5)
+    assert can_transition(S.RESTORING, S.FAILED)
+    assert not can_transition(S.FAILED, S.RESTORING)

@@ -47,3 +47,9 @@ def test_ingest_commit_option_accepts_only_full_shas() -> None:
     assert parser.parse_args(["ingest", "--source", "k"]).commit is None
     with pytest.raises(SystemExit):
         parser.parse_args(["ingest", "--source", "k", "--commit", "9d9747d"])
+
+
+@pytest.mark.parametrize("profile", ["local", "prod"])
+def test_snapshot_command_is_registered_in_every_profile(profile: str) -> None:
+    args = build_parser(_settings(profile, False)).parse_args(["snapshot", "--run", "12"])
+    assert (args.command, args.run, args.out) == ("snapshot", 12, None)

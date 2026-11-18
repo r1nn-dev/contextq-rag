@@ -4,16 +4,21 @@
     uv run python -m src.ingest.cli activate --run 12
     uv run python -m src.ingest.cli rollback --source langchain_v1x
     uv run python -m src.ingest.cli smoke [--source langchain_v1x]
+    uv run python -m src.ingest.cli snapshot --run 12 [--out data/snapshots]
+    uv run python -m src.ingest.cli restore --snapshot data/snapshots/snapshot-….tar.gz [--activate]
 
 수집·임베딩 명령(`ingest`)은 prod 프로필이거나 `INGEST_ENABLED`가 꺼져 있으면 등록하지 않는다
 (정책서 §4.5 운영 수집 금지, INV-17). 활성화·롤백은 모든 프로필에서 쓸 수 있다.
 `smoke`는 ACTIVE run에 스모크 질문만 다시 돌리고 인덱스 상태는 바꾸지 않는다(정책서 §4.4).
+`snapshot`은 run 하나를 스냅샷 파일로 내보낸다(정책서 §4.5). DB는 읽기만 한다.
+`restore`는 스냅샷을 같은 run id로 복원·검증하고, `--activate`면 이어서 활성화한다(모든 프로필).
 모든 명령은 시작할 때 24시간 지난 FAILED run을 정리한다(정책서 §4.5).
 """
 
 import argparse
 import sys
 from collections.abc import Callable, Sequence
+from pathlib import Path
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -40,6 +45,12 @@ from src.ingest.pipeline import (
 from src.ingest.reload import notify_reload
 from src.ingest.runs import InvalidTransitionError, SourceNotFoundError
 from src.ingest.smoke import format_outcome, run_smoke
+from src.ingest.snapshot import (
+    RestoreDependencies,
+    SnapshotError,
+    export_snapshot,
+    restore_snapshot,
+)
 from src.ingest.store import ChromaVectorStore, VectorStore
 from src.retrieval.errors import RetrievalError
 
@@ -89,7 +100,44 @@ def build_parser(settings: Settings) -> argparse.ArgumentParser:
     smoke_cmd.add_argument(
         "--source", help="ai.sources.source_key (생략하면 smoke_questions.yaml의 모든 소스)"
     )
+    snapshot_cmd = commands.add_parser("snapshot", help="run 하나를 스냅샷 파일로 내보낸다")
+    snapshot_cmd.add_argument("--run", type=int, required=True, help="ai.ingest_runs.id")
+    snapshot_cmd.add_argument(
+        "--out", type=Path, help="저장 디렉터리 (기본: ${INGEST_DATA_DIR}/snapshots)"
+    )
+    restore_cmd = commands.add_parser(
+        "restore", help="스냅샷을 같은 run id로 복원·검증한다 (RESTORING → VALIDATING → READY)"
+    )
+    restore_cmd.add_argument("--snapshot", type=Path, required=True, help="스냅샷 .tar.gz 경로")
+    restore_cmd.add_argument(
+        "--activate", action="store_true", help="복원 검증을 통과하면 바로 활성화한다"
+    )
     return parser
+
+
+def _restore(
+    args: argparse.Namespace,
+    settings: Settings,
+    session_factory: sessionmaker[Session],
+    store: VectorStore,
+) -> None:
+    embedding = load_embedding_config()
+    deps = RestoreDependencies(
+        store=store,
+        embedder_factory=lambda: OpenAIEmbeddingClient(settings.openai_api_key, embedding),
+        smoke=load_smoke_config(),
+        smoke_tau=lambda key: _tau(settings, key),
+        embedding_model=embedding.model,
+        embedding_dim=embedding.dimensions,
+    )
+    summary = restore_snapshot(session_factory, args.snapshot, deps)
+    print(
+        f"restore: run {summary.run_id} ({summary.source_key}) {summary.status} — "
+        f"청크 {summary.chunk_count}"
+    )
+    if args.activate:
+        with session_factory() as session:
+            _print_activation("activate", activate(session, store, summary.run_id), settings)
 
 
 def _ingest(
@@ -208,6 +256,17 @@ def main(argv: Sequence[str] | None = None, settings: Settings | None = None) ->
         elif args.command == "rollback":
             with session_factory() as session:
                 _print_activation("rollback", rollback(session, store, args.source), settings)
+        elif args.command == "restore":
+            _restore(args, settings, session_factory, store)
+        elif args.command == "snapshot":
+            out_dir = args.out or settings.ingest_data_dir / "snapshots"
+            with session_factory() as session:
+                result = export_snapshot(session, store, args.run, out_dir)
+            print(
+                f"snapshot: run {args.run} → {result.path} "
+                f"(청크 {result.manifest['chunk_count']}, "
+                f"records_sha256 {result.manifest['records_sha256'][:12]}…)"
+            )
         return 0
     except (
         SourceNotFoundError,
@@ -215,6 +274,7 @@ def main(argv: Sequence[str] | None = None, settings: Settings | None = None) ->
         ActivationError,
         InvalidTransitionError,
         RetrievalError,
+        SnapshotError,
     ) as exc:
         print(str(exc), file=sys.stderr)
         return 1

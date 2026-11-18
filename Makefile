@@ -2,7 +2,7 @@
 # Shortcut commands for local development.
 # Prerequisites: Docker Desktop, uv, node/npm, lefthook
 
-.PHONY: up down logs ingest activate-index rollback-index smoke-index eval eval-check eval-tau eval-abstain test hooks help
+.PHONY: up down logs ingest activate-index rollback-index smoke-index snapshot-index restore-index eval eval-check eval-tau eval-abstain test hooks help
 
 # --- Docker Compose -------------------------------------------------------
 
@@ -32,6 +32,13 @@ rollback-index: ## Roll back to the previous SUPERSEDED run (1 generation). Usag
 
 smoke-index: ## Re-run smoke questions on ACTIVE runs with configs/rag.yaml τ (read-only). Usage: make smoke-index [SOURCE=<key>]
 	cd ai-server && uv run python -m src.ingest.cli smoke $(if $(SOURCE),--source $(SOURCE),)
+
+snapshot-index: ## Export a READY/ACTIVE/SUPERSEDED run to snapshot-{source}-run{id}.tar.gz (+ .sha256). Usage: make snapshot-index RUN=<id> [OUT=<dir>]
+	cd ai-server && uv run python -m src.ingest.cli snapshot --run $(RUN) $(if $(OUT),--out $(OUT),)
+
+# All profiles (prod included): RESTORING -> checksum -> VALIDATING -> READY -> ACTIVE (policy §4.5).
+restore-index: ## Restore a snapshot with its run id, validate it and activate it. Usage: make restore-index SNAPSHOT=<path relative to ai-server/ or absolute>
+	cd ai-server && uv run python -m src.ingest.cli restore --snapshot $(SNAPSHOT) --activate
 
 # --- Evaluation (docs/experiments/evaluation.md §4) -----------------------
 # Needs DB (ACTIVE pointers), CHROMA_DATA_DIR index, OPENAI_API_KEY for query embeddings.

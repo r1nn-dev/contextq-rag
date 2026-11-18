@@ -22,9 +22,9 @@ class IngestStatus(StrEnum):
 
 S = IngestStatus
 
-# 실패 전이가 허용되는 진행 단계 (정책서 §10.1 "PENDING~VALIDATING → FAILED")
+# 실패 전이가 허용되는 진행 단계 (정책서 §10.1 "PENDING~VALIDATING → FAILED", "RESTORING → FAILED")
 FAILABLE: frozenset[IngestStatus] = frozenset(
-    {S.PENDING, S.COLLECTING, S.PROCESSING, S.EMBEDDING, S.VALIDATING}
+    {S.PENDING, S.COLLECTING, S.PROCESSING, S.EMBEDDING, S.VALIDATING, S.RESTORING}
 )
 
 ALLOWED_TRANSITIONS: frozenset[tuple[IngestStatus | None, IngestStatus]] = frozenset(

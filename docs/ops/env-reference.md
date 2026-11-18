@@ -1,6 +1,6 @@
 # 환경 변수 레퍼런스
 
-> **최종 수정일:** 2026-11-17
+> **최종 수정일:** 2026-11-18
 
 `.env`의 모든 변수와 GitHub Actions Secrets에 대한 설명, 생성 방법, 기본값을 정리한다.
 
@@ -152,6 +152,15 @@ openssl rand -hex 32
 
 > τ의 기본값은 `ai-server/configs/rag.yaml` `retrieval.thresholds`에 source_key별로 둔다 (ADR-008). E1로 확정한 값은 `langchain_v03` 0.29, `langchain_v1x` 0.34다 (`docs/planning/policy.md` > §5.3).  
 > Top-K와 컨텍스트 토큰 예산은 환경 변수가 없고 `ai-server/configs/rag.yaml`에서만 바꾼다.
+
+### 1.11 인덱스 스냅샷 보관 (운영 스크립트)
+
+| 변수명 | 설명 | 예시 / 기본값 | 필수 |
+|---|---|---|---|
+| `SNAPSHOT_S3_URI` | 인덱스 스냅샷 보관 위치. `infra/scripts/index-snapshot-s3.sh`가 `upload`·`download`·`list`에 쓴다 | `s3://<bucket>/index-snapshots` | 스크립트 사용 시 ✅ |
+
+> 스냅샷은 `make snapshot-index RUN=<id>`가 `${INGEST_DATA_DIR}/snapshots/`에 `.tar.gz`와 `.sha256`으로 만든다. 스크립트는 업로드 전·다운로드 후 `.sha256`으로 전송 손상을 확인하고, 같은 이름은 덮어쓰지 않는다 (`docs/planning/policy.md` > §4.5).  
+> AWS 자격 증명은 환경 변수로 넣지 않고 aws CLI 기본 체인(EC2 인스턴스 역할 또는 별도 터미널의 프로필)을 쓴다.
 
 ---
 
