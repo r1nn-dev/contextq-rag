@@ -32,7 +32,8 @@ export interface AdminActiveRun {
 export interface RecentRun {
   ingestRunId: number
   status: IngestRunStatus
-  startedAt: string
+  /** null for a run that has not started collecting (api-spec 5.1 응답 규칙) */
+  startedAt: string | null
   failureStage?: string
 }
 
