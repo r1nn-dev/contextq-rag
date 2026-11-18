@@ -1,0 +1,107 @@
+# 로컬 시연 질문셋 — 시연 순서대로 읽는다 (R-10-2, #174).
+#
+# 평가 질문셋 eval-v1에서 고른 질문만 쓴다. eval-v1 원본(eval/questions/)은 바꾸지 않고 source_id로 참조한다.
+# 이어서 질문의 둘째 턴은 eval-v1에 없어 새로 썼다(source_id: null).
+# 비교 질문 두 개는 eval-v1 Q-shared 질문의 영어 번역이다. 한국어 원문은 유사도가 낮아(top1 0.33~0.49)
+# 두 버전 요약이 비슷하거나 한쪽 근거가 없었다(R-11-5 한국어 유사도 저하).
+#
+# expected는 2026-11-18 로컬 시연 스택(ACTIVE run 6·10, gpt-4o-mini, temperature 0)에서 nginx를 거쳐
+# 실제로 실행해 확인한 값이다. 결과 기록은 eval/demo/README.md.
+#   status       done.status (API 명세 부록 B)
+#   citations    답변 본문의 인용 번호 개수(단일) / 측별 citations 개수(비교)
+#   snapshot     답변 아래 스냅샷 표시 "버전 · 커밋 7자리 · 수집일 수집"
+
+snapshots:
+  langchain_v03: "v0.3 · 9971fd8 · 2026-11-18 수집"
+  langchain_v1x: "v1.x · 9d9747d · 2026-11-18 수집"
+
+scenarios:
+  - scenario: 단일 v0.3
+    mode: SINGLE
+    source_key: langchain_v03
+    questions:
+      - source_id: RET-013
+        query: LangChain v0.3에서 AgentExecutor로 도구를 쓰는 에이전트를 실행하는 방법은?
+        expected: { status: COMPLETED, sources: 8, citations: 2, top1_similarity: 0.58 }
+      - source_id: RET-015
+        query: LangChain v0.3에서 with_structured_output으로 모델 출력을 Pydantic 객체로 받는 방법은?
+        expected: { status: COMPLETED, sources: 8, citations: 3, top1_similarity: 0.65 }
+
+  - scenario: 단일 v1.x
+    mode: SINGLE
+    source_key: langchain_v1x
+    questions:
+      - source_id: RET-026
+        query: LangChain v1.x에서 create_agent로 에이전트를 만드는 방법은?
+        expected: { status: COMPLETED, sources: 8, citations: 2, top1_similarity: 0.61 }
+      - source_id: RET-028
+        query: LangChain v1.x에서 HumanInTheLoopMiddleware로 특정 도구를 실행하기 전에 사람 승인을 받는 방법은?
+        expected: { status: COMPLETED, sources: 8, citations: 3, top1_similarity: 0.62 }
+
+  - scenario: 이어서 질문 (멀티턴 재작성, ADR-009)
+    mode: SINGLE
+    turns:
+      - first: RET-026
+        source_id: null
+        query: 그 에이전트에 시스템 프롬프트는 어떻게 넣어?
+        expected:
+          status: COMPLETED
+          citations: 1
+          rewritten_query: LangChain v1.x에서 create_agent로 만든 에이전트에 시스템 프롬프트는 어떻게 넣어?
+      - first: RET-013
+        source_id: null
+        query: 거기에 대화 기록을 붙이려면 어떻게 해?
+        expected:
+          status: COMPLETED
+          citations: 1
+          rewritten_query: LangChain v0.3에서 AgentExecutor로 도구를 쓰는 에이전트에 대화 기록을 붙이려면 어떻게 해?
+
+  - scenario: 버전 비교 (로그인 필요, 일일 한도 2회 차감)
+    mode: COMPARE
+    source_key_a: langchain_v03
+    source_key_b: langchain_v1x
+    questions:
+      - source_id: SHR-006
+        query: How do I get human approval before a tool runs?
+        note: eval-v1 한국어 원문의 영어 번역. v0.3 체인 승인 단계 ↔ v1.x HITL 미들웨어 차이가 드러난다
+        expected: { status: COMPLETED, citations_a: 3, citations_b: 3, changes: 2, invalid_citations: 0 }
+      - source_id: SHR-001
+        query: How do I create an agent in LangChain?
+        note: eval-v1 한국어 원문의 영어 번역. v1.x 측에 create_agent가 나온다
+        expected: { status: COMPLETED, citations_a: 1, citations_b: 2, changes: 2, invalid_citations: 0 }
+      - source_id: SHR-016
+        query: 도구(tool)를 정의하는 방법은?
+        note: 한국어 그대로 확인됨. v0.3 bind_tools ↔ v1.x @tool·ToolRuntime
+        expected: { status: COMPLETED, citations_a: 4, citations_b: 3, changes: 2, invalid_citations: 0 }
+
+  - scenario: 범위 밖 질문 (NO_CONTEXT, LLM 미호출)
+    mode: SINGLE
+    questions:
+      - source_id: OOS-001
+        source_key: langchain_v03
+        query: Django ORM에서 ForeignKey 관계를 정의하는 방법은?
+        expected: { status: NO_CONTEXT, status_reason: LOW_SIMILARITY, sources: 0 }
+      - source_id: OOS-005
+        source_key: langchain_v1x
+        query: React에서 함수형 컴포넌트를 만드는 방법은?
+        expected: { status: NO_CONTEXT, status_reason: LOW_SIMILARITY, sources: 0 }
+      - source_id: OOS-003
+        source_key: langchain_v03
+        query: PyTorch에서 텐서의 shape을 바꾸는 방법은?
+        note: 게스트 5회 한도 시연에 쓴다(LLM 호출 없이 횟수만 차감)
+        expected: { status: NO_CONTEXT, status_reason: LOW_SIMILARITY, sources: 0 }
+
+# 시연에서 쓰지 않는 질문 (실측에서 기대와 다르게 나옴)
+excluded:
+  - source_id: RET-001
+    reason: v1.x 답변 코드에 v0.3 레거시 API(initialize_agent·agent.run)가 섞여 나온 적이 있다(생성 단계 버전 혼입, E3 관찰 대상)
+  - source_id: RET-009
+    reason: 한국어 질문이 NO_CONTEXT(LLM_ABSTAIN)로 끝난다(R-11-5)
+  - source_id: OOS-009
+    reason: 근거 부족 대신 "날짜는 문서에 없다"고 인용과 함께 답한다(COMPLETED, 근접 사례)
+  - source_id: SHR-001
+    reason: 한국어 원문은 두 버전 요약이 거의 같다(top1 0.46) — 영어 번역을 쓴다
+  - source_id: SHR-002
+    reason: 한국어 원문은 v1.x 측 no_evidence → 변경점 목록 없음
+  - source_id: SHR-006
+    reason: 한국어 원문은 v1.x 측이 HITL 미들웨어를 찾지 못한다(top1 0.33) — 영어 번역을 쓴다
