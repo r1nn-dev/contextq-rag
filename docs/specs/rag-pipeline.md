@@ -57,25 +57,34 @@ SSE Stream  (계약: contracts/sse-events.schema.json · API 명세 부록 B)
 COMPARE 모드는 SSE 스트리밍이 **아니다**. OpenAI Structured Outputs 비스트리밍 단일 호출로 두 버전의 답변을 원자적으로 반환한다. token 이벤트는 발생하지 않는다.
 
 ```
-Client
-  │  POST /internal/v1/chat/stream  (mode=COMPARE, sourceKeyA, sourceKeyB, question)
+backend (POST /api/v1/chat/stream, mode=COMPARE 중계)
+  │  POST /internal/v1/chat/stream  (requestId, mode=COMPARE, sourceKeyA, sourceKeyB, question, history)
   ▼
-[FastAPI Router]
+[FastAPI Router]  검증 · 비교 쌍 확인 · A·B ACTIVE run 확정 · 동시성 슬롯 1개 (실패는 HTTP 상태)
+  │
+  ├─ [1. 질의 재작성]  history가 있으면 1회 (재작성 질의 하나로 양쪽 검색, 정책서 §5.6)
   │
   ├─ asyncio.gather(
-  │     retrieve(source_key=source_key_a, question),
-  │     retrieve(source_key=source_key_b, question)
-  │  )  ← 두 컬렉션 동시 검색
+  │     search(query, source_key_a),   ← 검색마다 질의 임베딩 1회
+  │     search(query, source_key_b)
+  │  )  ← 두 컬렉션 동시 검색 (ADR-010)
+  │
+  ├─ 측별 τ 판정 (정책서 §5.6)
+  │   ├─ 양쪽 미달 → meta(noContext=true) → done(NO_CONTEXT, LOW_SIMILARITY)  (LLM 미호출)
+  │   └─ 한쪽 미달 → 그 측 출처 제외, no_evidence 고정, changes 생성 안 함
+  ▼
+event: meta  (통과한 측 컨텍스트 청크만, rank A1… / B1…)
   │
   ▼
-[Structured Outputs 비스트리밍 호출]
-  OpenAI gpt-4o-mini, response_format=CompareResult
-  (두 컨텍스트 + 질문 → version_a · version_b · changes 생성, 정책서 §5.6)
+[Structured Outputs 비스트리밍 호출]  configs/prompts/compare_v1.j2, models.yaml compare
+  (파싱 실패 1회 재시도 → COMPARE_PARSE_ERROR)
   │
   ▼
-SSE Stream (token 이벤트 없음)
-  event: meta   → {"event": "meta", "sourceKeyA": "langchain_v03", "sourceKeyB": "langchain_v1x", "sources": [{"rank": "A1", ...}, {"rank": "B1", ...}], ...}
-  event: done   → {"event": "done", "status": "COMPLETED", "compareResult": {"version_a": {...}, "version_b": {...}, "changes": [...]}}
+[인용 후처리]  없는·반대 측 번호 제거 → invalidCitations, 양쪽 인용 없는 변경점 폐기
+  │
+  ▼
+event: done  (status COMPLETED, compareResult)   ← token 이벤트 없음
+※ 요청부터 30초를 넘기면 error(UPSTREAM_TIMEOUT) (정책서 §2.1)
 ```
 
 ---
@@ -283,15 +292,27 @@ async def _yield_no_context() -> AsyncIterator[SseEvent]:
 
 ## 5. 비교 모드 — Structured Outputs 처리
 
-COMPARE 모드는 asyncio queue + SSE 인터리빙 방식을 **사용하지 않는다**. OpenAI Structured Outputs로 두 버전의 답변을 단일 비스트리밍 호출로 생성한다.
+COMPARE 모드는 asyncio queue + SSE 인터리빙 방식을 **사용하지 않는다**. OpenAI Structured Outputs로 두 버전의 비교 결과를 단일 비스트리밍 호출로 생성한다(ADR-010, 정책서 §5.6). 이벤트 계약은 `docs/specs/api-spec.md` §6.1 "비교 모드"·부록 B.2·B.4를 따른다.
+
+### 5.1 처리 순서
+
+1. 질의 재작성 — `history`가 있으면 1회(§3.1). 재작성 질의 하나로 양쪽을 검색한다.
+2. 양측 검색 — `asyncio.gather`로 A·B를 병렬 검색한다(각각 질의 임베딩 1회, `retrieval.top_k`). `latency.embedMs`·`retrieveMs`는 두 검색 중 큰 값이다.
+3. 측별 τ 판정 — 각 소스의 τ로 따로 판정한다(ADR-008).
+   - 양쪽 미달: `meta(noContext=true, sources=[])` → `done(NO_CONTEXT, LOW_SIMILARITY)`. 생성 LLM을 부르지 않는다(INV-07).
+   - 한쪽 미달: 그 측은 컨텍스트·출처 없이 `no_evidence=true`로 고정한다.
+4. 컨텍스트 선택 — 통과한 측마다 §3.4 규칙(τ 이상·토큰 예산)을 따로 적용한다. 고른 순서가 인용 번호 `A1…`·`B1…`이다.
+5. `meta` — 두 소스의 run 스냅샷과 통과한 측의 출처만 보낸다.
+6. 생성 — `configs/prompts/{compare_prompt_version}.j2`로 메시지를 만들고 `response_format`에 아래 출력 스키마를 준다. `configs/models.yaml` `compare`(temperature 0, `max_tokens` 1,500).
+7. 후처리 검증(§5.3) → `done(COMPLETED, compareResult)`.
+
+### 5.2 출력 스키마
 
 ```python
-from pydantic import BaseModel
-
 class CompareSide(BaseModel):
     summary: str
     citations: list[str]   # A측 A1…Ak, B측 B1…Bk
-    no_evidence: bool      # 해당 측 top-1 < τ
+    no_evidence: bool      # τ 미달이면 서버가 true로 고정. 모델도 근거 부족을 선언할 수 있다
 
 
 class CompareChange(BaseModel):
@@ -307,52 +328,26 @@ class CompareResult(BaseModel):
     version_a: CompareSide
     version_b: CompareSide
     changes: list[CompareChange]
-
-
-async def compare_pipeline(
-    question: str,
-    source_key_a: str,
-    source_key_b: str,
-) -> AsyncIterator[SseEvent]:
-
-    # 1. 두 소스 동시 벡터 검색
-    chunks_a, chunks_b = await asyncio.gather(
-        retriever.retrieve(query=question, source_key=source_key_a, top_k=retrieval.top_k),  # rag.yaml (8)
-        retriever.retrieve(query=question, source_key=source_key_b, top_k=retrieval.top_k),
-    )
-
-    # 2. meta 이벤트 먼저 전송
-    yield SseEvent(event="meta", data={
-        "requestId": request_id,
-        "sourceKeyA": source_key_a,
-        "sourceKeyB": source_key_b,
-        "noContext": False,
-        # 출처 rank는 A측 A1…, B측 B1… (정책서 §5.6 인용 번호 체계)
-        "sources": [to_source_payload(f"A{i}", c) for i, c in enumerate(chunks_a, 1)]
-        + [to_source_payload(f"B{i}", c) for i, c in enumerate(chunks_b, 1)],
-    })
-
-    # 3. Structured Outputs 비스트리밍 호출 (stream=False)
-    response = await openai_client.beta.chat.completions.parse(
-        model="gpt-4o-mini",
-        messages=build_compare_messages(
-            question, chunks_a, chunks_b, source_key_a, source_key_b
-        ),
-        response_format=CompareResult,
-        temperature=0,
-    )
-
-    result: CompareResult = response.choices[0].message.parsed
-    # 후처리 검증: 없는 인용 번호 제거, A·B 인용이 모두 없는 changes 항목 폐기 (정책서 §5.6)
-
-    # 4. done 이벤트 1회 반환
-    yield SseEvent(event="done", data={
-        "status": "COMPLETED",
-        "compareResult": result.model_dump(),
-    })
 ```
 
-**에러 처리:** Structured Outputs 파싱 실패(`ValidationError`)는 1회 재시도하고, 그래도 실패하면 `error` 이벤트(`COMPARE_PARSE_ERROR`)로 종결한다(정책서 §5.6·§9.2). OpenAI 호출 실패는 `LLM_ERROR`다. `done`에 오류 상태를 싣지 않는다.
+### 5.3 후처리 검증 (정책서 §5.6)
+
+- 인용 배열(`citations`·`citations_a`·`citations_b`)에서 그 측의 출처 범위 밖 번호와 반대 측 번호를 지운다. 순서를 유지하고 중복을 없앤다.
+- 본문(`summary`·`a`·`b`) 안의 `[A1]`·`[B2]` 표시도 같은 기준으로 지운다. 코드 펜스·인라인 코드 안은 건드리지 않는다.
+- 지운 번호는 `done.invalidCitations`에 기록한다(INV-08).
+- `no_evidence=true`인 측은 `summary=""`·`citations=[]`로 비우고, 한쪽이라도 `no_evidence`이면 `changes=[]`다.
+- 변경점은 `citations_a`·`citations_b`가 모두 남아 있을 때만 유지한다("양쪽 근거 인용 필수").
+
+### 5.4 오류 처리
+
+| 상황 | 처리 |
+| --- | --- |
+| 파싱 실패 — 스키마 검증 실패, `finish_reason=length`, 거절(refusal), 빈 결과 | 1회 재시도. 두 번째도 실패하면 `error(COMPARE_PARSE_ERROR, partial=false)` |
+| OpenAI 호출 실패(연결·상태 코드·호출 제한 시간) | 재시도 없이 `error(LLM_ERROR, partial=false)` |
+| 질의 임베딩 실패 | `error(LLM_ERROR, partial=false)` |
+| 요청부터 30초 초과 (`stream.compare_max_duration_seconds`) | 처리를 취소하고 `error(UPSTREAM_TIMEOUT, partial=false)` |
+
+`done`에 오류 상태를 싣지 않는다.
 
 ```python
 yield SseEvent(event="error", data={
@@ -375,7 +370,9 @@ yield SseEvent(event="error", data={
 | `configs/rag.yaml` | `retrieval.top_k`, `retrieval.thresholds.{source_key}`(τ, ADR-008), `retrieval.context_budget_tokens` |
 | `configs/models.yaml` | `llm.model`·`temperature`(0)·`max_tokens`·`first_token_timeout_seconds`·`max_retries`, `embedding.*` |
 | `configs/prompts/single_v{n}.j2` | 단일 모드 시스템 프롬프트 템플릿 (파일명 = `prompt_version`) |
-| `configs/prompts/compare_system.jinja2` | 비교 모드 Structured Outputs 프롬프트 |
+| `configs/prompts/compare_v{n}.j2` | 비교 모드 Structured Outputs 프롬프트 (파일명 = `prompt_version`, 기본값 `rag.yaml` `generation.compare_prompt_version`) |
+| `configs/models.yaml` `compare` | `model`·`temperature`(0)·`max_tokens`(1,500)·`timeout_seconds`·`max_retries`(0)·`parse_retries`(1) |
+| `configs/rag.yaml` `stream.compare_max_duration_seconds` | 비교 모드 전체 상한 30초 (정책서 §2.1) |
 
 > 모든 설정값은 하드코딩 금지. 코드에서 직접 설정값을 사용하지 않는다.
 > 활성 ingest_run ID는 설정 파일이 아닌 PostgreSQL `ingest_runs` 테이블에서 조회한다.
@@ -396,15 +393,15 @@ yield SseEvent(event="error", data={
 | `llm_stream_start` | `request_id`, `prompt_tokens` |
 | `llm_stream_done` | `request_id`, `completion_tokens`, `ttft_ms` |
 | `stream_aborted` | `request_id`, `reason` |
-| `compare_structured_done` | `request_id`, `latency_ms`, `answer_a_len`, `answer_b_len` |
+| `compare_structured_done` | `request_id`, `latency_ms`, `attempts`, `invalid_citations`, `changes_dropped` |
 
 ---
 
 ## 미결 사항
 
 - [ ] **P-1** `history_window` 기본값 최적화 (멀티턴 E2E 테스트 후 결정)
-- [ ] **P-2** 비교 모드 에러 — 양쪽 소스 중 하나가 NO_CONTEXT 범위일 때 처리 방식 (해당 answer에 "관련 내용 없음" 메시지 삽입 vs 별도 플래그)
-- [ ] **P-3** `configs/prompts/compare_system.jinja2` 프롬프트 최적화 (두 버전 컨텍스트를 하나의 프롬프트로 조립하는 최적 구조)
+- [x] **P-2** 비교 모드 한쪽 근거 없음 — 별도 플래그(`no_evidence`)로 처리, 그 측 출처 제외·`changes=[]` (§5.3, R-8-1)
+- [ ] **P-3** 비교 프롬프트(`compare_v1`) 최적화 — 두 버전 컨텍스트를 하나의 프롬프트로 조립하는 구조 (R-8-1 수동 검증 10건 이후 필요 시)
 - [x] **P-4** 멀티턴 재작성 `answer_summary` 생성 방식 — 이전 답변 앞 500자 사용(정책서 §5.2, R-7-2)
 
 ---
@@ -421,6 +418,7 @@ yield SseEvent(event="error", data={
 | v0.6 | §3.5 프롬프트 위치 `configs/prompts/{prompt_version}.j2`·정책서 §5.5 규칙, 컨텍스트 초과 처리 → 정책서 §5.3 토큰 예산, §3.6 첫 토큰 타임아웃·모델 선택, §6 `configs/models.yaml` |
 | v0.7 | §1 관련 문서 경로 정정, §2.1 진입점을 backend → `POST /internal/v1/chat/stream`으로, 4단계 Source Adapter → 컨텍스트 선택(§3.4, ADR-006), §3.2 임베딩 실패는 `error` 이벤트 |
 | v0.8 | §3.5 현재 프롬프트 `single_v2`(#108) — 규칙 ⑤(근거 부족 시 sentinel만)가 ③(첫 줄 기준 버전)보다 우선 |
+| v0.9 | §2.2 비교 모드 흐름을 실제 처리 순서로 정정(진입 경로 `/internal/v1/chat/stream`, 재작성 1회, 측별 τ 판정, 통과한 측 출처만), §5 처리 순서·후처리·오류 처리 확정, §6 프롬프트 파일명 `compare_v{n}.j2`·설정 키, P-2 결정 (R-8-1) |
 
 ---
 

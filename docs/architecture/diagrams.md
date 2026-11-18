@@ -1,6 +1,6 @@
 # 시스템 아키텍처 다이어그램
 
-> 수정일: 2026-11-06
+> 수정일: 2026-11-18
 
 ---
 
@@ -355,25 +355,26 @@ sequenceDiagram
     participant VDB as Chroma
     participant LLM as OpenAI
 
-    U->>BE: POST /api/v1/chat/compare<br/>{question, sourceKeyA, sourceKeyB}
-    Note over BE: 게스트 → 403 GUEST_MODE_NOT_ALLOWED (INV-16)
+    U->>BE: POST /api/v1/chat/stream<br/>{mode=COMPARE, question, sourceKeyA, sourceKeyB}
+    Note over BE: 게스트 → 403 GUEST_MODE_NOT_ALLOWED (정책 §1.3)
     BE->>DB: 이용량 확인 (delta=2) + INV-11 검사
     BE->>DB: INSERT messages(USER, quota_cost=2)<br/>INSERT messages(ASSISTANT, PENDING)
 
-    BE->>AI: POST /internal/v1/chat/stream<br/>{mode=COMPARE, sourceKeyA, sourceKeyB, question}
+    BE->>AI: POST /internal/v1/chat/stream<br/>{mode=COMPARE, sourceKeyA, sourceKeyB, question, history}
 
-    alt AI 연결 실패
-        AI-->>BE: 503
-        BE->>DB: UPDATE → FAILED(AI_UNAVAILABLE)
-        BE-->>U: 503 AI_UNAVAILABLE
-    else 연결 성공
-        AI->>AI: embed(question)
+    alt AI 연결 실패·스트림 전 오류
+        AI-->>BE: 503 등 (HTTP 상태)
+        BE->>DB: UPDATE → FAILED(AI_UNAVAILABLE 등)
+        BE-->>U: 503 AI_UNAVAILABLE (JSON)
+    else 연결 성공 (200)
+        BE->>DB: UPDATE → PROCESSING
+        AI->>AI: 질의 재작성 (history 있을 때 1회)
 
         par A측 검색
-            AI->>VDB: search(vector, collection=sourceKeyA_runIdA, top_k=K)
+            AI->>VDB: embed + search(collection=sourceKeyA_runIdA, top_k=K)
             VDB-->>AI: A chunks + scores
         and B측 검색
-            AI->>VDB: search(vector, collection=sourceKeyB_runIdB, top_k=K)
+            AI->>VDB: embed + search(collection=sourceKeyB_runIdB, top_k=K)
             VDB-->>AI: B chunks + scores
         end
 
@@ -382,34 +383,33 @@ sequenceDiagram
             AI-->>BE: [SSE] done(status=NO_CONTEXT, reason=LOW_SIMILARITY)
             BE->>DB: UPDATE → NO_CONTEXT(LOW_SIMILARITY)
             BE-->>U: [SSE] meta + done
-        else 검색 통과
-            AI-->>BE: [SSE] meta(sourceKeyA, sourceKeyB, A·B sources, commitShaA, commitShaB)
-            BE->>DB: UPDATE → PROCESSING
-            BE->>DB: INSERT message_sources(A측 + B측, rank=A1..AN, B1..BN) [스냅샷]
+        else 한쪽 이상 통과
+            AI-->>BE: [SSE] meta(A·B 스냅샷, 통과한 측 sources A1..·B1..)
+            BE->>DB: UPDATE 스냅샷(A·B) + INSERT message_sources [스냅샷]
             BE-->>U: [SSE] meta
 
-            AI->>LLM: chat completion [Structured Outputs JSON 스키마, ≤30초]
-            Note over AI: token 이벤트 없음 — JSON 검증 후 한 번에 반환
+            AI->>LLM: chat completion [Structured Outputs, max_tokens 1,500]
+            Note over AI: token 이벤트 없음 — 요청부터 30초 상한
 
             alt 30초 초과
-                AI-->>BE: error(UPSTREAM_TIMEOUT)
+                AI-->>BE: [SSE] error(UPSTREAM_TIMEOUT)
                 BE->>DB: UPDATE → FAILED(UPSTREAM_TIMEOUT)
-                BE-->>U: 504 UPSTREAM_TIMEOUT
+                BE-->>U: [SSE] error(UPSTREAM_TIMEOUT)
             else JSON 파싱 2회 연속 실패
                 AI->>LLM: 재시도 1회 포함 총 2회
-                LLM-->>AI: invalid JSON (2회)
-                AI-->>BE: error(COMPARE_PARSE_ERROR)
+                AI-->>BE: [SSE] error(COMPARE_PARSE_ERROR)
                 BE->>DB: UPDATE → FAILED(COMPARE_PARSE_ERROR)
-                BE-->>U: 502 COMPARE_PARSE_ERROR
+                BE-->>U: [SSE] error(COMPARE_PARSE_ERROR)
             else 정상 완료
-                LLM-->>AI: compareResult JSON<br/>{versionA, versionB, diff, citationsA[], citationsB[]}
-                AI->>AI: INV-08: 인용 번호 범위 검증
+                LLM-->>AI: compareResult JSON<br/>{version_a, version_b, changes}
+                AI->>AI: 후처리 — 없는·반대 측 인용 제거, 양쪽 인용 없는 변경점 폐기
                 AI-->>BE: [SSE] done(status=COMPLETED, compareResult, invalidCitations)
-                BE->>DB: UPDATE → COMPLETED<br/>INSERT compare_results
+                BE->>DB: UPDATE → COMPLETED<br/>messages.compare_result 저장
                 BE-->>U: [SSE] done + compareResult
             end
         end
     end
+    Note over BE,AI: 브라우저가 이탈해도 취소를 전파하지 않고 끝까지 처리·저장 (정책 §2.3)
 ```
 
 ---
@@ -580,6 +580,7 @@ stateDiagram-v2
 | 버전 | 내용 |
 | --- | --- |
 | v0.3 | §5.2 compare 엔드포인트·요청바디 수정, §6.2 INV-01 source_key 수정 |
+| v0.4 | §5.2 비교 시퀀스 정정 — 진입 `/api/v1/chat/stream`(mode=COMPARE), 없는 `compare_results` 테이블 → `messages.compare_result`, meta 뒤 오류는 SSE `error`(INV-09), 필드명 snake_case, 측별 τ·30초 상한·이탈 시 계속 처리 (R-8-1) |
 
 ---
 
