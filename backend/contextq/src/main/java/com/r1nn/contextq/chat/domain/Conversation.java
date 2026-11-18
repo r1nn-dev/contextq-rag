@@ -124,6 +124,11 @@ public class Conversation {
     return messageCount + count <= MAX_MESSAGES;
   }
 
+  /** Message cap reached: the conversation is read-only (policy §6.1, db-design §3.6). */
+  public boolean isFull() {
+    return messageCount >= MAX_MESSAGES;
+  }
+
   /** Counts the USER + ASSISTANT pair inserted for one question. */
   public void appendMessages(int count) {
     if (!canAppend(count)) {

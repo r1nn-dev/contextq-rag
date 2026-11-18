@@ -74,6 +74,19 @@ public class SourceCatalog {
   }
 
   /**
+   * Catalog for read-only views that must not fail with ai-server (api-spec §4.1 조회 규칙).
+   *
+   * @return the current catalog, or {@code null} when ai-server fails and nothing is cached
+   */
+  public InternalSources currentOrNull() {
+    try {
+      return current();
+    } catch (BusinessException e) {
+      return null;
+    }
+  }
+
+  /**
    * Public source list (api-spec §2.1).
    *
    * @throws BusinessException {@code INDEX_NOT_ACTIVE} when enabled sources exist but none has an
