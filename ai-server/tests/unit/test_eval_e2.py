@@ -101,26 +101,35 @@ def test_fence_stats_counts_complete_and_split_fences() -> None:
 # --- 전략별 run 선택 ----------------------------------------------------------
 
 
-def _run(session: Session, source_key: str, strategy: str, status: S) -> IngestRun:
+def _run(session: Session, source_key: str, strategy: str, status: S, sha: str = "a" * 40
+         ) -> IngestRun:  # fmt: skip
     run = IngestRun(source_key=source_key, status=status, accept_drift=True,
-                    chunk_strategy=strategy, chunk_count=10)  # fmt: skip
+                    chunk_strategy=strategy, chunk_count=10, commit_sha=sha)  # fmt: skip
     session.add(run)
     session.flush()
     return run
 
 
-def test_strategy_indexes_prefers_active_then_latest_searchable_run(session: Session) -> None:
-    active = _run(session, V03, "B", S.ACTIVE)
-    _run(session, V03, "B", S.READY)
-    _run(session, V1X, "B", S.READY)
+def test_strategy_indexes_picks_the_latest_searchable_run(session: Session) -> None:
+    _run(session, V03, "B", S.ACTIVE)
+    latest = _run(session, V03, "B", S.READY)
+    _run(session, V1X, "B", S.SUPERSEDED)
     newest = _run(session, V1X, "B", S.READY)
     _run(session, V1X, "B", S.FAILED)
 
     found = strategy_indexes(session, [V03, V1X], ["B"])
 
-    assert found["B"][V03].run_id == active.id
+    assert found["B"][V03].run_id == latest.id
     assert found["B"][V1X].run_id == newest.id
     assert found["B"][V1X].version == "v1.x"
+
+
+def test_strategy_runs_of_one_source_must_share_the_commit(session: Session) -> None:
+    _run(session, V1X, "B", S.ACTIVE, sha="b" * 40)
+    _run(session, V1X, "C", S.READY, sha="c" * 40)
+
+    with pytest.raises(StrategyRunsMissingError, match="커밋이 다릅니다"):
+        strategy_indexes(session, [V1X], ["B", "C"])
 
 
 def test_strategy_indexes_lists_missing_combinations(session: Session) -> None:

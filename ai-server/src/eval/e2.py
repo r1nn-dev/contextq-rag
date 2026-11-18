@@ -1,6 +1,8 @@
 """E2 청킹 전략 비교 — 전략별 run 선택·코드 블록 보존율·결정 규칙 적용 (protocol.md 실험 E2).
 
 - 검색은 E1-C와 같은 서비스 검색기(`ChromaRetriever`)로 하고, 전략·버전마다 run을 고정한다.
+- 같은 소스의 전략별 run은 같은 커밋 SHA여야 한다. `main`을 따라가는 소스는 빌드 사이에
+  문서가 바뀔 수 있어, 다르면 비교를 거부한다(전략 차이와 문서 차이가 섞이지 않게).
 - 결정 규칙은 `eval/decision_rules.md` §1·§2를 그대로 옮긴다(eval-v1 태그 이후 변경 금지).
   §1: Hit@5 최고 → 1·2위 차이 < 3%p면 MRR@5 → 평균 컨텍스트 토큰(적은 쪽).
   §2: 채택 전략에서 Hit@5 − Hit@3 < 2%p면 K=3, 아니고 Hit@8 − Hit@5 < 2%p면 K=5, 아니면 K=8.
@@ -26,7 +28,7 @@ FENCE = "```"
 
 
 class StrategyRunsMissingError(LookupError):
-    """전략·버전 조합 중 검색할 수 있는 run이 없음 — 먼저 `make ingest STRATEGY=...`."""
+    """전략·버전 조합 중 검색할 수 있는 run이 없거나, 같은 소스의 전략별 run 커밋이 다름."""
 
 
 def run_index(session: Session, run: IngestRun) -> ActiveIndex:
@@ -49,7 +51,7 @@ def run_index(session: Session, run: IngestRun) -> ActiveIndex:
 def strategy_indexes(
     session: Session, source_keys: Sequence[str], strategies: Sequence[str] = STRATEGIES
 ) -> dict[str, dict[str, ActiveIndex]]:
-    """전략 → 소스 → 검색할 run. 같은 조합이 여러 개면 가장 최근 run(ACTIVE 우선)."""
+    """전략 → 소스 → 검색할 run. 같은 조합이 여러 개면 가장 최근 run."""
     found: dict[str, dict[str, ActiveIndex]] = {s: {} for s in strategies}
     missing: list[str] = []
     for strategy in strategies:
@@ -66,10 +68,22 @@ def strategy_indexes(
             if not runs:
                 missing.append(f"{source_key}/{strategy}")
                 continue
-            chosen = next((r for r in runs if r.status == IngestStatus.ACTIVE), runs[0])
-            found[strategy][source_key] = run_index(session, chosen)
+            found[strategy][source_key] = run_index(session, runs[0])
     if missing:
         raise StrategyRunsMissingError(f"검색할 수 있는 전략별 run이 없습니다: {missing}")
+    mismatched = [
+        f"{key}: "
+        + ", ".join(
+            f"{s}=run{found[s][key].run_id}@{(found[s][key].commit_sha or '-')[:7]}"
+            for s in strategies
+        )
+        for key in source_keys
+        if len({found[s][key].commit_sha for s in strategies}) > 1
+    ]
+    if mismatched:
+        raise StrategyRunsMissingError(
+            f"같은 소스의 전략별 run 커밋이 다릅니다 — 같은 커밋으로 다시 빌드하세요: {mismatched}"
+        )
     return found
 
 
