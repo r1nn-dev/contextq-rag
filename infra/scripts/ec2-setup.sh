@@ -9,6 +9,7 @@
 #   - Docker Engine + Compose 플러그인, 운영 사용자를 docker 그룹에 추가
 #   - AWS CLI(S3 스냅샷·백업), certbot(Let's Encrypt), git
 #   - 운영 디렉터리 /opt/contextq/{snapshots,backups,logs}
+#   - PostgreSQL 백업 크론 /etc/cron.d/contextq (매일 03:00 KST → infra/scripts/pg-backup.sh)
 # AWS 쪽 설정(인스턴스 유형·CPU standard 모드·EBS·Elastic IP·보안 그룹·IAM 역할)은 콘솔에서 한다
 # (docs/ops/deployment.md §5.1).
 set -euo pipefail
@@ -60,6 +61,16 @@ command -v aws >/dev/null || snap install aws-cli --classic
 log "운영 디렉터리 $CONTEXTQ_HOME"
 install -d -o "$OWNER" -g "$OWNER" -m 0755 "$CONTEXTQ_HOME" \
   "$CONTEXTQ_HOME/snapshots" "$CONTEXTQ_HOME/backups" "$CONTEXTQ_HOME/logs"
+
+log "PostgreSQL 백업 크론 (매일 03:00 KST, 정책서 §9.4)"
+cat > /etc/cron.d/contextq <<CRON
+# ContextQ 운영 크론 — infra/scripts/ec2-setup.sh가 만든다 (서버 시간대 Asia/Seoul)
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
+CONTEXTQ_HOME=$CONTEXTQ_HOME
+0 3 * * * $OWNER $CONTEXTQ_HOME/app/infra/scripts/pg-backup.sh >> $CONTEXTQ_HOME/logs/pg-backup.log 2>&1
+CRON
+chmod 644 /etc/cron.d/contextq
 
 log "완료"
 docker --version
