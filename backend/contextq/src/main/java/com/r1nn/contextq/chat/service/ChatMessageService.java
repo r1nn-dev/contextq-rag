@@ -3,11 +3,11 @@ package com.r1nn.contextq.chat.service;
 import com.r1nn.contextq.chat.domain.AnswerOutcome;
 import com.r1nn.contextq.chat.domain.AnswerSnapshot;
 import com.r1nn.contextq.chat.domain.Conversation;
-import com.r1nn.contextq.chat.domain.ConversationMode;
 import com.r1nn.contextq.chat.domain.Message;
 import com.r1nn.contextq.chat.domain.MessageRole;
 import com.r1nn.contextq.chat.domain.MessageSource;
 import com.r1nn.contextq.chat.domain.MessageStatus;
+import com.r1nn.contextq.chat.domain.QuestionTarget;
 import com.r1nn.contextq.chat.repository.ConversationRepository;
 import com.r1nn.contextq.chat.repository.MessageRepository;
 import com.r1nn.contextq.chat.repository.MessageSourceRepository;
@@ -102,17 +102,18 @@ public class ChatMessageService {
       BigDecimal similarity) {}
 
   /**
-   * Source key of the caller's existing SINGLE conversation, checked before ai-server is called.
+   * Versions of the caller's existing conversation, checked before ai-server is called.
    *
+   * @param requested mode and versions named by the request; null keys mean "the conversation's"
    * @throws BusinessException {@code CONVERSATION_NOT_FOUND} for missing or foreign conversations
-   *     (INV-14), {@code INVALID_REQUEST} when the conversation is not SINGLE or the requested
-   *     version differs (policy §5.1)
+   *     (INV-14), {@code INVALID_REQUEST} when the mode or a named version differs (policy §5.1)
    */
   @Transactional(readOnly = true)
-  public String conversationSource(Long userId, Long conversationId, String requestedSourceKey) {
+  public QuestionTarget conversationTarget(
+      Long userId, Long conversationId, QuestionTarget requested) {
     Conversation c = owned(conversations.findById(conversationId).orElse(null), userId);
-    requireSameSetting(c, requestedSourceKey);
-    return c.getSourceKey();
+    requireSameSetting(c, requested);
+    return QuestionTarget.of(c);
   }
 
   /**
@@ -131,7 +132,7 @@ public class ChatMessageService {
     } else {
       conversation =
           owned(conversations.findByIdForUpdate(cmd.conversationId()).orElse(null), cmd.userId());
-      requireSameSetting(conversation, cmd.sourceKey());
+      requireSameSetting(conversation, QuestionTarget.single(cmd.sourceKey()));
       if (!conversation.canAppend(MESSAGES_PER_QUESTION)) {
         throw new BusinessException(ErrorCode.CONVERSATION_FULL);
       }
@@ -268,12 +269,19 @@ public class ChatMessageService {
     return conversation;
   }
 
-  private static void requireSameSetting(Conversation conversation, String requestedSourceKey) {
-    if (conversation.getMode() != ConversationMode.SINGLE) {
+  /** INV-10: mode and versions are fixed; omitted versions mean the conversation's own. */
+  private static void requireSameSetting(Conversation conversation, QuestionTarget requested) {
+    if (conversation.getMode() != requested.mode()) {
       throw BusinessException.invalidField("mode", "대화의 모드와 다릅니다.");
     }
-    if (requestedSourceKey != null && !requestedSourceKey.equals(conversation.getSourceKey())) {
-      throw BusinessException.invalidField("sourceKey", "대화의 버전과 다릅니다.");
+    requireSame("sourceKey", requested.sourceKey(), conversation.getSourceKey());
+    requireSame("sourceKeyA", requested.sourceKeyA(), conversation.getSourceKeyA());
+    requireSame("sourceKeyB", requested.sourceKeyB(), conversation.getSourceKeyB());
+  }
+
+  private static void requireSame(String field, String requested, String fixed) {
+    if (requested != null && !requested.equals(fixed)) {
+      throw BusinessException.invalidField(field, "대화의 버전과 다릅니다.");
     }
   }
 }

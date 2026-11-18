@@ -3,6 +3,7 @@ package com.r1nn.contextq.chat.service;
 import com.r1nn.contextq.chat.domain.AnswerOutcome;
 import com.r1nn.contextq.chat.domain.ConversationMode;
 import com.r1nn.contextq.chat.domain.MessageStatus;
+import com.r1nn.contextq.chat.domain.QuestionTarget;
 import com.r1nn.contextq.chat.dto.ChatStreamRequest;
 import com.r1nn.contextq.chat.service.ChatMessageService.AcceptCommand;
 import com.r1nn.contextq.chat.service.ChatMessageService.Accepted;
@@ -87,15 +88,21 @@ public class ChatRelayService {
    */
   public Flux<ServerSentEvent<String>> streamForUser(
       Long userId, ChatStreamRequest request, String requestId) {
-    request.requireSupportedMode();
+    request.requireModeFields();
     rateLimiter.acquire(userId); // 10 per minute (policy §8.1)
     Slot slot = slots.acquire("u:" + userId, quota.concurrentUser());
     try {
       boolean followUp = request.conversationId() != null;
-      String sourceKey =
+      QuestionTarget target =
           followUp
-              ? messages.conversationSource(userId, request.conversationId(), request.sourceKey())
-              : request.sourceKey();
+              ? messages.conversationTarget(
+                  userId, request.conversationId(), request.requestedTarget())
+              : request.requestedTarget();
+      if (target.isCompare()) {
+        sourceCatalog.requireComparable(target.sourceKeyA(), target.sourceKeyB(), followUp);
+        throw BusinessException.invalidField("mode", "비교 모드 중계는 아직 지원하지 않습니다.");
+      }
+      String sourceKey = target.sourceKey();
       sourceCatalog.requireAskable(sourceKey, followUp);
 
       String question = request.trimmedQuestion();
@@ -137,7 +144,7 @@ public class ChatRelayService {
       throw BusinessException.invalidField(
           "conversationId", "게스트 대화는 서버에 저장되지 않아 대화 ID를 쓸 수 없습니다.");
     }
-    request.requireSupportedMode();
+    request.requireModeFields();
     String sourceKey = request.sourceKey();
     List<Map<String, String>> history = request.guestHistory();
     sourceCatalog.requireAskable(sourceKey, false);

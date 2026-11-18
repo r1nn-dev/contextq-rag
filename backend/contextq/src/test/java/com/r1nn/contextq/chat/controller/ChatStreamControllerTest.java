@@ -338,9 +338,9 @@ class ChatStreamControllerTest {
             streamRequest(
                 userId,
                 "{\"question\":\"q\",\"mode\":\"COMPARE\",\"sourceKeyA\":\"langchain_v03\","
-                    + "\"sourceKeyB\":\"langchain_v1x\"}"))
+                    + "\"sourceKeyB\":\"langchain_v03\"}"))
         .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.error.details[0].field").value("mode"));
+        .andExpect(jsonPath("$.error.details[0].field").value("sourceKeyB"));
   }
 
   @Test
