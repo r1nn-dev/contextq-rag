@@ -118,6 +118,11 @@ public class User extends BaseTimeEntity {
     return false;
   }
 
+  /** Admin unlock (policy §10.3): the same clean state as a successful login. */
+  public void unlock() {
+    recordSuccess();
+  }
+
   /** Successful login clears the failure state (policy §1.2). */
   public void recordSuccess() {
     loginFailedCount = 0;

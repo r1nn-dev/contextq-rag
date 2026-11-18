@@ -26,6 +26,7 @@ public enum ErrorCode {
 
   CONVERSATION_NOT_FOUND(HttpStatus.NOT_FOUND, "대화를 찾을 수 없습니다."),
   SOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "선택한 문서 버전을 찾을 수 없습니다."),
+  USER_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),
 
   AUTH_REFRESH_CONFLICT(HttpStatus.CONFLICT, "토큰 갱신이 동시에 요청되었습니다. 다시 시도해주세요."),
   CONVERSATION_BUSY(HttpStatus.CONFLICT, "이전 답변이 끝난 뒤 질문해주세요."),
