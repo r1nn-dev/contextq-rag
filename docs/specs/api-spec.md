@@ -573,6 +573,7 @@ Set-Cookie: `devdocs_rt=; Max-Age=0; Path=/api/v1/auth; HttpOnly; Secure; SameSi
 - 절단 후 값을 ai-server 6.1 `history`로 그대로 넘긴다.
 - 게스트 화면은 최근 3턴을 오래된 것부터 보낸다. 실패한 답변과 근거 부족(`NO_CONTEXT`) 답변은 빼고 그 턴의 질문은 남긴다(정책서 §5.2 제외 메시지).
 - 로그인 사용자의 이력은 backend가 같은 대화의 최근 6개 메시지(3턴)를 DB에서 읽어 같은 규칙으로 만든다. 첫 질문(새 대화)은 빈 배열이다.
+- 비교 대화의 이전 답변(`COMPLETED`)은 `compareResult`의 `version_a.summary`·`version_b.summary` 중 비어 있지 않은 것을 줄바꿈으로 이어 `assistant` 내용으로 쓴다(정책서 §5.6 멀티턴).
 - backend는 보낸 이력과 `meta.rewrittenQuery`로 답변의 `rewrite_status`를 저장한다: 이력이 비었으면 `SKIPPED`, 재작성 질의가 있으면 `OK`, 이력을 보냈는데 null이면 `FALLBACK`.
 
 **비교 모드 예시**
@@ -694,7 +695,17 @@ data: {"event":"done", "status":"COMPLETED", ...}
 
 - backend는 ai-server 응답 헤더(HTTP 상태)를 받을 때까지 기다린 뒤 브라우저에 200을 보낸다. ai-server가 스트림 전 오류(6.1 표)를 주면 브라우저도 일반 JSON 오류를 받는다. 그대로 전달하는 코드: `SOURCE_NOT_FOUND`·`SOURCE_UNAVAILABLE`·`INDEX_NOT_ACTIVE`·`AI_BUSY`·`EMBEDDING_MODEL_MISMATCH`.
 - 기존 대화(`conversationId` 지정)의 버전 값이 대화 설정과 다르면 `INVALID_REQUEST`(400), 메시지 100개면 `CONVERSATION_FULL`, 대화의 소스가 비활성이면 `SOURCE_UNAVAILABLE`이다(정책서 §5.1·§2.3). 버전 값을 생략하면 대화 설정을 쓴다.
-- 비교 모드(`COMPARE`)는 비교 모드 구현 전까지 `INVALID_REQUEST`(400, `field: "mode"`)다.
+**비교 모드 (`COMPARE`) 규칙** (정책서 §3.2·§5.6·§8.1, ADR-010)
+
+- 로그인 사용자만 쓴다. 게스트는 `GUEST_MODE_NOT_ALLOWED`(403)이다.
+- 새 대화는 `sourceKeyA`·`sourceKeyB`가 필요하다. 없으면 `INVALID_REQUEST`(해당 필드), 같으면 `INVALID_REQUEST`(`sourceKeyB`)다.
+- 두 소스는 메타 API `comparePairs`에 같은 순서(A = 구버전, B = 신버전)로 있어야 한다. 아니면 `INVALID_REQUEST`(`sourceKeyB`)다. 두 소스 각각에 `sourceKey`와 같은 검사(`SOURCE_NOT_FOUND`·`SOURCE_UNAVAILABLE`·`INDEX_NOT_ACTIVE`)를 한다.
+- 이어서 질문은 `conversationId`만으로 충분하다. `mode`가 대화와 다르면 `INVALID_REQUEST`(`mode`), 함께 온 버전 값이 대화와 다르면 `INVALID_REQUEST`(해당 필드)다. 단일 모드 요청의 `sourceKeyA/B`, 비교 모드 요청의 `sourceKey`는 null이어야 한다.
+- 일일 한도는 2회로 차감한다(USER 메시지 `quota_cost` = 2). 분당 한도는 1회, 동시 스트림 자리는 1개를 쓴다.
+- 브라우저 이벤트는 `meta`(부록 B.4, `conversationId`·`messageId` 추가) → `done`(`compareResult`) 또는 `error`다. token은 없다.
+- 저장: 요청 수락 시 ASSISTANT `PENDING` → ai-server가 200을 주면 `PROCESSING` → `meta`에서 A·B 스냅샷(`ingest_run_id_a/b`·`commit_sha_a/b`·`ingested_at_a/b`·`top1_similarity_a/b`)과 출처(`rank_label` A1…·B1…, 측별 `source_key`) 저장 → 종결 시 `compare_result`(후처리 결과 그대로)와 사용량·지연을 한 번에 저장한다. `content`는 NULL이다.
+- 브라우저가 중간에 나가도 업스트림 취소를 전파하지 않고 끝까지 처리해 저장한다(정책서 §2.3). 동시 스트림 자리는 처리가 끝날 때 반납한다.
+- 비교 모드 오류 종결: ai-server `error`(`COMPARE_PARSE_ERROR`·`UPSTREAM_TIMEOUT`·`LLM_ERROR` 등)는 그 코드로 `FAILED`, 첫 이벤트 15초·유휴 30초 초과는 `UPSTREAM_TIMEOUT`이다(아래 표). 비교 모드는 토큰이 없으므로 `PARTIAL`이 없다.
 
 **스트림 후 `error` 이벤트 (backend가 보내는 코드)**
 
@@ -871,7 +882,7 @@ data: {"event":"done", "status":"COMPLETED", ...}
 - `sources[].rank`는 `rankLabel`의 순번 숫자다. 출처가 없으면 빈 배열이다.
 - `rewrittenQuery`는 재작성하지 않았거나(첫 질문·`SKIPPED`) 폴백한 경우 null이다.
 
-**비교 모드 ASSISTANT 메시지 추가 필드** (비교 모드 구현 시 채운다)
+**비교 모드 ASSISTANT 메시지 추가 필드** (`mode = COMPARE`)
 
 ```json
 {
@@ -896,6 +907,11 @@ data: {"event":"done", "status":"COMPLETED", ...}
   }
 }
 ```
+
+- `content`는 빈 문자열이다(비교 답변은 본문 없이 `compareResult`만 저장).
+- `compareResult`는 `COMPLETED`일 때만 값이 있고, 그 밖에는 null이다. 내부 키는 snake_case 그대로다(정책서 §9.3).
+- `snapshot`은 위 네 필드다. `meta`를 받기 전에 끝난 답변이면 null이다. `ingestedAtA/B`는 그 측 값이 없으면 null이다.
+- `sources[].rankLabel`은 `A1…`·`B1…`이고, `rank`는 그 순번 숫자다.
 
 **에러**
 
@@ -1408,7 +1424,7 @@ INSERT
       → FAILED       [종결, AI_UNAVAILABLE 등]
 
 [종결 상태: COMPLETED / PARTIAL / NO_CONTEXT / FAILED → 전이 불가 (INV-12)]
-[스위퍼: STREAMING·PENDING + updated_at 150초 초과 → FAILED(STALE), 종결 저장 실패분은 FAILED(PERSIST_ERROR)]
+[스위퍼: STREAMING·PENDING·PROCESSING + updated_at 150초 초과 → FAILED(STALE), 종결 저장 실패분은 FAILED(PERSIST_ERROR)]
 ```
 
 ### C.2 app.refresh\_tokens 상태 전이

@@ -434,7 +434,7 @@ stateDiagram-v2
 
     PROCESSING --> COMPLETED : JSON 검증 완료
     PROCESSING --> NO_CONTEXT : 양측 top-1 < τ
-    PROCESSING --> FAILED : 30초 초과 · 파싱 2회 실패 · AI오류
+    PROCESSING --> FAILED : 30초 초과 · 파싱 2회 실패 · AI오류\n150초 고착 STALE · PERSIST_ERROR
 
     COMPLETED --> [*]
     PARTIAL --> [*]
@@ -581,6 +581,7 @@ stateDiagram-v2
 | --- | --- |
 | v0.3 | §5.2 compare 엔드포인트·요청바디 수정, §6.2 INV-01 source_key 수정 |
 | v0.4 | §5.2 비교 시퀀스 정정 — 진입 `/api/v1/chat/stream`(mode=COMPARE), 없는 `compare_results` 테이블 → `messages.compare_result`, meta 뒤 오류는 SSE `error`(INV-09), 필드명 snake_case, 측별 τ·30초 상한·이탈 시 계속 처리 (R-8-1) |
+| v0.5 | §5.3 PROCESSING → FAILED에 150초 고착(STALE·PERSIST_ERROR) 추가 (R-8-2) |
 
 ---
 
