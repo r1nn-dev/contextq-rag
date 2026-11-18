@@ -113,6 +113,9 @@ make ingest SOURCE=langchain_v1x STRATEGY=C COMMIT=<40자 커밋 SHA>
 
 **전체 스택을 컨테이너로 띄우는 경우** (`make up` 또는 `make -C infra up` = 기본 파일 + `infra/docker-compose.local.yml`)
 
+- 컨테이너는 nginx · backend · ai-server · postgres 4개다. 화면과 `/api`는 nginx(`http://localhost`)로 접속한다. 구성은 `docs/ops/deployment.md` §2.
+- Compose 프로젝트 이름은 `contextq`로 고정돼 있고, Makefile은 저장소 루트의 환경 파일을 `--env-file`로 넘긴다(Compose 기본값은 `infra/`).
+- ai-server 헬스체크는 소스별 ACTIVE 인덱스까지 확인한다. 인덱스가 없으면 backend·nginx가 뜨지 않으므로 인덱스를 먼저 준비한다(빌드 또는 `make restore-index`).
 - local 오버레이는 호스트의 `ai-server/data/chroma`를 컨테이너 Chroma 경로(`/app/chroma_db`)에 연결한다. 호스트에서 `make ingest`·`make activate-index`로 만든 인덱스를 컨테이너 ai-server가 그대로 검색한다. 활성 인덱스 포인터는 같은 PostgreSQL에 있으므로 활성화 CLI의 reload가 컨테이너에 바로 반영된다.
 - 기본 파일만 쓰면(배포 구성) Chroma는 `chroma_data` 볼륨이라 호스트 인덱스가 보이지 않는다. 배포 환경은 스냅샷 복원으로 채운다.
 - ai-server 코드가 바뀌면 이미지를 다시 빌드한다. 옛 이미지가 떠 있으면 새 내부 API가 없어 reload가 404로 끝난다.
