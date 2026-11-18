@@ -45,7 +45,7 @@ The reference documents are written in Korean.
 - Before each commit, run the per-commit routine in §7. Report only the commands you actually ran, with their results.
 - Docs-only commits (no Java or Python source changes): skip `spotlessApply` and `uv run ruff check`.
 - Never reference `.env` or `.mcp.json` paths in commit messages, code comments, Issue bodies, or PR bodies.
-- After creating a branch, push it immediately and open a Draft PR before starting implementation.
+- After creating a branch, push it immediately. Open the Draft PR after the stage 40 self-review, following stage 50 (GitHub cannot open a PR for a branch with no commits).
 
 ---
 
@@ -80,7 +80,7 @@ The source of the document list is `docs/README.md`.
 - Reply to the user in Korean. 
 - Write all outputs and deliverables (Issues, PRs, commit messages, documents) in Korean. Keep `type(scope):`, code identifiers, and file paths as they are.
 - Conduct work internally in English (reasoning, intermediate steps, tool calls).
-- Write code comments by `docs/ops/code-convention.md` §3 (comment rules).
+- Write code comments in the same language and style as the existing comments in the file you change, and explain why rather than what. No separate comment rules document exists.
 
 ---
 
