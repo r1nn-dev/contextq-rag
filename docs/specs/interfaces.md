@@ -100,6 +100,7 @@ class SourceKey(str, Enum):
 | --- | --- | --- | --- | --- |
 | `Retriever` | 쿼리로 관련 청크 검색 | r1nn-dev | - | 설계 |
 | `AnswerGenerator` | 컨텍스트 기반 답변 생성 | r1nn-dev | - | 설계 |
+| `QueryRewriter` | 멀티턴 후속 질문을 단독 검색 질의로 재작성 | r1nn-dev | - | 구현 |
 | `DocumentChunker` | 문서를 청크로 분할 | r1nn-dev | - | 설계 |
 | `EmbeddingClient` | 텍스트를 임베딩 벡터로 변환 | r1nn-dev | - | 설계 |
 
@@ -315,6 +316,61 @@ class GenerationStream(Protocol):
 - `generate_stream` 파라미터: temperature 0, `max_tokens` 1,024, 첫 토큰 10초, 재시도 없음 (`configs/models.yaml` `llm`, 정책서 §5.5·§2.1). 모델은 `LLM_MODEL` 환경 변수가 우선한다.
 - sentinel(`[[NO_ANSWER]]`) 감지와 인용 번호 검증은 생성기가 아니라 라우터 조립 단계가 한다 (정책서 §5.4·§5.5).
 - COMPARE 모드는 `generate()`를 사용하며, OpenAI Structured Outputs JSON 스키마를 적용해 비스트리밍으로 호출한다. token 이벤트 없이 `done` 이벤트 1회만 발생한다.
+
+---
+
+### QueryRewriter
+
+| 항목 | 값 |
+| --- | --- |
+| **목적** | 최근 대화로 후속 질문을 단독 검색 질의로 바꾼다 (ADR-009, 정책서 §5.2) |
+| **초안** | r1nn-dev |
+| **확정** | - |
+| **상태** | 구현 |
+| **구현체** | `OpenAIQueryRewriter` (`SkippingRewriter`: 재작성 없이 원래 질문 — 평가·테스트용 기본값) |
+| **소비자** | 단일 모드 파이프라인 (`pipeline/single.py`) — 검색 전 단계 |
+
+#### 메서드 목록
+
+| 메서드명 | 설명 | 동기/비동기 | 용도 |
+| --- | --- | --- | --- |
+| `rewrite` | 이력이 있으면 재작성, 없으면 원래 질문 | async | SINGLE 모드 (비교 모드도 같은 질의 1개로 양쪽 검색, 정책서 §5.6) |
+
+**입력 파라미터**
+
+| 파라미터 | 타입 | 필수 | 설명 | 제약 |
+| --- | --- | --- | --- | --- |
+| `question` | `str` | Y | 현재 질문 원문 | trim 후 1~1,000자 |
+| `history` | `Sequence[HistoryMessage]` | Y | 최근 대화, 오래된 것부터 (`role`: `user`·`assistant`) | 최대 6개, 메시지당 2,000자. 실패·근거 부족 답변은 보내는 쪽이 뺀다. 빈 시퀀스면 재작성하지 않음 |
+| `request_id` | `str` | Y (키워드) | 로그 상관 ID | - |
+
+**반환값**
+
+| 타입 | 설명 |
+| --- | --- |
+| `RewriteResult` | `query`(검색에 쓸 질의), `rewritten`(재작성 성공 시만 값 → `meta.rewrittenQuery`), `status`(`OK`·`FALLBACK`·`SKIPPED`), `elapsed_ms`(시도했으면 걸린 시간 → `done.latency.rewriteMs`, SKIPPED면 None) |
+
+**예외**
+
+- 없음. 제한 시간(3초) 초과·빈 출력·200자 초과·호출 오류·질문 언어가 바뀐 출력은 원래 질문을 쓰는 `FALLBACK`으로 돌려준다(재작성 실패는 답변 실패가 아니다).
+
+**코드 예시**
+
+```python
+class QueryRewriter(Protocol):
+    async def rewrite(
+        self, question: str, history: Sequence[HistoryMessage], *, request_id: str
+    ) -> RewriteResult:
+        """
+        최근 3턴만 참조하고 이전 assistant 본문은 앞 500자만 쓴다(configs/rag.yaml rewrite).
+        재작성 질의는 검색에만 쓰고, 생성 프롬프트에는 원래 질문을 넣는다(ADR-009).
+        """
+        ...
+```
+
+**구현 노트**
+- 프롬프트는 `configs/prompts/{rewrite.prompt_version}.j2` 템플릿 하나를 user 메시지로 보낸다. 문구 변경은 새 버전 파일로 한다.
+- 호출 파라미터는 `configs/models.yaml` `rewrite`(temperature 0, 비스트리밍, 재시도 없음, 3초).
 
 ---
 
