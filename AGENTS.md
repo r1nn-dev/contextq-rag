@@ -176,7 +176,7 @@ Browser ──HTTPS──► React (Vite)  [frontend/]
 
 ```
 com.r1nn.contextq
-├── {domain}/         ← auth, chat
+├── {domain}/         ← auth, chat, admin
 │   ├── controller/   ← ResponseEntity<ApiResponse<T>>
 │   ├── service/      ← @Transactional on public methods; readOnly for reads
 │   ├── repository/   ← Spring Data JPA

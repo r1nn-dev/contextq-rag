@@ -113,10 +113,10 @@ class SecurityConfigTest {
 
   @Test
   void adminTokenPassesAdminPath() throws Exception {
-    // no admin endpoint exists yet: passing security means the MVC 404, not 401/403
+    // an unmapped admin path: passing security means the MVC 404, not 401/403
     mockMvc
         .perform(
-            MockMvcRequestBuilders.get("/api/v1/admin/index/status")
+            MockMvcRequestBuilders.get("/api/v1/admin/not-mapped")
                 .header(HttpHeaders.AUTHORIZATION, bearer(UserRole.ROLE_ADMIN)))
         .andExpect(status().isNotFound());
   }

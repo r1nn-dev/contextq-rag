@@ -926,7 +926,7 @@ data: {"event":"done", "status":"COMPLETED", ...}
 
 > **서비스**: backend (Spring Boot)\
 **인증**: JWT + `ROLE_ADMIN` 필수. 비관리자 → `FORBIDDEN`(403)\
-**데이터 출처**: 인덱스 정보는 ai-server 내부 API 경유(backend는 ai 스키마 테이블을 직접 읽지 않음. 필요한 내부 API는 관리자 대시보드 작업에서 이 문서 §6에 먼저 추가), `app.messages` (집계)
+**데이터 출처**: 인덱스 정보는 ai-server 내부 API 경유(backend는 ai 스키마 테이블을 직접 읽지 않음, §6.6), 사용량은 `app.messages`·`app.guest_usage_logs` 집계
 
 ---
 
@@ -987,12 +987,24 @@ data: {"event":"done", "status":"COMPLETED", ...}
 }
 ```
 
+**응답 규칙**
+
+- `sources`는 ai-server §6.6 응답을 그대로 옮긴다. 카탈로그의 모든 소스(비활성 포함)이고, `activeRun`은 ACTIVE run이 없으면 null이다.
+- `recentRuns`는 소스별 최근 수집 run 5개(`created_at` 내림차순)다. `failureStage`는 `FAILED`일 때만 있고, `startedAt`은 수집을 시작하지 않은 run이면 null이다.
+- `usageSummary`의 날짜는 KST(정책서 §8.1 일일 한도와 같은 기준)다.
+  - `totalMessages`: 그날 질문 수 = 회원 USER 메시지 수 + 게스트 이용 기록(`guest_usage_logs`) 수
+  - `promptTokens`·`completionTokens`: 그날 생성된 회원 ASSISTANT 메시지와 게스트 이용 기록의 토큰 합(없으면 0)
+  - `today.guestSessions`: 오늘 이용 기록이 있는 게스트 세션 수(서로 다른 `sid_hash`)
+  - `last7Days`: 오늘을 포함한 최근 7일, 오래된 날부터. 기록이 없는 날도 0으로 넣는다. `guestSessions`는 없다(세션 행은 만료 후 삭제돼 과거 날짜를 셀 수 없음)
+- 금액·토큰 단위: `embeddingCostUsd`는 달러(소수), 시각은 UTC ISO-8601이다.
+
 **에러**
 
 | 코드 | HTTP | 조건 |
 | --- | --- | --- |
 | `AUTH_TOKEN_MISSING` | 401 | JWT 없음 |
 | `FORBIDDEN` | 403 | ROLE\_USER 접근 |
+| `AI_UNAVAILABLE` | 503 | ai-server 인덱스 현황(§6.6) 호출 실패 |
 
 ---
 
@@ -1324,6 +1336,56 @@ data: {"event":"done", "status":"NO_CONTEXT", "statusReason":"LOW_SIMILARITY", "
 
 ---
 
+### 6.6 인덱스 현황 (ai-server 내부)
+
+- **Method / URI**: `GET /internal/v1/index/status`
+- **서비스**: ai-server (FastAPI)
+- **인증**: `X-Internal-Token`
+- **설명**: backend의 `GET /api/v1/admin/index/status`(§5.1)가 호출. 소스별 ACTIVE run 상세와 최근 수집 이력을 반환. ai-server는 캐시하지 않는다(관리자 화면 전용).
+
+**응답 200**
+
+```json
+{
+  "sources": [
+    {
+      "sourceKey":   "langchain_v03",
+      "displayName": "LangChain v0.3",
+      "enabled":     true,
+      "activeRun": {
+        "ingestRunId":      7,
+        "status":           "ACTIVE",
+        "commitSha":        "<COMMIT_SHA>",
+        "chunkStrategy":    "C",
+        "chunkCount":       3842,
+        "prevChunkCount":   3790,
+        "embeddingModel":   "text-embedding-3-small",
+        "embeddingTokens":  2150000,
+        "embeddingCostUsd": 0.042,
+        "ingestDurationMs": 48500,
+        "startedAt":        "2026-10-05T02:00:00Z",
+        "completedAt":      "2026-10-05T02:00:48Z"
+      },
+      "recentRuns": [
+        { "ingestRunId": 7, "status": "ACTIVE",     "startedAt": "2026-10-05T02:00:00Z" },
+        { "ingestRunId": 3, "status": "FAILED",     "startedAt": "2026-09-21T02:00:00Z", "failureStage": "VALIDATING" }
+      ]
+    }
+  ]
+}
+```
+
+- 대상은 `ai.sources` 전체(카탈로그 순서)다. 비활성 소스도 넣는다.
+- `activeRun`은 포인터가 가리키는 run이 `ACTIVE`일 때만 값이 있고, 아니면 null이다. 그 run의 값이 없는 필드는 null이다.
+- `recentRuns`는 `ai.ingest_runs`를 `created_at` 내림차순으로 5개까지다. `failureStage`는 `FAILED`일 때만 넣는다.
+- `embeddingCostUsd`는 소수(달러), 시각은 UTC ISO-8601(`Z`)이다.
+
+| 코드 | HTTP | 조건 |
+| --- | --- | --- |
+| `INTERNAL_UNAUTHORIZED` | 401 | `X-Internal-Token` 누락·불일치 |
+
+---
+
 ## 부록 A. 서비스 간 내부 API 지도
 
 | 제공 서비스 | 이용 서비스 | Method / URI | 용도 | 실패 시 처리 |
@@ -1333,6 +1395,7 @@ data: {"event":"done", "status":"NO_CONTEXT", "statusReason":"LOW_SIMILARITY", "
 | ai-server | backend | `GET /internal/v1/sources` | 소스 메타 캐시 갱신 (60초) | 캐시 만료 전 응답 실패 시 캐시 유지 |
 | ai-server | backend | `POST /internal/v1/pipeline/ingest` | 수집·임베딩·검증 파이프라인 비동기 실행 | 호출 실패 시 ingest_run FAILED 처리 |
 | ai-server | backend | `POST /internal/v1/index/reload` | ACTIVE 전환 후 ai-server 캐시 즉시 무효화 | 실패 시 경고 로그. 60초 후 캐시 자연 만료로 보완 |
+| ai-server | backend | `GET /internal/v1/index/status` | 관리자 인덱스 현황(§5.1) | 실패 시 503 `AI_UNAVAILABLE` |
 
 ---
 

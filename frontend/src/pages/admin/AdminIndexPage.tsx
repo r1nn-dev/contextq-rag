@@ -90,7 +90,7 @@ function SourceCard({ source }: { source: AdminSourceStatus }): JSX.Element {
             {runBadge(r.status)}
             {r.failureStage !== undefined && <span className="faint">실패 단계: {r.failureStage}</span>}
             <span className="spacer" />
-            <span className="faint">{formatDateTime(r.startedAt)}</span>
+            <span className="faint">{r.startedAt !== null ? formatDateTime(r.startedAt) : '—'}</span>
           </div>
         ))}
       </div>
