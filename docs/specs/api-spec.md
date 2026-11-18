@@ -114,6 +114,7 @@ record CursorResponse<T>(
 | `FORBIDDEN_IN_PROFILE` | 403 | Auth | prod 환경 재수집 트리거 호출 |
 | `GUEST_MODE_NOT_ALLOWED` | 403 | Guest | 게스트 COMPARE 모드 시도 |
 | `CONVERSATION_NOT_FOUND` | 404 | Conv | 없는 대화 또는 타인 대화 (INV-14, 소유자 여부 미노출) |
+| `USER_NOT_FOUND` | 404 | Admin | 관리자 계정 잠금 해제 대상 사용자 없음 (§5.4) |
 | `SOURCE_NOT_FOUND` | 404 | Index | `source_key` 미존재 |
 | `AUTH_REFRESH_CONFLICT` | 409 | Auth | USED 토큰 5초 유예 내 재제출 → 1회 재시도 |
 | `CONVERSATION_BUSY` | 409 | Conv | 진행 중 ASSISTANT 메시지 존재 (INV-11) |
@@ -1048,6 +1049,166 @@ data: {"event":"done", "status":"COMPLETED", ...}
 | `FORBIDDEN` | 403 | ROLE\_USER 접근 |
 | `FORBIDDEN_IN_PROFILE` | 403 | prod 환경 호출 |
 | `SOURCE_NOT_FOUND` | 404 | sourceKey 미존재 |
+
+---
+
+### 5.3 사용자 목록
+
+- **Method / URI**: `GET /api/v1/admin/users`
+- **인증**: JWT + ADMIN
+- **Idempotency**: 멱등
+- **설명**: 가입 사용자 목록과 이용량. 게스트는 계정이 아니므로 넣지 않는다(게스트 이용은 §5.1 사용량과 §5.5 요청 로그). 비밀번호 해시·토큰 정보는 내보내지 않는다.
+
+**쿼리 파라미터**
+
+| 파라미터 | 타입 | 기본값 | 설명 |
+| --- | --- | --- | --- |
+| `query` | string | — | 이메일 부분 일치(대소문자 무시, 앞뒤 공백 제거, 최대 254자) |
+| `before` | string | — | ISO 8601 커서. 이 시각보다 이전에 가입한 사용자만 반환 |
+| `size` | int | 20 | 1~50 |
+
+**응답 200**
+
+```json
+{
+  "success": true,
+  "message": null,
+  "data": {
+    "items": [
+      {
+        "userId":         12,
+        "email":          "user1@example.com",
+        "role":           "ROLE_USER",
+        "status":         "LOCKED",
+        "lockedUntil":    "2026-11-18T03:15:00Z",
+        "createdAt":      "2026-10-15T09:00:00Z",
+        "totalQuestions": 142,
+        "todayQuotaUsed": 7,
+        "dailyQuota":     100
+      }
+    ],
+    "cursor":  "2026-10-15T09:00:00Z",
+    "hasNext": false,
+    "summary": { "totalUsers": 6, "admins": 1, "members": 5, "locked": 1 }
+  }
+}
+```
+
+| 필드 | 설명 |
+| --- | --- |
+| `status` | `LOCKED`는 잠금 후 15분이 지나지 않은 계정이다(정책서 §1.2, 조회 시 판정). 그 밖은 `ACTIVE` |
+| `lockedUntil` | 잠금이 풀리는 시각. `ACTIVE`이면 null |
+| `totalQuestions` | 지금까지의 질문 수(USER 메시지 수) |
+| `todayQuotaUsed` · `dailyQuota` | 오늘(KST) 사용한 일일 한도(`quota_cost` 합, 비교 = 2)와 일일 한도(관리자 포함 같은 값, 정책서 §8.1) |
+| `cursor` | 이번 페이지 마지막 항목의 `createdAt`. 마지막 페이지이면 null |
+| `summary` | 검색과 무관한 전체 계정 수: 전체·관리자(`ROLE_ADMIN`)·일반(`ROLE_USER`)·잠김(`status = LOCKED`) |
+
+- 정렬은 `createdAt` 내림차순, 같은 시각이면 `userId` 내림차순이다.
+
+**에러**
+
+| 코드 | HTTP | 조건 |
+| --- | --- | --- |
+| `INVALID_REQUEST` | 400 | `size`가 1~50 밖, `before`가 ISO 8601이 아님, `query`가 254자 초과 |
+| `AUTH_TOKEN_MISSING` | 401 | JWT 없음 |
+| `FORBIDDEN` | 403 | ROLE\_USER 접근 |
+
+---
+
+### 5.4 계정 잠금 해제
+
+- **Method / URI**: `POST /api/v1/admin/users/{userId}/unlock`
+- **인증**: JWT + ADMIN
+- **Idempotency**: 멱등 (잠기지 않은 계정도 같은 결과)
+- **설명**: 로그인 실패 잠금을 즉시 푼다. 실패 횟수·실패 구간 시작 시각·잠금 시각을 지우고 `ACTIVE`로 바꾼다(정책서 §10.3). 다른 계정 정보는 바꾸지 않는다.
+
+**응답 200**: §5.3 `items[]`와 같은 형식의 사용자 1명
+
+**에러**
+
+| 코드 | HTTP | 조건 |
+| --- | --- | --- |
+| `INVALID_REQUEST` | 400 | `userId`가 정수가 아님 |
+| `AUTH_TOKEN_MISSING` | 401 | JWT 없음 |
+| `FORBIDDEN` | 403 | ROLE\_USER 접근 |
+| `USER_NOT_FOUND` | 404 | 없는 사용자 |
+
+---
+
+### 5.5 요청 로그
+
+- **Method / URI**: `GET /api/v1/admin/logs`
+- **인증**: JWT + ADMIN
+- **Idempotency**: 멱등
+- **설명**: 최근 요청의 결과를 시각 내림차순으로 보여 준다. 별도 로그 저장소 없이 DB 기록을 쓴다: 회원 답변(종결된 ASSISTANT 메시지) + 게스트 이용 기록(`guest_usage_logs`). 질문 원문·이메일은 넣지 않는다(정책서 §9.4).
+
+**쿼리 파라미터**
+
+| 파라미터 | 타입 | 기본값 | 설명 |
+| --- | --- | --- | --- |
+| `level` | string | — | `INFO` \| `WARN` \| `ERROR`. 없으면 전체 |
+| `before` | string | — | ISO 8601 커서. 이 시각보다 이전 항목만 반환 |
+| `size` | int | 20 | 1~50 |
+
+**응답 200**
+
+```json
+{
+  "success": true,
+  "message": null,
+  "data": {
+    "items": [
+      {
+        "at":           "2026-11-18T09:02:15Z",
+        "level":        "ERROR",
+        "actor":        "USER",
+        "userId":       12,
+        "requestId":    "c04e5f72-...",
+        "mode":         "SINGLE",
+        "status":       "FAILED",
+        "statusReason": "LLM_ERROR",
+        "totalMs":      4120,
+        "promptTokens":     null,
+        "completionTokens": null
+      },
+      {
+        "at":           "2026-11-18T09:01:40Z",
+        "level":        "INFO",
+        "actor":        "GUEST",
+        "userId":       null,
+        "requestId":    null,
+        "mode":         "SINGLE",
+        "status":       "COMPLETED",
+        "statusReason": null,
+        "totalMs":      null,
+        "promptTokens":     1240,
+        "completionTokens": 312
+      }
+    ],
+    "cursor":  "2026-11-18T09:01:40Z",
+    "hasNext": true
+  }
+}
+```
+
+| 필드 | 설명 |
+| --- | --- |
+| `at` | 회원: 답변이 종결된 시각(`messages.updated_at`). 게스트: 기록 시각 |
+| `level` | `FAILED` → `ERROR`, `PARTIAL`·`NO_CONTEXT` → `WARN`, `COMPLETED` → `INFO` |
+| `actor` · `userId` | `USER`(회원 ID) 또는 `GUEST`(null) |
+| `requestId` · `statusReason` · `totalMs` | 회원 답변의 값. 게스트 기록에는 없어 null |
+| `mode` | 회원: 대화 모드(`SINGLE`·`COMPARE`). 게스트: `SINGLE` |
+| `cursor` | 이번 페이지 마지막 항목의 `at`. 마지막 페이지이면 null |
+
+**에러**
+
+| 코드 | HTTP | 조건 |
+| --- | --- | --- |
+| `INVALID_REQUEST` | 400 | `level`이 세 값이 아님, `size`가 1~50 밖, `before`가 ISO 8601이 아님 |
+| `AUTH_TOKEN_MISSING` | 401 | JWT 없음 |
+| `FORBIDDEN` | 403 | ROLE\_USER 접근 |
+
+---
 
 ## 6. 내부 API (ai-server · FastAPI)
 

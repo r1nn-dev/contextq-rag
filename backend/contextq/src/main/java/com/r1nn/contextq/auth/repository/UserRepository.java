@@ -21,4 +21,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select u from User u where u.email = :email")
   Optional<User> findByEmailForUpdate(@Param("email") String email);
+
+  /** Admin unlock takes the same row lock as a login failure. */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("select u from User u where u.id = :id")
+  Optional<User> findByIdForUpdate(@Param("id") Long id);
 }
