@@ -85,7 +85,7 @@ htpasswd -bnBC 10 "" '<password>' | tr -d ':\n' | sed 's/^\$2y/\$2a/'
 
 | 변수명 | 설명 | 예시 / 기본값 | 필수 |
 |---|---|---|---|
-| `CHROMA_DATA_DIR` | Chroma 데이터 저장 경로. 로컬 실행은 ai-server 기준 상대 경로, Docker Compose 컨테이너는 `/app/chroma_db`로 고정(볼륨 `chroma_data`) | `./data/chroma` | ✅ |
+| `CHROMA_DATA_DIR` | Chroma 데이터 저장 경로. 로컬 실행은 ai-server 기준 상대 경로, Docker Compose 컨테이너는 `/app/chroma_db`로 고정. 기본 파일은 볼륨 `chroma_data`, local 오버레이는 호스트 `ai-server/data/chroma`를 연결(`docs/ops/local-setup.md` Step 4) | `./data/chroma` | ✅ |
 
 > **Chroma는 ai-server에 임베디드**된다 (ADR-002). 별도 컨테이너나 `CHROMA_PORT` 환경 변수는 사용하지 않는다.  
 > Colab 환경에서는 절대 경로로 설정한다: `/content/contextq-rag/data/chroma`

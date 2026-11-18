@@ -6,14 +6,17 @@
 
 # --- Docker Compose -------------------------------------------------------
 
-up: ## Start full stack (ai-server + backend + frontend + postgres + chroma)
-	docker compose -f infra/docker-compose.yml up -d
+# local override: exposes ports, mounts configs and the host index (ai-server/data/chroma)
+COMPOSE_LOCAL = docker compose -f infra/docker-compose.yml -f infra/docker-compose.local.yml
+
+up: ## Start full stack with the local override (ai-server + backend + frontend + postgres)
+	$(COMPOSE_LOCAL) up -d
 
 down: ## Stop full stack
-	docker compose -f infra/docker-compose.yml down
+	$(COMPOSE_LOCAL) down
 
 logs: ## Tail container logs
-	docker compose -f infra/docker-compose.yml logs -f
+	$(COMPOSE_LOCAL) logs -f
 
 # --- Index build (offline, local·staging only — ADR-005) ------------------
 # Requires INGEST_ENABLED=true and APP_PROFILE != prod; DB migrated (alembic upgrade head).
