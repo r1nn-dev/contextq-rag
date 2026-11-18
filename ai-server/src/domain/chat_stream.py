@@ -44,17 +44,24 @@ class ChatStreamRequest(BaseModel):
     request_id: str | None = Field(default=None, min_length=1, max_length=100)
     mode: Literal["SINGLE", "COMPARE"] = "SINGLE"
     source_key: str | None = Field(default=None, min_length=1, max_length=50)
-    source_key_a: str | None = None
-    source_key_b: str | None = None
+    source_key_a: str | None = Field(default=None, min_length=1, max_length=50)
+    source_key_b: str | None = Field(default=None, min_length=1, max_length=50)
     question: Question
     history: list[HistoryMessage] = Field(default_factory=list, max_length=6)
     prompt_version: str | None = Field(default=None, min_length=1, max_length=50)
 
     @model_validator(mode="after")
-    def _single_mode_only(self) -> "ChatStreamRequest":
+    def _mode_fields(self) -> "ChatStreamRequest":
+        """SINGLE은 `sourceKey`, COMPARE는 서로 다른 `sourceKeyA`·`sourceKeyB` (api-spec §6.1).
+
+        허용된 비교 쌍인지는 DB가 필요해 라우터가 확인한다.
+        """
         if self.mode == "COMPARE":
-            raise ValueError("비교 모드(COMPARE)는 아직 지원하지 않습니다")
-        if not self.source_key:
+            if not (self.source_key_a and self.source_key_b):
+                raise ValueError("COMPARE 모드에는 sourceKeyA와 sourceKeyB가 필요합니다")
+            if self.source_key_a == self.source_key_b:
+                raise ValueError("비교할 두 소스가 같습니다")
+        elif not self.source_key:
             raise ValueError("SINGLE 모드에는 sourceKey가 필요합니다")
         return self
 
