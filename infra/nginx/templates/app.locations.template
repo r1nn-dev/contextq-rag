@@ -1,0 +1,59 @@
+# server 블록 공용 location — HTTP(로컬)와 HTTPS(배포) server가 같이 include한다.
+# 기동 시 envsubst로 /etc/nginx/conf.d/app.locations가 된다(.conf가 아니라 http 수준에서는 읽히지 않음).
+
+root  /usr/share/nginx/html;
+index index.html;
+
+include /etc/nginx/snippets/security-headers.conf;
+
+# 컨테이너 헬스체크 전용
+location = /healthz {
+    access_log off;
+    default_type text/plain;
+    return 200 "ok\n";
+}
+
+# 내부 API·actuator는 외부에 열지 않는다 (정책서 §9.4, ADR-012). 헬스체크는 Compose 내부망에서 한다
+location ^~ /internal/ { return 404; }
+location ^~ /actuator/ { return 404; }
+
+location ^~ /api/v1/auth/ {
+    limit_req zone=auth burst=${NGINX_BURST_AUTH} nodelay;
+    include /etc/nginx/snippets/proxy-backend.conf;
+}
+
+location ^~ /api/v1/chat/ {
+    limit_req zone=chat burst=${NGINX_BURST_CHAT} nodelay;
+    include /etc/nginx/snippets/proxy-backend.conf;
+}
+
+location ^~ /api/ {
+    limit_req zone=api burst=${NGINX_BURST_API} nodelay;
+    include /etc/nginx/snippets/proxy-backend.conf;
+}
+
+# Swagger UI는 운영에서도 노출한다(정책서 §9.1). Swagger UI 정적 자원이 인라인 스타일·data: 이미지를 쓴다
+location ^~ /swagger-ui {
+    limit_req zone=api burst=${NGINX_BURST_API} nodelay;
+    include /etc/nginx/snippets/proxy-backend.conf;
+    include /etc/nginx/snippets/security-headers-swagger.conf;
+}
+
+location ^~ /v3/api-docs {
+    limit_req zone=api burst=${NGINX_BURST_API} nodelay;
+    include /etc/nginx/snippets/proxy-backend.conf;
+}
+
+# 해시가 붙은 빌드 자원은 오래 캐시한다
+location ^~ /assets/ {
+    include /etc/nginx/snippets/security-headers.conf;
+    add_header Cache-Control "public, max-age=31536000, immutable" always;
+    try_files $uri =404;
+}
+
+# SPA 라우팅 — 없는 경로는 index.html (클라이언트 라우터가 처리)
+location / {
+    include /etc/nginx/snippets/security-headers.conf;
+    add_header Cache-Control "no-cache" always;
+    try_files $uri $uri/ /index.html;
+}

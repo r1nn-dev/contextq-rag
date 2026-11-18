@@ -1,9 +1,15 @@
+# 로컬 개발 오버레이 — 기본 파일 위에 겹쳐 쓴다 (`make up`).
+# 개발용 포트 노출, local 프로필, 호스트에서 빌드한 인덱스·스냅샷 연결만 바꾼다.
 services:
   backend:
+    environment:
+      SPRING_PROFILES_ACTIVE: local
     ports:
       - "${BACKEND_PORT:-8080}:8080"
 
   ai-server:
+    environment:
+      APP_PROFILE: ${APP_PROFILE:-local}
     ports:
       - "${AI_SERVER_PORT:-8000}:8000"
     volumes:
@@ -11,11 +17,9 @@ services:
       # 호스트에서 빌드·활성화한 인덱스(make ingest → ai-server/data/chroma)를 컨테이너가 그대로 읽는다.
       # 기본 파일의 chroma_data 볼륨을 같은 경로로 대체한다(배포는 볼륨 + 스냅샷 복원).
       - ../ai-server/data/chroma:/app/chroma_db
+      # make snapshot-index 산출물 위치 (기본 파일의 ./snapshots 대신)
+      - ../ai-server/data/snapshots:/app/data/snapshots:ro
 
   postgres:
     ports:
-      - "${POSTGRES_HOST_PORT:-5432}:5432"  # Windows 로컬 PG 충돌 시 .env에서 5433으로 변경
-
-  frontend:
-    ports:
-      - "${FRONTEND_PORT:-5173}:80"
+      - "${POSTGRES_HOST_PORT:-5432}:5432"  # Windows 로컬 PG와 충돌하면 환경 파일에서 5433으로 바꾼다

@@ -6,11 +6,12 @@
 
 # --- Docker Compose -------------------------------------------------------
 
-# local override: exposes ports, mounts configs and the host index (ai-server/data/chroma)
-COMPOSE_LOCAL = docker compose -f infra/docker-compose.yml -f infra/docker-compose.local.yml
+# local override: exposes ports, mounts configs and the host index (ai-server/data/chroma).
+# --env-file: Compose reads its env file from the project directory (infra/) by default, not the repo root
+COMPOSE_LOCAL = docker compose --env-file .env -f infra/docker-compose.yml -f infra/docker-compose.local.yml
 
-up: ## Start full stack with the local override (ai-server + backend + frontend + postgres)
-	$(COMPOSE_LOCAL) up -d
+up: ## Build and start the full stack with the local override (nginx + backend + ai-server + postgres) → http://localhost
+	$(COMPOSE_LOCAL) up -d --build
 
 down: ## Stop full stack
 	$(COMPOSE_LOCAL) down

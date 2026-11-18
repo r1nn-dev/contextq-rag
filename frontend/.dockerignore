@@ -1,0 +1,6 @@
+# 빌드 컨텍스트에서 제외 — 이미지 안에서 npm ci·build를 다시 한다
+node_modules/
+dist/
+coverage/
+.env
+.env.*
