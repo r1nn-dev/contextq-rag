@@ -193,7 +193,7 @@ openssl rand -hex 32
 | `DB_PASSWORD` | 운영 DB 비밀번호 | `application-prod.yml` → `${DB_PASSWORD}` |
 | `EC2_HOST` | AWS EC2 퍼블릭 IP 또는 도메인 | 배포 대상 서버 |
 | `EC2_SSH_KEY` | EC2 SSH 비밀키 (PEM 파일 전체 내용) | deploy 잡에서 SSH 접속 |
-| `GHCR_TOKEN` | GitHub PAT (`packages:write` 권한) | Docker 이미지 GHCR 푸시 |
+| `GHCR_TOKEN` | GitHub PAT (classic, `read:packages` 권한) | 운영 서버가 비공개 GHCR 이미지를 pull할 때 `docker login ghcr.io`에 쓴다. Actions Secret이 아니라 서버에서만 입력한다. 이미지 푸시는 `release.yml`이 워크플로 기본 `GITHUB_TOKEN`으로 한다 |
 | `DISCORD_WEBHOOK_URL` | Discord 알림 웹훅 URL | CI 완료·실패 알림 |
 
 ---
