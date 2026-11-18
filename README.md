@@ -47,28 +47,38 @@ cp .env.example .env
 
 ### 전체 스택 기동
 
+nginx · backend · ai-server(Chroma 내장) · postgres 4개 컨테이너를 한 번에 띄웁니다.
+
 ```bash
-make up       # Docker Compose로 전체 스택 기동
-make down     # 스택 종료
+make up       # 이미지 빌드 + 기동 → http://localhost (화면과 /api를 nginx가 함께 제공)
+make down     # 스택 종료 (볼륨 보존)
 make logs     # 로그 확인
 ```
 
+처음에는 인덱스가 없어 ai-server 헬스체크가 503이고 backend·nginx가 기다리다 `make up`이 실패합니다(정상).
+아래 "인덱스 준비"를 한 번 한 뒤 `make up`을 다시 실행합니다.
+
 서비스 포트 (기본값):
 
-| 서비스 | 포트 |
+| 서비스 | 주소 |
 | --- | --- |
-| AI 서버 (FastAPI) | `http://localhost:8000` |
-| 백엔드 (Spring Boot) | `http://localhost:8080` |
-| 프론트엔드 (Vite) | `http://localhost:5173` |
+| 웹 (nginx — 화면 + `/api`) | `http://localhost` (`NGINX_HTTP_PORT`) |
+| 백엔드 직접 (로컬 오버레이) | `http://localhost:8080` |
+| AI 서버 직접 (로컬 오버레이) | `http://localhost:8000` |
+| 프론트엔드 개발 서버 (`npm run dev`) | `http://localhost:5173` |
 
-### 인덱스 빌드 (최초 1회)
+### 인덱스 준비 (최초 1회)
 
-Chroma 벡터 인덱스는 로컬에서 빌드 후 EC2에 전송합니다.
-프로덕션 서버에서는 직접 빌드하지 않습니다.
+인덱스는 로컬에서만 빌드하고 운영은 스냅샷을 복원합니다(ADR-005). 둘 중 하나를 합니다.
 
 ```bash
+# A. 스냅샷 복원 (빌드 생략, 임베딩 비용 없음)
+make restore-index SNAPSHOT=data/snapshots/snapshot-langchain_v1x-run10.tar.gz   # 소스마다
+
+# B. 직접 빌드 (OpenAI 임베딩 비용 발생)
 make ingest SOURCE=langchain_v03   # 문서 수집 → 전처리·청킹 → 임베딩 → 검증 (소스별 새 run)
 make ingest SOURCE=langchain_v1x
+make activate-index RUN=<id>       # 소스마다 READY run 활성화
 ```
 
 > 수집 대상·저장 경로는 `docs/specs/data-sources.md`, 빌드·활성화 명령은 `docs/adr/ADR-005-offline-index-build.md`를 참고합니다.

@@ -1,6 +1,7 @@
 COMPOSE_BASE = docker-compose.yml
 COMPOSE_LOCAL = docker-compose.local.yml
-COMPOSE = docker compose -f $(COMPOSE_BASE) -f $(COMPOSE_LOCAL)
+# 환경 파일은 저장소 루트 것을 쓴다 (Compose 기본값은 프로젝트 디렉터리 infra/)
+COMPOSE = docker compose --env-file ../.env -f $(COMPOSE_BASE) -f $(COMPOSE_LOCAL)
 
 .PHONY: up down logs ps build rebuild config
 

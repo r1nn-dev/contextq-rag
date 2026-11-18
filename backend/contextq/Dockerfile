@@ -21,4 +21,6 @@ COPY --from=build /app/build/libs/*.jar app.jar
 
 EXPOSE 8080
 
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# heap·metaspace limits come from JAVA_TOOL_OPTIONS in Compose (planning appendix A memory budget).
+# Exit on OOM so the container restarts instead of running in a broken state.
+ENTRYPOINT ["java", "-XX:+ExitOnOutOfMemoryError", "-jar", "app.jar"]

@@ -1,55 +1,106 @@
+# 전체 서비스 — nginx · backend · ai-server(Chroma 내장) · postgres (기획서 §4.1, 컨테이너 4개).
+# 배포 구성이 기준이다. 로컬 개발은 docker-compose.local.yml을 겹쳐 쓴다 (`make up`).
+#
+# 이미지 이름은 IMAGE_REGISTRY·IMAGE_TAG로 정한다. 로컬은 build로 만들고, 배포는 같은 파일로
+# 레지스트리 이미지를 pull해 `up --no-build`로 띄운다(정책서 §9.4 — 태그 = git SHA, latest 금지).
+# mem_limit은 기획서 부록 A 메모리 예산(t3.small 2GiB, 상주 합계 ≤ 1.75GB)의 상한이다.
+
+# 프로젝트 이름 고정 — 어느 디렉터리·환경 파일로 실행해도 같은 컨테이너·볼륨(contextq_*)을 쓴다
+name: contextq
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
-    depends_on:
-      - backend
-      - frontend
-    networks:
-      - contextq-net
-
-  frontend:
+    image: ${IMAGE_REGISTRY:-contextq}/nginx:${IMAGE_TAG:-local}
     build:
       context: ../frontend
-      dockerfile: Dockerfile
+      dockerfile: ../infra/nginx/Dockerfile
+      additional_contexts:
+        nginxconf: ./nginx
+    ports:
+      - "${NGINX_HTTP_PORT:-80}:80"
+    environment:
+      # 레이트 리밋 (정책서 §8.1). 비우면 이미지 기본값(10r/m·30r/m·120r/m)
+      NGINX_RATE_CHAT: ${NGINX_RATE_CHAT:-30r/m}
+      NGINX_BURST_CHAT: ${NGINX_BURST_CHAT:-10}
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    mem_limit: 64m
+    restart: unless-stopped
+    logging: *default-logging
     networks:
       - contextq-net
 
   backend:
+    image: ${IMAGE_REGISTRY:-contextq}/backend:${IMAGE_TAG:-local}
     build:
       context: ../backend/contextq
       dockerfile: Dockerfile
     environment:
-      SPRING_DATASOURCE_URL: ${DATABASE_URL}
-      SPRING_DATASOURCE_USERNAME: ${DATABASE_USERNAME}
-      SPRING_DATASOURCE_PASSWORD: ${DATABASE_PASSWORD}
-      SPRING_PROFILES_ACTIVE: docker
-      AI_SERVER_INTERNAL_URL: ${AI_SERVER_INTERNAL_URL}
-      JWT_SECRET: ${JWT_SECRET}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      # 데이터소스는 Compose 서비스 이름으로 접속한다 (어느 프로필이든 이 값이 우선)
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-contextq_db}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-contextq}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      # max_connections 20 안에서 ai-server(기본 풀 5)와 나눠 쓴다
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "8"
+      # 기획서 부록 A — 힙 320MB·메타스페이스 128MB, Tomcat 스레드 40
+      JAVA_TOOL_OPTIONS: "-Xmx320m -XX:MaxMetaspaceSize=128m"
+      SERVER_TOMCAT_THREADS_MAX: "40"
+      AI_SERVER_INTERNAL_URL: http://ai-server:8000
       INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+      JWT_SECRET: ${JWT_SECRET}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD_BCRYPT: ${ADMIN_PASSWORD_BCRYPT:-}
+      GUEST_SESSIONS_PER_IP_PER_HOUR: ${GUEST_SESSIONS_PER_IP_PER_HOUR:-30}
+      DAILY_QUOTA: ${DAILY_QUOTA:-100}
     depends_on:
       postgres:
         condition: service_healthy
+      ai-server:
+        condition: service_healthy
+    healthcheck:
+      # 정책서 §9.4 — DB 연결 포함. 이미지(alpine)의 busybox wget을 쓴다
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    mem_limit: 600m
+    restart: unless-stopped
+    logging: *default-logging
     networks:
-      contextq-net:
-        aliases:
-          - contextq-backend   # frontend/nginx.conf의 upstream 호스트명과 일치
+      - contextq-net
 
   ai-server:
+    image: ${IMAGE_REGISTRY:-contextq}/ai-server:${IMAGE_TAG:-local}
     build:
       context: ../ai-server
       dockerfile: Dockerfile
     environment:
+      APP_PROFILE: ${APP_PROFILE:-prod}
+      # prod에서는 수집·임베딩과 mock LLM을 켤 수 없다 (INV-17, 켜면 기동 실패)
+      INGEST_ENABLED: ${INGEST_ENABLED:-false}
+      LLM_MOCK: ${LLM_MOCK:-false}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       INTERNAL_TOKEN: ${INTERNAL_TOKEN}
-      # 컨테이너 안 경로는 고정한다. .env의 CHROMA_DATA_DIR은 로컬(호스트) 실행용 상대 경로다
+      # 컨테이너 안 경로는 고정한다. 환경 파일의 CHROMA_DATA_DIR은 로컬(호스트) 실행용 상대 경로다
       CHROMA_DATA_DIR: /app/chroma_db
+      INGEST_DATA_DIR: /app/data
+      # 활성화·롤백·복원 CLI(docker compose exec)가 reload를 호출할 주소 — 같은 컨테이너
+      AI_SERVER_INTERNAL_URL: http://localhost:8000
       # ai 스키마(활성 인덱스 포인터) 접속 — 컨테이너에서는 Compose 서비스 이름으로 접속한다
-      # (.env의 POSTGRES_HOST·POSTGRES_HOST_PORT는 호스트 실행용이므로 쓰지 않는다)
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       POSTGRES_DB: ${POSTGRES_DB:-contextq_db}
@@ -57,21 +108,29 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - chroma_data:/app/chroma_db
+      # 인덱스 스냅샷 복원 입력 (make restore-index, 정책서 §4.5) — 읽기 전용
+      - ${SNAPSHOT_HOST_DIR:-./snapshots}:/app/data/snapshots:ro
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
       # 소스별 ACTIVE 인덱스까지 확인한다 (api-spec §6.2, 정책서 §9.4). 이미지에 curl이 없어 python으로 호출
+      # 인덱스를 복원하기 전에는 503이라 backend·nginx가 기다린다 — 배포 절차는 deployment.md
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/internal/v1/health', timeout=4).status == 200 else 1)"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 20s
+      start_period: 30s
+    mem_limit: 768m
+    restart: unless-stopped
+    logging: *default-logging
     networks:
       - contextq-net
 
   postgres:
     image: postgres:16-alpine
+    # 기획서 부록 A — shared_buffers 64MB, 최대 연결 20
+    command: ["postgres", "-c", "shared_buffers=64MB", "-c", "max_connections=20"]
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-contextq_db}
       POSTGRES_USER: ${POSTGRES_USER:-contextq}
@@ -84,6 +143,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    mem_limit: 256m
+    restart: unless-stopped
+    logging: *default-logging
     networks:
       - contextq-net
 

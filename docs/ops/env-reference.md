@@ -162,6 +162,21 @@ openssl rand -hex 32
 > 스냅샷은 `make snapshot-index RUN=<id>`가 `${INGEST_DATA_DIR}/snapshots/`에 `.tar.gz`와 `.sha256`으로 만든다. 스크립트는 업로드 전·다운로드 후 `.sha256`으로 전송 손상을 확인하고, 같은 이름은 덮어쓰지 않는다 (`docs/planning/policy.md` > §4.5).  
 > AWS 자격 증명은 환경 변수로 넣지 않고 aws CLI 기본 체인(EC2 인스턴스 역할 또는 별도 터미널의 프로필)을 쓴다.
 
+### 1.12 Compose·nginx
+
+| 변수명 | 설명 | 예시 / 기본값 | 필수 |
+|---|---|---|---|
+| `IMAGE_REGISTRY` | 이미지 이름 앞부분. 로컬 빌드는 기본값, 배포는 레지스트리 경로 | `contextq` | 선택 |
+| `IMAGE_TAG` | 이미지 태그. 배포는 git SHA만 쓴다(`latest` 금지, `docs/planning/policy.md` > §9.4) | `local` | 선택 |
+| `NGINX_HTTP_PORT` | 호스트에 여는 nginx HTTP 포트 | `80` | 선택 |
+| `NGINX_RATE_CHAT` | `/api/v1/chat/**` IP당 요청 한도 (`docs/planning/policy.md` > §8.1) | `30r/m` (전시회 `60r/m`) | 선택 |
+| `NGINX_BURST_CHAT` | 위 한도의 burst | `10` (전시회 `20`) | 선택 |
+| `SNAPSHOT_HOST_DIR` | ai-server에 읽기 전용으로 연결하는 스냅샷 디렉터리(호스트 경로, `infra/` 기준). 로컬 오버레이는 `ai-server/data/snapshots` | `./snapshots` | 선택 |
+
+> Compose 기본 파일은 배포 구성이라 ai-server `APP_PROFILE` 기본값이 `prod`, backend `SPRING_PROFILES_ACTIVE` 기본값이 `prod`다. 로컬 오버레이가 각각 `local`로 바꾼다.
+> 인증(`10r/m`, burst 5)과 그 외 `/api/**`(`120r/m`, burst 30) 한도는 nginx 이미지 기본값이며 Compose에서 넘기지 않는다.
+> 컨테이너 안 DB 접속(`postgres:5432`), backend 커넥션 풀(8), JVM 힙(`-Xmx320m`), Tomcat 스레드(40)는 `infra/docker-compose.yml`에 고정한다(기획서 부록 A).
+
 ---
 
 ## 2. GitHub Actions Secrets
