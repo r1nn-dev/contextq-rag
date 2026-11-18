@@ -21,3 +21,11 @@ rewrite:
   max_tokens: 200                   # 출력 200자 이하 질의 한 줄 (정책서 §5.2)
   timeout_seconds: 3                # 정책서 §2.1 질의 재작성 호출 — 넘으면 원래 질문으로 폴백
   max_retries: 0                    # 폴백이 있으므로 재시도하지 않는다 (3초 예산)
+
+compare:
+  model: "gpt-4o-mini"              # 비교 모드 생성 모델 — LLM_MODEL 환경 변수가 우선 (정책서 §5.6)
+  temperature: 0                    # 정책서 §5.6
+  max_tokens: 1500                  # 정책서 §5.6 출력 상한
+  timeout_seconds: 25               # 호출 1회 제한 — 전체 30초 상한(rag.yaml stream) 안에서 끝나도록
+  max_retries: 0                    # 호출 오류는 재시도하지 않는다 (LLM_ERROR)
+  parse_retries: 1                  # 파싱 실패만 1회 재시도 → 그래도 실패면 COMPARE_PARSE_ERROR

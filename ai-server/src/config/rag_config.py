@@ -1,6 +1,7 @@
 """서비스 검색·생성 설정 로더 — `configs/rag.yaml`(ADR-008, 정책서 §5.3)·`models.yaml`.
 
-`models.yaml`의 `llm`은 단일 모드 생성, `rewrite`는 멀티턴 질의 재작성(정책서 §5.2) 파라미터다.
+`models.yaml`의 `llm`은 단일 모드 생성, `rewrite`는 멀티턴 질의 재작성(정책서 §5.2),
+`compare`는 비교 모드 구조화 출력(정책서 §5.6) 파라미터다.
 
 τ는 source_key별 값이고 `Settings`의 `TAU_{SOURCE_KEY}` 덮어쓰기가 우선한다.
 """
@@ -37,14 +38,16 @@ class RetrievalConfig(BaseModel):
 
 class GenerationConfig(BaseModel):
     prompt_version: str = Field(min_length=1)  # 요청에 promptVersion이 없을 때
+    compare_prompt_version: str = Field(default="compare_v1", min_length=1)  # 비교 모드 기본값
 
 
 class StreamConfig(BaseModel):
-    """정책서 §2.1 SSE 하트비트·단일 스트림 최대 시간, §8.1 동시 생성 상한."""
+    """정책서 §2.1 SSE 하트비트·단일 스트림 최대 시간·비교 모드 전체 시간, §8.1 동시 생성 상한."""
 
     heartbeat_seconds: float = Field(gt=0)
     max_duration_seconds: float = Field(gt=0)
     max_concurrency: int = Field(ge=1)
+    compare_max_duration_seconds: float = Field(default=30, gt=0)
 
 
 class RewriteConfig(BaseModel):
@@ -92,6 +95,24 @@ class RewriteModelConfig(BaseModel):
     max_retries: int = Field(ge=0)
 
 
+class CompareModelConfig(BaseModel):
+    """`configs/models.yaml` `compare` — 비교 모드 구조화 출력 호출 (정책서 §5.6).
+
+    `max_retries`는 호출 오류 재시도(SDK), `parse_retries`는 파싱 실패 재시도다.
+    """
+
+    model: str = Field(min_length=1)
+    temperature: float = Field(ge=0, le=2)
+    max_tokens: int = Field(gt=0)
+    timeout_seconds: float = Field(gt=0)
+    max_retries: int = Field(ge=0)
+    parse_retries: int = Field(ge=0, le=1)  # 정책서 §5.6 "1회 재시도"
+
+    def resolve_model(self, override: str = "") -> str:
+        """`LLM_MODEL`이 있으면 그 값, 없으면 yaml 기본 모델."""
+        return override.strip() or self.model
+
+
 def _load(config_dir: Path, name: str = "rag.yaml") -> dict[str, Any]:
     data = yaml.safe_load((config_dir / name).read_text(encoding="utf-8"))
     if not isinstance(data, dict):
@@ -116,3 +137,8 @@ def load_llm_config(config_dir: Path = CONFIG_DIR) -> LlmConfig:
 @lru_cache
 def load_rewrite_model_config(config_dir: Path = CONFIG_DIR) -> RewriteModelConfig:
     return RewriteModelConfig.model_validate(_load(config_dir, "models.yaml")["rewrite"])
+
+
+@lru_cache
+def load_compare_model_config(config_dir: Path = CONFIG_DIR) -> CompareModelConfig:
+    return CompareModelConfig.model_validate(_load(config_dir, "models.yaml")["compare"])
