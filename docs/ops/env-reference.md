@@ -65,11 +65,26 @@ openssl rand -hex 32
 | `ADMIN_PASSWORD_BCRYPT` | 관리자 비밀번호의 BCrypt 해시(`$2a$10$…`). 평문을 넣으면 시드를 거부하고 오류 로그만 남긴다 | `<placeholder>` | 선택 |
 
 ```bash
-# BCrypt 해시 생성 (cost 10) — 비밀번호는 별도 터미널에서 입력
-htpasswd -bnBC 10 "" '<password>' | tr -d ':\n' | sed 's/^\$2y/\$2a/'
+# BCrypt 해시 생성 (cost 10) — 별도 터미널에서 실행, 비밀번호는 화면에 보이지 않게 입력한다
+read -rsp 'password: ' PW; echo
+printf '%s' "$PW" | uv run --no-project --with bcrypt python -c "import sys,bcrypt; print(bcrypt.hashpw(sys.stdin.read().encode(), bcrypt.gensalt(10)).decode())"
+unset PW
+# htpasswd가 있으면: htpasswd -bnBC 10 "" '<password>' | tr -d ':\n' | sed 's/^\$2y/\$2a/'
 ```
 
-> 이미 같은 이메일 계정이 있으면 건너뛴다(정책서 §1.1). 가입 API로는 관리자를 만들 수 없다.
+환경 파일에는 해시를 **작은따옴표로 감싸서** 넣는다.
+
+```bash
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD_BCRYPT='$2b$10$<53자>'
+```
+
+- 따옴표가 없으면 Compose가 해시 안의 `$…`를 변수로 치환해 값이 잘리고(`$2b$10`만 남음), backend는 BCrypt 형식이 아니라며 시드를 거부한다. 큰따옴표도 치환되므로 작은따옴표만 쓴다.
+- `$2a`·`$2b`·`$2y` 접두사를 모두 받는다.
+- 비밀번호는 시연·운영 때 직접 입력해야 하므로 무작위로 만들었다면 비밀번호 관리자에 보관한다. 해시만 환경 파일에 둔다.
+- 반영: `make up`(backend 재생성) 후 backend 로그에서 시드 결과를 확인한다 — `admin_seed_created`면 성공, `admin_seed_skipped reason=invalid_bcrypt_hash`면 해시가 잘렸거나 형식이 틀렸다(`docker compose -p contextq logs backend | grep admin_seed`).
+
+> 이미 같은 이메일 계정이 있으면 건너뛴다(정책서 §1.1). 가입 API로는 관리자를 만들 수 없다. 해시를 바꿔도 기존 계정의 비밀번호는 바뀌지 않는다.
 
 ### 1.3.2 이용 한도
 
