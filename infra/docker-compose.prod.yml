@@ -1,0 +1,18 @@
+# 운영(EC2) 오버레이 — 기본 파일 위에 겹쳐 쓴다. 직접 부르지 말고 infra/scripts/compose-prod.sh를 쓴다.
+# 이미지는 레지스트리에서 pull해 `up --no-build`로 띄운다(IMAGE_REGISTRY·IMAGE_TAG = deploy.sh가 기록한 값).
+services:
+  nginx:
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      NGINX_SERVER_NAME: ${DOMAIN:?DOMAIN이 필요합니다}
+    volumes:
+      # HTTPS server 설정으로 바꾼다 (HTTP → HTTPS 301, 정책서 §11)
+      - ./nginx/prod/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+
+  ai-server:
+    volumes:
+      # S3에서 받은 인덱스 스냅샷 (infra/scripts/restore-index.sh)
+      - ${SNAPSHOT_HOST_DIR:-/opt/contextq/snapshots}:/app/data/snapshots:ro
