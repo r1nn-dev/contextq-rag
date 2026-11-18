@@ -15,6 +15,7 @@ from src.ingest.snapshot import (
     MANIFEST,
     RECORDS,
     SnapshotError,
+    digest_contents,
     digest_records,
     export_snapshot,
     record_line,
@@ -27,22 +28,32 @@ KEY = "langchain_v1x"
 MODEL = "text-embedding-3-small"
 DIM = 4
 SHA = "9d9747d0cf241e086c616a16d5ce230ad8f8f31d"
+BODY = "정의와 사용법을 설명하는 문단입니다. " * 3  # 50자 미만 청크는 잔존물 검사 실패
 
 
-def make_records(count: int = 3) -> list[dict[str, Any]]:
-    return [
-        {
-            "id": f"chunk{i:02d}",
-            "document": f"본문 {i} — agents tools",
-            "metadata": {
-                "file_path": f"src/oss/doc{i}.mdx",
-                "line_start": i,
-                "has_code": i % 2 == 0,
-            },
-            "embedding": [0.25 * (i + 1), 0.5, -0.125, 1.0 / (i + 3)],
-        }
-        for i in range(count)
-    ]
+def make_records(count: int = 3, run_id: int = 1) -> list[dict[str, Any]]:
+    """정책서 §4.2 필수 메타데이터를 모두 갖춘 레코드 — 복원 게이트(check_records)를 통과한다."""
+    records = []
+    for i in range(count):
+        path = f"src/oss/doc{i}.mdx"
+        records.append(
+            {
+                "id": f"chunk{i:02d}",
+                "document": f"본문 {i} — agents tools. " + BODY,
+                "metadata": {
+                    "chunk_id": f"chunk{i:02d}", "source_key": KEY, "framework": "langchain",
+                    "version": "v1.x", "ingest_run_id": run_id, "commit_sha": SHA,
+                    "file_path": path, "heading_path": f"Doc {i} > Tools", "line_start": i + 1,
+                    "line_end": i + 9,
+                    "permalink": f"https://github.com/langchain-ai/docs/blob/{SHA}/{path}",
+                    "site_url": f"https://docs.langchain.com/doc{i}", "doc_type": "mdx",
+                    "chunk_strategy": "C", "chunk_params_hash": "a1b2c3d4",
+                    "embedding_model": MODEL, "token_count": 20, "has_code": i % 2 == 0,
+                },
+                "embedding": [0.25 * (i + 1), 0.5, -0.125, 1.0 / (i + 3)],
+            }
+        )  # fmt: skip
+    return records
 
 
 def seed_run(
@@ -118,6 +129,8 @@ def test_export_writes_manifest_records_and_checksum_file(
     assert sorted(r["id"] for r in records) == ["chunk00", "chunk01", "chunk02"]
     assert records[0]["embedding"] == [0.25, 0.5, -0.125, 1.0 / 3]
     assert manifest["records_sha256"] == digest_records(make_records()).hexdigest()
+    assert manifest["content_sha256"] == digest_contents(make_records()).hexdigest()
+    assert manifest["content_sha256"] != manifest["records_sha256"]
 
     digest, filename = result.checksum_path.read_text(encoding="utf-8").split()
     assert filename == result.path.name
