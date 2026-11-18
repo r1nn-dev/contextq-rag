@@ -28,6 +28,18 @@
 - 프로젝트 이름은 `contextq`로 고정한다(컨테이너 `contextq-*`, 볼륨 `contextq_*`).
 - 이미지 이름은 `${IMAGE_REGISTRY:-contextq}/<서비스>:${IMAGE_TAG:-local}`이다. 배포 태그는 git SHA만 쓰고 `latest`는 쓰지 않는다(정책서 §9.4).
 
+### 2.1 이미지 빌드·푸시 (`.github/workflows/release.yml`)
+
+| 항목 | 내용 |
+|---|---|
+| 트리거 | `main` push, 수동 실행(선택한 브랜치 HEAD — 배포 리허설) |
+| 이미지 | `ghcr.io/<owner>/<repo>/{nginx,backend,ai-server}:<40자 git SHA>` — 운영 `IMAGE_REGISTRY=ghcr.io/<owner>/<repo>`, `IMAGE_TAG=<sha>` |
+| 인증 | 푸시는 워크플로 기본 `GITHUB_TOKEN`(`packages: write`). 운영 서버 pull은 `read:packages` PAT(`GHCR_TOKEN`, 서버에서만 입력) 또는 패키지 공개 설정 |
+| 캐시 | GitHub Actions 캐시(서비스별 scope) |
+| 결과 | 실행 요약에 이미지 경로와 `deploy.sh <sha>` 인자를 남긴다 |
+
+- 서버 배포는 워크플로가 하지 않는다. 운영 서버에서 `deploy.sh <git-sha>`로 pull·기동한다(§5).
+
 ## 3. nginx
 
 설정은 이미지에 넣는다(`infra/nginx/`). `templates/*.template`은 기동 시 envsubst로 `conf.d`에 풀린다.

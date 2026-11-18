@@ -138,7 +138,7 @@ make -C infra build && make -C infra up    # 코드 변경 후 재빌드·재기
 | `JWT_SECRET` | JWT 서명 키 | `openssl rand -hex 32` |
 | `EC2_HOST` | AWS EC2 퍼블릭 IP | EC2 콘솔 → 인스턴스 → Public IPv4 address |
 | `EC2_SSH_KEY` | EC2 SSH 비밀키 | EC2 콘솔 → Key Pairs → PEM 파일 전체 내용 |
-| `GHCR_TOKEN` | GitHub PAT | GitHub → Settings → Developer settings → PAT (Classic) · 권한: `write:packages` |
+| `GHCR_TOKEN` | GitHub PAT (운영 서버 pull 전용, Actions Secret 아님) | GitHub → Settings → Developer settings → PAT (Classic) · 권한: `read:packages` |
 | `DISCORD_WEBHOOK_URL` | Discord 웹훅 URL | Discord 서버 설정 → 연동 → 웹후크 → 새 웹후크 → URL 복사 |
 
 ---
