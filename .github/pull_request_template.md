@@ -108,7 +108,7 @@ Squash and merge 시 이 제목이 develop 커밋 메시지가 된다.
 
 <!--
 병합 시 이슈를 닫으려면 Closes, 연결만 하려면 Related to를 쓴다.
-Closes가 없으면 linked-issue 체크가 실패한다.
+Closes가 없으면 `lint` 체크의 연결된 이슈 검사가 실패한다.
 -->
 
 Closes #이슈번호
