@@ -2,7 +2,7 @@
 # Shortcut commands for local development.
 # Prerequisites: Docker Desktop, uv, node/npm, lefthook
 
-.PHONY: up down logs ingest activate-index rollback-index smoke-index snapshot-index restore-index eval eval-check eval-tau eval-abstain test hooks help
+.PHONY: up down logs demo-check ingest activate-index rollback-index smoke-index snapshot-index restore-index eval eval-check eval-tau eval-abstain test hooks help
 
 # --- Docker Compose -------------------------------------------------------
 
@@ -18,6 +18,9 @@ down: ## Stop full stack
 
 logs: ## Tail container logs
 	$(COMPOSE_LOCAL) logs -f
+
+demo-check: ## Pre-demo status check (containers, health, sources, 1 guest question). Usage: make demo-check [ARGS=--no-llm]
+	bash scripts/demo-check.sh $(ARGS)
 
 # --- Index build (offline, local·staging only — ADR-005) ------------------
 # Requires INGEST_ENABLED=true and APP_PROFILE != prod; DB migrated (alembic upgrade head).
