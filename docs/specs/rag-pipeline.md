@@ -317,8 +317,8 @@ async def compare_pipeline(
 
     # 1. 두 소스 동시 벡터 검색
     chunks_a, chunks_b = await asyncio.gather(
-        retriever.retrieve(query=question, source_key=source_key_a, top_k=5),
-        retriever.retrieve(query=question, source_key=source_key_b, top_k=5),
+        retriever.retrieve(query=question, source_key=source_key_a, top_k=retrieval.top_k),  # rag.yaml (8)
+        retriever.retrieve(query=question, source_key=source_key_b, top_k=retrieval.top_k),
     )
 
     # 2. meta 이벤트 먼저 전송

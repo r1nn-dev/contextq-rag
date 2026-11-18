@@ -30,7 +30,7 @@ source_key마다 문서 도메인·임베딩 분포가 달라 동일 임계값 �
 class RAGPipeline:
     def query(self, q: str, source_key: str) -> RAGResponse:
         threshold = self._get_threshold(source_key)
-        results = self.retriever.retrieve(q, source_key, top_k=5)
+        results = self.retriever.retrieve(q, source_key, top_k=self.config.retrieval.top_k)
 
         if not results or results[0].score < threshold:
             return RAGResponse(
@@ -55,7 +55,7 @@ UI 전용 메시지를 `done` 이벤트와 함께 전달한다.
 
 ```yaml
 retrieval:
-  top_k: 5
+  top_k: 8  # E2 확정 (2026-11-18, eval/results/E2/decision.md)
   thresholds:
     langchain_v03: 0.29  # E1 확정 (2026-11-18)
     langchain_v1x: 0.34  # E1 확정 (2026-11-18)
