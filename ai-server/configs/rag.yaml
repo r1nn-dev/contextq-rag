@@ -22,3 +22,10 @@ stream:
   heartbeat_seconds: 10
   max_duration_seconds: 120
   max_concurrency: 20
+
+rewrite:
+  # 멀티턴 질의 재작성 (ADR-009, 정책서 §5.2) — 이력이 비면 재작성하지 않는다(SKIPPED)
+  prompt_version: rewrite_v2      # configs/prompts/{prompt_version}.j2 — v2: 생략 대상·질문 언어 보강
+  history_turns: 3                # 최근 3턴(6메시지)만 참조
+  assistant_max_chars: 500        # 이전 답변은 앞 500자만 사용 (재작성 토큰 제어)
+  max_output_chars: 200           # 넘으면 원래 질문으로 폴백 (rewritten_query VARCHAR(200))

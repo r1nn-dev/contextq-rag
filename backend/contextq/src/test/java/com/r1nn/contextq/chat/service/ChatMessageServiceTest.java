@@ -8,6 +8,7 @@ import com.r1nn.contextq.chat.domain.AnswerOutcome;
 import com.r1nn.contextq.chat.domain.AnswerSnapshot;
 import com.r1nn.contextq.chat.domain.Message;
 import com.r1nn.contextq.chat.domain.MessageStatus;
+import com.r1nn.contextq.chat.domain.RewriteStatus;
 import com.r1nn.contextq.chat.repository.ConversationRepository;
 import com.r1nn.contextq.chat.repository.MessageRepository;
 import com.r1nn.contextq.chat.repository.MessageSourceRepository;
@@ -180,6 +181,72 @@ class ChatMessageServiceTest {
 
     assertCode(
         () -> service.accept(followUp(first.conversationId(), null)), ErrorCode.CONVERSATION_FULL);
+  }
+
+  @Test
+  void newConversationHasNoHistoryAndSkipsTheRewrite() {
+    Accepted first = service.accept(newQuestion("q"));
+
+    assertThat(first.history()).isEmpty();
+    assertThat(messages.findById(first.answerId()).orElseThrow().getRewriteStatus())
+        .isEqualTo(RewriteStatus.SKIPPED);
+  }
+
+  @Test
+  void followUpHistoryIsTheLastThreeTurnsWithoutFailedOrNoContextAnswers() {
+    Accepted t1 = service.accept(newQuestion("질문1"));
+    answer(t1, MessageStatus.COMPLETED, "답1");
+    Accepted t2 = service.accept(followUpWith(t1.conversationId(), "질문2"));
+    service.finish(t2.answerId(), MessageStatus.FAILED, AnswerOutcome.interrupted("", "X"));
+    Accepted t3 = service.accept(followUpWith(t1.conversationId(), "질문3"));
+    service.applyMeta(t3.answerId(), "langchain_v03", snapshot(null), true, List.of());
+    service.finish(t3.answerId(), MessageStatus.NO_CONTEXT, outcome("근거 부족 안내"));
+    Accepted t4 = service.accept(followUpWith(t1.conversationId(), "질문4"));
+    answer(t4, MessageStatus.PARTIAL, "가".repeat(2500));
+
+    Accepted t5 = service.accept(followUpWith(t1.conversationId(), "질문5"));
+
+    assertThat(t5.history())
+        .extracting(m -> m.get("role") + ":" + m.get("content").substring(0, 3))
+        .containsExactly("user:질문2", "user:질문3", "user:질문4", "assistant:가가가");
+    assertThat(t5.history().getLast().get("content")).hasSize(2000);
+    assertThat(messages.findById(t5.answerId()).orElseThrow().getRewriteStatus()).isNull();
+  }
+
+  @Test
+  void rewriteStatusFollowsTheMetaWhenHistoryWasSent() {
+    Accepted t1 = service.accept(newQuestion("질문1"));
+    answer(t1, MessageStatus.COMPLETED, "답1");
+    Accepted ok = service.accept(followUpWith(t1.conversationId(), "그건?"));
+    service.applyMeta(ok.answerId(), "langchain_v03", snapshot("재작성 질의"), false, List.of());
+    service.finish(ok.answerId(), MessageStatus.COMPLETED, outcome("답2"));
+    Accepted fallback = service.accept(followUpWith(t1.conversationId(), "그럼?"));
+    service.applyMeta(fallback.answerId(), "langchain_v03", snapshot(null), false, List.of());
+
+    Message okAnswer = messages.findById(ok.answerId()).orElseThrow();
+    assertThat(okAnswer.getRewriteStatus()).isEqualTo(RewriteStatus.OK);
+    assertThat(okAnswer.getRewrittenQuery()).isEqualTo("재작성 질의");
+    Message fallbackAnswer = messages.findById(fallback.answerId()).orElseThrow();
+    assertThat(fallbackAnswer.getRewriteStatus()).isEqualTo(RewriteStatus.FALLBACK);
+    assertThat(fallbackAnswer.getRewrittenQuery()).isNull();
+  }
+
+  private void answer(Accepted accepted, MessageStatus status, String content) {
+    service.applyMeta(accepted.answerId(), "langchain_v03", snapshot(null), false, List.of());
+    service.finish(accepted.answerId(), status, outcome(content));
+  }
+
+  private static AnswerSnapshot snapshot(String rewrittenQuery) {
+    return new AnswerSnapshot(7L, SHA, LocalDate.of(2026, 10, 5), null, rewrittenQuery);
+  }
+
+  private static AnswerOutcome outcome(String content) {
+    return new AnswerOutcome(
+        content, null, "stop", "gpt-4o-mini", "single_v2", 10, 5, null, null, 1, 1, 1, 3);
+  }
+
+  private AcceptCommand followUpWith(Long conversationId, String question) {
+    return new AcceptCommand(userId, conversationId, question, null, "req-" + System.nanoTime());
   }
 
   private AcceptCommand newQuestion(String question) {

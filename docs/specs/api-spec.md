@@ -570,7 +570,10 @@ Set-Cookie: `devdocs_rt=; Max-Age=0; Path=/api/v1/auth; HttpOnly; Secure; SameSi
 - 게스트만 보낸다. 로그인 사용자가 보내면 무시하고 서버 DB 이력을 쓴다(조작된 맥락 주입 차단).
 - 서버가 재검증·절단한다: 최근 6개(3턴)만 남기고 그보다 오래된 항목은 버린다. 메시지당 2,000자를 넘으면 앞 2,000자로 자른다.
 - `role`이 `user`·`assistant`가 아니거나 `content`가 문자열이 아니면 `INVALID_REQUEST`(400, `field: "history"`)다.
-- 절단 후 값을 ai-server 6.1 `history`로 그대로 넘긴다. 질의 재작성(멀티턴) 구현 전까지 ai-server는 형식만 검증하고 쓰지 않는다.
+- 절단 후 값을 ai-server 6.1 `history`로 그대로 넘긴다.
+- 게스트 화면은 최근 3턴을 오래된 것부터 보낸다. 실패한 답변과 근거 부족(`NO_CONTEXT`) 답변은 빼고 그 턴의 질문은 남긴다(정책서 §5.2 제외 메시지).
+- 로그인 사용자의 이력은 backend가 같은 대화의 최근 6개 메시지(3턴)를 DB에서 읽어 같은 규칙으로 만든다. 첫 질문(새 대화)은 빈 배열이다.
+- backend는 보낸 이력과 `meta.rewrittenQuery`로 답변의 `rewrite_status`를 저장한다: 이력이 비었으면 `SKIPPED`, 재작성 질의가 있으면 `OK`, 이력을 보냈는데 null이면 `FALLBACK`.
 
 **비교 모드 예시**
 
@@ -1059,7 +1062,7 @@ data: {"event":"done", "status":"COMPLETED", ...}
 | `mode` | `SINGLE`. `COMPARE`는 비교 모드 구현(R-8) 전까지 400 `INVALID_REQUEST` |
 | `sourceKey` | `SINGLE`이면 필수 |
 | `question` | trim 후 1~1,000자 (정책서 §5.1) |
-| `history` | 최근 3턴 (USER·ASSISTANT 쌍). 첫 질문이면 빈 배열 `[]`. 최대 6개, 메시지당 2,000자. 질의 재작성(멀티턴) 구현 전까지는 형식만 검증하고 쓰지 않는다 (`rewrittenQuery`·`rewriteMs`는 `null`) |
+| `history` | 최근 3턴, 오래된 것부터. 첫 질문이면 빈 배열 `[]`. 최대 6개, 메시지당 2,000자. 실패·근거 부족 답변은 보내는 쪽(backend)이 뺀다. 비어 있지 않으면 질의를 재작성한다(정책서 §5.2) — `assistant` 항목은 앞 500자만 쓴다. 재작성 성공이면 `meta.rewrittenQuery`에 재작성 질의, 빈 배열·폴백이면 null. `done.latency.rewriteMs`는 재작성을 시도했으면 걸린 시간, 빈 배열이면 null |
 | `promptVersion` | 선택. `ai-server/configs/prompts/` 파일명(확장자 제외). backend가 환경 변수로 주입. 없으면 `ai-server/configs/rag.yaml` `generation.prompt_version`. 없는 버전이면 400 |
 
 **응답**: `200 OK`, `text/event-stream`

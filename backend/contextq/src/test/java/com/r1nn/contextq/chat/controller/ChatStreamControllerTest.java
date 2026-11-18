@@ -18,6 +18,7 @@ import com.r1nn.contextq.TestcontainersConfiguration;
 import com.r1nn.contextq.chat.domain.Conversation;
 import com.r1nn.contextq.chat.domain.Message;
 import com.r1nn.contextq.chat.domain.MessageStatus;
+import com.r1nn.contextq.chat.domain.RewriteStatus;
 import com.r1nn.contextq.chat.repository.ConversationRepository;
 import com.r1nn.contextq.chat.repository.MessageRepository;
 import com.r1nn.contextq.chat.repository.MessageSourceRepository;
@@ -289,6 +290,41 @@ class ChatStreamControllerTest {
 
     assertThat(events(second).getFirst().get("conversationId").asLong()).isEqualTo(conversationId);
     assertThat(conversations.findById(conversationId).orElseThrow().getMessageCount()).isEqualTo(4);
+  }
+
+  @Test
+  void followUpSendsDbHistoryAndStoresTheRewrite() throws Exception {
+    upstream(StubResponse.sse(GAP, frame(META), frame(TOKEN_A), frame(DONE)));
+    String first =
+        streamBody(mockMvc, streamRequest(userId, singleBody(null, "q1", "langchain_v03")));
+    long conversationId = events(first).getFirst().get("conversationId").asLong();
+    assertThat(lastAnswer(first).getRewriteStatus()).isEqualTo(RewriteStatus.SKIPPED);
+    STUB.reset();
+    STUB.on("GET", "/internal/v1/sources", r -> StubResponse.json(200, CATALOG));
+    String rewrittenMeta =
+        META.replace("\"rewrittenQuery\":null", "\"rewrittenQuery\":\"q1 대상의 반환값\"");
+    upstream(StubResponse.sse(GAP, frame(rewrittenMeta), frame(TOKEN_A), frame(DONE)));
+
+    String body =
+        """
+        {"conversationId":%d,"question":"그 반환값은?","mode":"SINGLE",
+         "history":[{"role":"user","content":"조작된 맥락"}]}
+        """
+            .formatted(conversationId);
+    Message answer = lastAnswer(streamBody(mockMvc, streamRequest(userId, body)));
+
+    JsonNode sent =
+        jsonOf(
+            STUB.requests().stream()
+                .filter(r -> r.path().endsWith("chat/stream"))
+                .findFirst()
+                .orElseThrow()
+                .body());
+    assertThat(sent.get("history"))
+        .extracting(m -> m.get("role").asString() + ":" + m.get("content").asString())
+        .containsExactly("user:q1", "assistant:LangChain v0.3 기준 ");
+    assertThat(answer.getRewriteStatus()).isEqualTo(RewriteStatus.OK);
+    assertThat(answer.getRewrittenQuery()).isEqualTo("q1 대상의 반환값");
   }
 
   @Test

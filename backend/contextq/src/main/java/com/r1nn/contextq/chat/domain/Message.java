@@ -65,8 +65,9 @@ public class Message extends BaseTimeEntity {
   @Column(name = "rewritten_query", length = 200)
   private String rewrittenQuery;
 
+  @Enumerated(EnumType.STRING)
   @Column(name = "rewrite_status", length = 20)
-  private String rewriteStatus;
+  private RewriteStatus rewriteStatus;
 
   @Column(name = "ingest_run_id")
   private Long ingestRunId;
@@ -130,14 +131,25 @@ public class Message extends BaseTimeEntity {
     return m;
   }
 
-  /** ASSISTANT answer accepted for processing (policy §6.3 step 1). */
+  /** ASSISTANT answer accepted without history: no rewrite ({@code SKIPPED}). */
   public static Message pendingAnswer(Conversation conversation, Long userId, String requestId) {
+    return pendingAnswer(conversation, userId, requestId, false);
+  }
+
+  /**
+   * ASSISTANT answer accepted for processing (policy §6.3 step 1).
+   *
+   * @param rewriteRequested history was sent, so the rewrite outcome is known only at {@code meta}
+   */
+  public static Message pendingAnswer(
+      Conversation conversation, Long userId, String requestId, boolean rewriteRequested) {
     Message m = new Message();
     m.conversation = conversation;
     m.userId = userId;
     m.role = MessageRole.ASSISTANT;
     m.requestId = requestId;
     m.status = MessageStatus.PENDING;
+    m.rewriteStatus = rewriteRequested ? null : RewriteStatus.SKIPPED;
     return m;
   }
 
@@ -152,6 +164,10 @@ public class Message extends BaseTimeEntity {
     this.ingestedAt = snapshot.ingestedAt();
     this.top1Similarity = snapshot.top1Similarity();
     this.rewrittenQuery = snapshot.rewrittenQuery();
+    if (rewriteStatus == null) { // history was sent: a rewritten query means the rewrite worked
+      this.rewriteStatus =
+          snapshot.rewrittenQuery() != null ? RewriteStatus.OK : RewriteStatus.FALLBACK;
+    }
     if (!noContext) {
       transitionTo(MessageStatus.STREAMING);
     }
@@ -242,7 +258,7 @@ public class Message extends BaseTimeEntity {
     return rewrittenQuery;
   }
 
-  public String getRewriteStatus() {
+  public RewriteStatus getRewriteStatus() {
     return rewriteStatus;
   }
 

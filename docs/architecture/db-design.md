@@ -306,7 +306,7 @@
 | status | VARCHAR(30) | NULL | ASSISTANT만 | 상태값 참조 |
 | status_reason | VARCHAR(50) | NULL | ASSISTANT만 | PARTIAL/FAILED/NO_CONTEXT 세부 사유 |
 | finish_reason | VARCHAR(20) | NULL | ASSISTANT SINGLE만 | OpenAI finish_reason (stop / length) |
-| rewritten_query | VARCHAR(200) | NULL | ASSISTANT만 | 재작성 질의. 첫 질문·SKIPPED 시 NULL |
+| rewritten_query | VARCHAR(200) | NULL | ASSISTANT만 | 재작성 질의. SKIPPED(첫 질문)·FALLBACK 시 NULL |
 | rewrite_status | VARCHAR(20) | NULL | ASSISTANT만 | OK / FALLBACK / SKIPPED |
 | ingest_run_id | BIGINT | NULL | ASSISTANT SINGLE만 | ai.ingest_runs.id 값 스냅샷. FK 없음 (서비스 간) |
 | ingest_run_id_a | BIGINT | NULL | ASSISTANT COMPARE만 | A측 run ID 값 스냅샷 |

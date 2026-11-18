@@ -86,11 +86,12 @@ SSE Stream (token 이벤트 없음)
 
 | 항목 | 값 |
 | --- | --- |
-| **입력** | `conversation_id`, `question` (현재 턴) |
-| **출력** | `rewritten_query: str` |
-| **호출 조건** | `conversation_id`가 존재하고 최근 N턴 이력이 1개 이상 있을 때 |
-| **N턴 기본값** | 최근 3턴 (설정: `configs/pipeline.yaml → history_window`) |
-| **LLM 모델** | GPT-4o-mini (별도 호출, temperature=0) |
+| **입력** | `question` (현재 턴), `history` (backend·게스트 화면이 고른 최근 3턴, 실패·근거 부족 답변 제외) |
+| **출력** | 검색 질의, `rewritten_query: str \| None`, `rewrite_status` (`OK`·`FALLBACK`·`SKIPPED`), `rewrite_ms` |
+| **호출 조건** | `history`가 비어 있지 않을 때. 비었으면 `SKIPPED`(원본 질문 사용, LLM 미호출) |
+| **N턴 기본값** | 최근 3턴(6메시지), 이전 assistant는 앞 500자 (설정: `configs/rag.yaml → rewrite`) |
+| **프롬프트** | `configs/prompts/rewrite_v1.j2` (`rewrite.prompt_version`), 템플릿 하나를 user 메시지로 보낸다 |
+| **LLM 모델** | `configs/models.yaml → rewrite` (gpt-4o-mini, temperature 0, 비스트리밍, 재시도 없음) |
 
 **프롬프트 구조:**
 
@@ -114,7 +115,9 @@ user:
   독립형 검색 쿼리를 한 문장으로 반환하세요.
 ```
 
-**폴백:** 재작성 LLM 호출 실패 시 원본 `question`을 그대로 사용한다. 에러를 호출자에게 전파하지 않는다.
+**폴백:** 3초 초과·빈 출력·200자 초과·호출 오류면 원본 `question`을 그대로 검색에 쓰고 `FALLBACK`으로 기록한다(정책서 §5.2). 에러를 호출자에게 전파하지 않는다.
+
+**사용 범위:** 재작성 질의는 검색(임베딩)에만 쓴다. 생성 프롬프트에는 원본 질문을 넣는다(ADR-009).
 
 ---
 
@@ -366,7 +369,8 @@ yield SseEvent(event="error", data={
 
 | 파일 | 주요 설정값 |
 | --- | --- |
-| `configs/pipeline.yaml` | `history_window` (멀티턴 N턴), `rewrite_model` |
+| `configs/rag.yaml` `rewrite` | `prompt_version`, `history_turns`(3), `assistant_max_chars`(500), `max_output_chars`(200) |
+| `configs/models.yaml` `rewrite` | `model`·`temperature`(0)·`max_tokens`·`timeout_seconds`(3)·`max_retries`(0) |
 | `configs/ingest.yaml` | 청킹 전략 A·B·C 파라미터, 기본 전략 (인덱스 빌드 전용, `docs/specs/doc-source.md` §6) |
 | `configs/rag.yaml` | `retrieval.top_k`, `retrieval.thresholds.{source_key}`(τ, ADR-008), `retrieval.context_budget_tokens` |
 | `configs/models.yaml` | `llm.model`·`temperature`(0)·`max_tokens`·`first_token_timeout_seconds`·`max_retries`, `embedding.*` |
@@ -401,7 +405,7 @@ yield SseEvent(event="error", data={
 - [ ] **P-1** `history_window` 기본값 최적화 (멀티턴 E2E 테스트 후 결정)
 - [ ] **P-2** 비교 모드 에러 — 양쪽 소스 중 하나가 NO_CONTEXT 범위일 때 처리 방식 (해당 answer에 "관련 내용 없음" 메시지 삽입 vs 별도 플래그)
 - [ ] **P-3** `configs/prompts/compare_system.jinja2` 프롬프트 최적화 (두 버전 컨텍스트를 하나의 프롬프트로 조립하는 최적 구조)
-- [ ] **P-4** 멀티턴 재작성 `answer_summary` 생성 방식 — 전체 답변 저장 vs 첫 100자 요약
+- [x] **P-4** 멀티턴 재작성 `answer_summary` 생성 방식 — 이전 답변 앞 500자 사용(정책서 §5.2, R-7-2)
 
 ---
 

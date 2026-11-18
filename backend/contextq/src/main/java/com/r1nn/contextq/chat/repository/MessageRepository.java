@@ -15,6 +15,12 @@ import org.springframework.data.repository.query.Param;
 
 public interface MessageRepository extends JpaRepository<Message, Long> {
 
+  /**
+   * Newest 6 messages (3 turns) of a conversation, newest first — the rewrite window of policy §5.2
+   * (idx_msg_conv_created).
+   */
+  List<Message> findTop6ByConversation_IdOrderByCreatedAtDescIdDesc(Long conversationId);
+
   /** Conversation messages oldest first (idx_msg_conv_created, api-spec §4.2). */
   List<Message> findByConversation_IdOrderByCreatedAtAscIdAsc(Long conversationId);
 

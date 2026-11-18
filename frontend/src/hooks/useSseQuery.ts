@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { streamChat } from '@/api/chat'
 import { ApiError, STREAM_INTERRUPTED } from '@/api/http'
-import type { ChatMode, ChatStreamRequest } from '@/types/chat'
+import type { ChatMode, ChatStreamRequest, HistoryItem } from '@/types/chat'
 import type { DoneEvent, MetaEvent } from '@/types/sse'
 
 export type TurnPhase = 'waiting' | 'streaming' | 'done' | 'failed'
@@ -59,7 +59,7 @@ export function useSseQuery(callbacks: SseQueryCallbacks = {}) {
   }, [])
 
   const ask = useCallback(
-    async (question: string, selection: QuerySelection) => {
+    async (question: string, selection: QuerySelection, history?: HistoryItem[]) => {
       abortRef.current?.abort()
       const controller = new AbortController()
       abortRef.current = controller
@@ -70,6 +70,7 @@ export function useSseQuery(callbacks: SseQueryCallbacks = {}) {
         conversationId: conversationRef.current,
         question,
         ...selection,
+        ...(history !== undefined && history.length > 0 ? { history } : {}),
       }
       setTurns((prev) => [
         ...prev,

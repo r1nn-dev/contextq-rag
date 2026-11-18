@@ -68,6 +68,7 @@ class MetaEvent:
     ingested_at: date | None
     no_context: bool
     sources: list[dict[str, Any]] = field(default_factory=list)
+    rewritten_query: str | None = None  # 재작성 성공일 때만 (정책서 §5.2 투명성)
 
     def to_dict(self) -> dict[str, Any]:
         data: dict[str, Any] = {
@@ -75,7 +76,7 @@ class MetaEvent:
             "requestId": self.request_id,
             "sourceKey": self.source_key,
             "ingestRunId": self.ingest_run_id,
-            "rewrittenQuery": None,  # 질의 재작성(R-7-2) 전
+            "rewrittenQuery": self.rewritten_query,
             "noContext": self.no_context,
             "sources": [] if self.no_context else self.sources,
         }

@@ -14,3 +14,10 @@ embedding:
   price_per_1m_tokens_usd: 0.02    # text-embedding-3-small 단가 — 비용 기록용
   query_timeout_seconds: 5         # 질의 임베딩 1회 제한 (정책서 §2.1 OpenAI 임베딩 호출)
   query_max_retries: 1             # 질의 임베딩 재시도 (멱등 호출)
+
+rewrite:
+  model: "gpt-4o-mini"              # 질의 재작성 모델 (rag-pipeline.md §3.1)
+  temperature: 0
+  max_tokens: 200                   # 출력 200자 이하 질의 한 줄 (정책서 §5.2)
+  timeout_seconds: 3                # 정책서 §2.1 질의 재작성 호출 — 넘으면 원래 질문으로 폴백
+  max_retries: 0                    # 폴백이 있으므로 재시도하지 않는다 (3초 예산)

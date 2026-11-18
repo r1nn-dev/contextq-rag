@@ -14,6 +14,7 @@ import { StartPanel } from '@/components/chat/StartPanel'
 import { Icon } from '@/components/common/Icon'
 import { turnsFromDetail } from '@/hooks/savedTurns'
 import { useAuth } from '@/hooks/useAuth'
+import { guestHistory } from '@/hooks/guestHistory'
 import { useConversationList } from '@/hooks/useConversationList'
 import { useGuestUsage } from '@/hooks/useGuestUsage'
 import { findSource, frameworkName, useSources, versionTone } from '@/hooks/useSources'
@@ -223,9 +224,11 @@ export function ChatPage(): JSX.Element {
         return
       }
       if (sourceKey === null) return
-      void ask(question, { mode: 'SINGLE', sourceKey, sourceKeyA: null, sourceKeyB: null })
+      // guests send the on-screen turns for the query rewrite; members use the server DB (policy §5.1)
+      const history = isGuest ? guestHistory(turns) : undefined
+      void ask(question, { mode: 'SINGLE', sourceKey, sourceKeyA: null, sourceKeyB: null }, history)
     },
-    [ask, isCompare, keyA, keyB, sourceKey],
+    [ask, isCompare, isGuest, keyA, keyB, sourceKey, turns],
   )
 
   const startNew = (): void => navigate('/chat', { state: { fresh: Date.now() } })
