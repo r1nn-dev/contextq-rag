@@ -12,7 +12,7 @@ from src.config.settings import Settings
 def test_repository_config_uses_confirmed_values() -> None:
     retrieval = load_rag_config().retrieval
 
-    assert retrieval.top_k == 5
+    assert retrieval.top_k == 8  # E2 확정
     assert retrieval.context_budget_tokens == 3000
     assert retrieval.thresholds == {"langchain_v03": 0.29, "langchain_v1x": 0.34}  # E1 확정
 

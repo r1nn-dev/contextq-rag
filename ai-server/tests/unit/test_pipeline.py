@@ -45,7 +45,8 @@ def remote_base(tmp_path: Path) -> str:
 
 
 def _options(tmp_path: Path, remote_base: str) -> IngestOptions:
-    return IngestOptions(data_dir=tmp_path / "data", remote_base=remote_base)
+    # 파이프라인 동작을 보는 테스트라 전략을 B로 고정한다 (기본 전략은 E2 결과로 바뀔 수 있다)
+    return IngestOptions(data_dir=tmp_path / "data", strategy="B", remote_base=remote_base)
 
 
 @pytest.fixture()
@@ -275,6 +276,7 @@ def _run(
     deps: IngestDependencies,
     **options: Any,
 ) -> int:
+    options.setdefault("strategy", "B")  # _options와 같은 이유로 B 고정
     opts = IngestOptions(data_dir=tmp_path / "data", remote_base=remote_base, **options)
     try:
         return run_ingest(session_factory, "langchain_v1x", opts, deps).run_id

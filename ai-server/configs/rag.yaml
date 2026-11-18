@@ -2,8 +2,9 @@
 # 값이 바뀌면 같은 평가셋으로 Before/After를 측정해 PR에 붙인다 (CONTRIBUTING.md §9.5).
 
 retrieval:
-  # Top-K 초기값 — E2 결정 규칙으로 확정 (K ∈ {3, 5, 8}, eval/decision_rules.md)
-  top_k: 5
+  # Top-K — E2 확정 2026-11-18 (eval/results/E2/decision.md, eval/decision_rules.md §2):
+  # 전략 C Hit@3 0.55 → Hit@5 0.65 → Hit@8 0.775, 두 증가폭 모두 ≥ 2%p → K=8
+  top_k: 8
   # 컨텍스트 토큰 예산 3,000 고정 — 성능 우선으로 공식 축소 없이 상한 그대로 (eval/decision_rules.md §4)
   context_budget_tokens: 3000
   # NO_CONTEXT 임계값 τ (source_key별) — E1 확정 2026-11-18 (eval/results/E1/analysis.md,

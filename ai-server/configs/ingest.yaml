@@ -1,9 +1,9 @@
 # 인덱스 빌드 청킹 설정 — docs/specs/doc-source.md §6, docs/experiments/protocol.md E2
-# 값은 E2 비교 조건이다. 최종 전략·파라미터는 E2 결과(R-7-3)로 확정한다.
+# 값은 E2 비교 조건이다. 기본 전략은 E2 결과로 확정했다(eval/results/E2/decision.md).
 # 크기 단위: 문자 (LangChain 분할기 기본 단위)
 
-# 정책서 미결정 사항 "청킹 전략" 가정값 (초기 개발용)
-default_strategy: B
+# E2 확정 2026-11-18 — 전략 C (Hit@5 0.650·MRR@5 0.436, eval/decision_rules.md §1)
+default_strategy: C
 
 strategies:
   A:  # CharacterTextSplitter — 고정 크기 분할
