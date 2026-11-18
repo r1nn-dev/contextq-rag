@@ -1,6 +1,7 @@
 package com.r1nn.contextq.chat.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -79,6 +80,49 @@ class SourceCatalogTest {
         .isInstanceOfSatisfying(
             BusinessException.class,
             e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.AI_UNAVAILABLE));
+  }
+
+  @Test
+  void compareNeedsBothSourcesAskableAndACatalogPairInOrder() {
+    when(client.fetch()).thenReturn(compareCatalog(true));
+
+    assertThatCode(() -> catalog.requireComparable("langchain_v03", "langchain_v1x", false))
+        .doesNotThrowAnyException();
+    assertThatThrownBy(() -> catalog.requireComparable("langchain_v1x", "langchain_v03", false))
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            e -> {
+              assertThat(e.getErrorCode()).isEqualTo(ErrorCode.INVALID_REQUEST);
+              assertThat(e.getDetails().getFirst().field()).isEqualTo("sourceKeyB");
+            });
+  }
+
+  @Test
+  void compareWithAnInactiveSideIsSourceUnavailable() {
+    when(client.fetch()).thenReturn(compareCatalog(false));
+
+    assertThatThrownBy(() -> catalog.requireComparable("langchain_v03", "langchain_v1x", true))
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.SOURCE_UNAVAILABLE));
+  }
+
+  static InternalSources compareCatalog(boolean newerEnabled) {
+    InternalSources.Source older = catalog("v0.3").sources().getFirst();
+    InternalSources.Source newer =
+        new InternalSources.Source(
+            "langchain_v1x",
+            "langchain",
+            "v1.x",
+            "LangChain v1.x",
+            newerEnabled,
+            8L,
+            "89abcdef0123456789abcdef0123456789abcdef",
+            "2026-10-05",
+            20);
+    return new InternalSources(
+        List.of(older, newer),
+        List.of(new InternalSources.ComparePair("langchain_v03", "langchain_v1x")));
   }
 
   static InternalSources catalog(String displayName) {

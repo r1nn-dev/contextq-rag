@@ -1,6 +1,7 @@
 package com.r1nn.contextq.contract;
 
 import static com.r1nn.contextq.support.ChatStreamTestSupport.CATALOG;
+import static com.r1nn.contextq.support.ChatStreamTestSupport.COMPARE_CATALOG;
 import static com.r1nn.contextq.support.ChatStreamTestSupport.events;
 import static com.r1nn.contextq.support.ChatStreamTestSupport.newUser;
 import static com.r1nn.contextq.support.ChatStreamTestSupport.singleBody;
@@ -18,6 +19,7 @@ import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,7 +33,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.JsonNode;
 
 /**
- * Every single-mode upstream example, relayed by backend, must satisfy the client-leg contract
+ * Every upstream example, relayed by backend, must satisfy the client-leg contract
  * (contracts/sse-events.schema.json, INV-06).
  */
 @Import(TestcontainersConfiguration.class)
@@ -85,5 +87,28 @@ class ChatRelayContractTest {
       assertThat(events.getFirst().get("conversationId").isIntegralNumber()).isTrue();
       assertThat(events.getFirst().get("messageId").isIntegralNumber()).isTrue();
     }
+  }
+
+  @Test
+  void relayedCompareStreamSatisfiesClientContract() throws Exception {
+    sourceCatalog.invalidate();
+    STUB.on("GET", "/internal/v1/sources", r -> StubResponse.json(200, COMPARE_CATALOG));
+    String[] frames = upstreamFrames("compare-completed.json");
+    STUB.on(
+        "POST", "/internal/v1/chat/stream", r -> StubResponse.sse(Duration.ofMillis(5), frames));
+    long userId = newUser(jdbc);
+
+    String body =
+        streamBody(
+            mockMvc,
+            streamRequest(
+                userId,
+                "{\"question\":\"q\",\"mode\":\"COMPARE\",\"sourceKeyA\":\"langchain_v03\","
+                    + "\"sourceKeyB\":\"langchain_v1x\"}"));
+
+    List<JsonNode> events = events(body);
+    SseContract.validateStream(events, Leg.CLIENT);
+    assertThat(events.getFirst().get("messageId").isIntegralNumber()).isTrue();
+    assertThat(events.getLast().get("compareResult").isObject()).isTrue();
   }
 }

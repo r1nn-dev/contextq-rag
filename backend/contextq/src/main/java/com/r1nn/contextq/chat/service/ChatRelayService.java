@@ -3,6 +3,7 @@ package com.r1nn.contextq.chat.service;
 import com.r1nn.contextq.chat.domain.AnswerOutcome;
 import com.r1nn.contextq.chat.domain.ConversationMode;
 import com.r1nn.contextq.chat.domain.MessageStatus;
+import com.r1nn.contextq.chat.domain.QuestionTarget;
 import com.r1nn.contextq.chat.dto.ChatStreamRequest;
 import com.r1nn.contextq.chat.service.ChatMessageService.AcceptCommand;
 import com.r1nn.contextq.chat.service.ChatMessageService.Accepted;
@@ -32,12 +33,15 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Single-mode relay: browser ⇄ backend ⇄ ai-server SSE (ADR-003 방식 X, api-spec §3.1).
+ * Chat relay: browser ⇄ backend ⇄ ai-server SSE (ADR-003 방식 X, api-spec §3.1).
  *
  * <p>Members and guests share the relay; only the {@link AnswerRecorder} differs (stored messages
  * vs. guest usage log and refund). Pre-stream failures throw {@link BusinessException} (plain
  * JSON). Once the stream starts every failure becomes an {@code error} event (INV-09). Not
  * transactional: persistence happens in short transactions, the ai-server call outside them.
+ *
+ * <p>Compare questions (members only) are processed to the end even when the browser leaves (policy
+ * §2.3): the upstream is consumed independently and the browser only watches a replay.
  */
 @Service
 public class ChatRelayService {
@@ -87,34 +91,50 @@ public class ChatRelayService {
    */
   public Flux<ServerSentEvent<String>> streamForUser(
       Long userId, ChatStreamRequest request, String requestId) {
-    request.requireSupportedMode();
+    request.requireModeFields();
     rateLimiter.acquire(userId); // 10 per minute (policy §8.1)
     Slot slot = slots.acquire("u:" + userId, quota.concurrentUser());
     try {
       boolean followUp = request.conversationId() != null;
-      String sourceKey =
+      QuestionTarget target =
           followUp
-              ? messages.conversationSource(userId, request.conversationId(), request.sourceKey())
-              : request.sourceKey();
-      sourceCatalog.requireAskable(sourceKey, followUp);
+              ? messages.conversationTarget(
+                  userId, request.conversationId(), request.requestedTarget())
+              : request.requestedTarget();
+      if (target.isCompare()) {
+        sourceCatalog.requireComparable(target.sourceKeyA(), target.sourceKeyB(), followUp);
+      } else {
+        sourceCatalog.requireAskable(target.sourceKey(), followUp);
+      }
 
       String question = request.trimmedQuestion();
       Accepted accepted =
           messages.accept(
-              new AcceptCommand(userId, request.conversationId(), question, sourceKey, requestId));
+              new AcceptCommand(userId, request.conversationId(), question, target, requestId));
+      ChatCall call =
+          target.isCompare()
+              ? ChatCall.compare(
+                  requestId, target.sourceKeyA(), target.sourceKeyB(), question, accepted.history())
+              : new ChatCall(requestId, target.sourceKey(), question, accepted.history());
       Flux<ServerSentEvent<String>> upstream =
           open(
-              new ChatCall(requestId, sourceKey, question, accepted.history()),
+              call,
               reason ->
                   messages.finish(
                       accepted.answerId(),
                       MessageStatus.FAILED,
-                      AnswerOutcome.interrupted("", reason)));
+                      AnswerOutcome.interrupted(target.isCompare() ? null : "", reason)));
       AnswerRecorder recorder =
           new MemberAnswerRecorder(
               messages, persistFailures, accepted.conversationId(), accepted.answerId(), requestId);
-      return relay(upstream, new RelaySession(recorder, JSON, requestId, sourceKey))
-          .doFinally(signal -> slot.release());
+      Flux<ServerSentEvent<String>> events =
+          relay(upstream, new RelaySession(recorder, JSON, requestId, target))
+              .doFinally(signal -> slot.release());
+      if (!target.isCompare()) {
+        return events;
+      }
+      messages.startProcessing(accepted.answerId()); // ai-server accepted: PENDING → PROCESSING
+      return detached(events);
     } catch (RuntimeException e) {
       slot.release(); // pre-stream failure: the stream never started
       throw e;
@@ -137,7 +157,7 @@ public class ChatRelayService {
       throw BusinessException.invalidField(
           "conversationId", "게스트 대화는 서버에 저장되지 않아 대화 ID를 쓸 수 없습니다.");
     }
-    request.requireSupportedMode();
+    request.requireModeFields();
     String sourceKey = request.sourceKey();
     List<Map<String, String>> history = request.guestHistory();
     sourceCatalog.requireAskable(sourceKey, false);
@@ -194,6 +214,15 @@ public class ChatRelayService {
       onFailure.accept(ErrorCode.AI_UNAVAILABLE.name());
       throw new BusinessException(ErrorCode.AI_UNAVAILABLE);
     }
+  }
+
+  /**
+   * Starts consuming {@code events} now and lets the browser watch a replay of them, so a browser
+   * cancel does not cancel the processing (policy §2.3 비교 모드 대기 중 이탈). The relay's own timeouts
+   * still end a stuck upstream.
+   */
+  static Flux<ServerSentEvent<String>> detached(Flux<ServerSentEvent<String>> events) {
+    return events.replay().autoConnect(0);
   }
 
   /**

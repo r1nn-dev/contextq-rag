@@ -14,7 +14,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * Ends answers stuck in STREAMING·PENDING for 150 s as {@code FAILED(STALE)}, or {@code
+ * Ends answers stuck in STREAMING·PENDING·PROCESSING for 150 s as {@code FAILED(STALE)}, or {@code
  * FAILED(PERSIST_ERROR)} when the relay could not store its terminal update (policy §2.1·§2.3, db-
  * design §5).
  *
@@ -26,7 +26,7 @@ public class StaleAnswerSweeper {
 
   private static final Logger log = LoggerFactory.getLogger(StaleAnswerSweeper.class);
   private static final Set<MessageStatus> STUCK =
-      Set.of(MessageStatus.STREAMING, MessageStatus.PENDING);
+      Set.of(MessageStatus.STREAMING, MessageStatus.PENDING, MessageStatus.PROCESSING);
 
   private final MessageRepository messages;
   private final ChatMessageService chatMessages;

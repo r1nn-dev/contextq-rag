@@ -7,6 +7,7 @@ import com.r1nn.contextq.chat.domain.AnswerOutcome;
 import com.r1nn.contextq.chat.domain.AnswerSnapshot;
 import com.r1nn.contextq.chat.domain.Message;
 import com.r1nn.contextq.chat.domain.MessageStatus;
+import com.r1nn.contextq.chat.domain.QuestionTarget;
 import com.r1nn.contextq.chat.repository.ConversationRepository;
 import com.r1nn.contextq.chat.repository.MessageRepository;
 import com.r1nn.contextq.chat.service.ChatMessageService.AcceptCommand;
@@ -61,6 +62,25 @@ class StaleAnswerSweeperTest {
         .isEqualTo(MessageStatus.FAILED);
   }
 
+  @Test
+  void endsCompareAnswersStuckInProcessing() {
+    long userId = ChatStreamTestSupport.newUser(jdbc);
+    Accepted processing =
+        chatMessages.accept(
+            new AcceptCommand(
+                userId,
+                null,
+                "q",
+                QuestionTarget.compare("langchain_v03", "langchain_v1x"),
+                "req-sweep-compare"));
+    chatMessages.startProcessing(processing.answerId());
+    age(List.of(processing), 200);
+
+    sweeper.sweep();
+
+    assertEnded(processing, "STALE");
+  }
+
   private Accepted streaming(long userId) {
     Accepted accepted = chatMessages.accept(command(userId));
     chatMessages.applyMeta(
@@ -92,6 +112,6 @@ class StaleAnswerSweeperTest {
   }
 
   private static AcceptCommand command(long userId) {
-    return new AcceptCommand(userId, null, "q", "langchain_v03", "req-sweep");
+    return AcceptCommand.single(userId, null, "q", "langchain_v03", "req-sweep");
   }
 }

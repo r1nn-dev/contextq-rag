@@ -2,6 +2,7 @@ package com.r1nn.contextq.chat.service;
 
 import com.r1nn.contextq.chat.domain.AnswerOutcome;
 import com.r1nn.contextq.chat.domain.AnswerSnapshot;
+import com.r1nn.contextq.chat.domain.CompareSnapshot;
 import com.r1nn.contextq.chat.domain.MessageStatus;
 import com.r1nn.contextq.chat.service.ChatMessageService.SourceValue;
 import java.util.List;
@@ -49,6 +50,12 @@ final class MemberAnswerRecorder implements AnswerRecorder {
   public void meta(
       String sourceKey, AnswerSnapshot snapshot, boolean noContext, List<SourceValue> cited) {
     messages.applyMeta(answerId, sourceKey, snapshot, noContext, cited);
+  }
+
+  @Override
+  public void compareMeta(
+      String sourceKeyA, String sourceKeyB, CompareSnapshot snapshot, List<SourceValue> cited) {
+    messages.applyCompareMeta(answerId, sourceKeyA, sourceKeyB, snapshot, cited);
   }
 
   @Override

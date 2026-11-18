@@ -2,7 +2,9 @@ package com.r1nn.contextq.chat.service;
 
 import com.r1nn.contextq.chat.domain.AnswerOutcome;
 import com.r1nn.contextq.chat.domain.AnswerSnapshot;
+import com.r1nn.contextq.chat.domain.CompareSnapshot;
 import com.r1nn.contextq.chat.domain.MessageStatus;
+import com.r1nn.contextq.chat.domain.QuestionTarget;
 import com.r1nn.contextq.chat.service.ChatMessageService.SourceValue;
 import com.r1nn.contextq.common.error.ErrorCode;
 import java.math.BigDecimal;
@@ -29,6 +31,10 @@ import tools.jackson.databind.node.ObjectNode;
  * done}/{@code error}/timeout/disconnect/cancel → one terminal record. A server-side failure before
  * {@code meta} is marked refundable (guest refund, policy §1.3). After the terminal event nothing
  * else is emitted (INV-06).
+ *
+ * <p>Compare mode (api-spec 부록 B.2·B.4): {@code meta} carries both sides' snapshots, there are no
+ * tokens, {@code done} carries {@code compareResult} (stored as is, no text), and a browser cancel
+ * does not end the answer — the caller keeps the upstream running (policy §2.3).
  */
 final class RelaySession {
 
@@ -39,7 +45,7 @@ final class RelaySession {
   private final AnswerRecorder recorder;
   private final ObjectMapper json;
   private final String requestId;
-  private final String sourceKey;
+  private final QuestionTarget target;
 
   private final StringBuilder content = new StringBuilder();
   private int tokens;
@@ -47,11 +53,17 @@ final class RelaySession {
   private volatile boolean anyDataSeen;
   private volatile boolean ended;
 
-  RelaySession(AnswerRecorder recorder, ObjectMapper json, String requestId, String sourceKey) {
+  RelaySession(
+      AnswerRecorder recorder, ObjectMapper json, String requestId, QuestionTarget target) {
     this.recorder = recorder;
     this.json = json;
     this.requestId = requestId;
-    this.sourceKey = sourceKey;
+    this.target = target;
+  }
+
+  /** Single-mode session. */
+  RelaySession(AnswerRecorder recorder, ObjectMapper json, String requestId, String sourceKey) {
+    this(recorder, json, requestId, QuestionTarget.single(sourceKey));
   }
 
   /** Marks the first data event; used by the first-event timeout (heartbeats do not count). */
@@ -78,6 +90,10 @@ final class RelaySession {
     return switch (node.path("event").asString()) {
       case "meta" -> List.of(data(onMeta((ObjectNode) node)));
       case "token" -> {
+        if (target.isCompare()) { // compare mode has no tokens (부록 B.2)
+          log.warn("unexpected_compare_token requestId={}", requestId);
+          yield List.of();
+        }
         content.append(node.path("t").asString());
         tokens++;
         yield List.of(data(event.data()));
@@ -100,7 +116,9 @@ final class RelaySession {
       return List.of();
     }
     if (error instanceof TimeoutException) {
-      String reason = anyDataSeen ? "UPSTREAM_IDLE_TIMEOUT" : "UPSTREAM_TIMEOUT";
+      // compare answers end as UPSTREAM_TIMEOUT either way (policy §10.2 PROCESSING → FAILED)
+      String reason =
+          anyDataSeen && !target.isCompare() ? "UPSTREAM_IDLE_TIMEOUT" : "UPSTREAM_TIMEOUT";
       return List.of(terminate(ErrorCode.UPSTREAM_TIMEOUT.name(), reason, null));
     }
     log.warn("upstream_stream_failed requestId={}", requestId, error);
@@ -114,6 +132,10 @@ final class RelaySession {
    */
   synchronized void onClientCancel() {
     if (ended) {
+      return;
+    }
+    if (target.isCompare()) { // processing continues and is stored (policy §2.3)
+      log.info("compare_client_left requestId={} — processing continues", requestId);
       return;
     }
     ended = true;
@@ -135,6 +157,10 @@ final class RelaySession {
 
   private String onMeta(ObjectNode meta) {
     metaSeen = true;
+    if (target.isCompare()) {
+      onCompareMeta(meta);
+      return clientMeta(meta);
+    }
     boolean noContext = meta.path("noContext").asBoolean(false);
     List<SourceValue> cited = new ArrayList<>();
     BigDecimal top1 = null;
@@ -160,11 +186,52 @@ final class RelaySession {
                 : null,
             top1,
             truncate(text(meta, "rewrittenQuery")));
-    recorder.meta(sourceKey, snapshot, noContext, cited);
-    // client leg adds the stored IDs; both are null for guests (contracts/README.md)
+    recorder.meta(target.sourceKey(), snapshot, noContext, cited);
+    return clientMeta(meta);
+  }
+
+  /** Client leg adds the stored IDs; both are null for guests (contracts/README.md). */
+  private String clientMeta(ObjectNode meta) {
     putId(meta, "conversationId", recorder.conversationId());
     putId(meta, "messageId", recorder.messageId());
     return json.writeValueAsString(meta);
+  }
+
+  /** Compare snapshot of both sides; top-1 per side is its first source (A1 / B1). */
+  private void onCompareMeta(ObjectNode meta) {
+    List<SourceValue> cited = new ArrayList<>();
+    BigDecimal top1A = null;
+    BigDecimal top1B = null;
+    for (JsonNode s : meta.path("sources")) {
+      SourceValue value = sourceValue(s);
+      if (value.rankLabel().startsWith("B")) {
+        top1B = top1B == null ? value.similarity() : top1B;
+      } else {
+        top1A = top1A == null ? value.similarity() : top1A;
+      }
+      cited.add(value);
+    }
+    CompareSnapshot snapshot =
+        new CompareSnapshot(
+            meta.hasNonNull("ingestRunIdA") ? meta.get("ingestRunIdA").asLong() : null,
+            meta.hasNonNull("ingestRunIdB") ? meta.get("ingestRunIdB").asLong() : null,
+            text(meta, "commitShaA"),
+            text(meta, "commitShaB"),
+            date(meta, "ingestedAtA"),
+            date(meta, "ingestedAtB"),
+            top1A,
+            top1B,
+            truncate(text(meta, "rewrittenQuery")));
+    recorder.compareMeta(target.sourceKeyA(), target.sourceKeyB(), snapshot, cited);
+  }
+
+  private SourceValue sourceValue(JsonNode s) {
+    return new SourceValue(
+        s.path("rank").asString(),
+        s.path("headingPath").asString(),
+        s.path("permalink").asString(),
+        s.hasNonNull("siteUrl") ? s.get("siteUrl").asString() : null,
+        similarity(s.path("similarity")));
   }
 
   private void onDone(JsonNode done) {
@@ -174,7 +241,7 @@ final class RelaySession {
     JsonNode latency = done.path("latency");
     AnswerOutcome outcome =
         new AnswerOutcome(
-            content.toString(),
+            answerText(),
             text(done, "statusReason"),
             text(done, "finishReason"),
             text(done, "model"),
@@ -186,7 +253,8 @@ final class RelaySession {
             integer(latency, "embedMs"),
             integer(latency, "retrieveMs"),
             integer(latency, "ttftMs"),
-            integer(latency, "totalMs"));
+            integer(latency, "totalMs"),
+            done.hasNonNull("compareResult") ? done.get("compareResult").toString() : null);
     recorder.finish(status, outcome, false); // NO_CONTEXT and completed answers are not refunded
   }
 
@@ -213,7 +281,7 @@ final class RelaySession {
     boolean partial = tokens > 0;
     recorder.finish(
         partial ? MessageStatus.PARTIAL : MessageStatus.FAILED,
-        AnswerOutcome.interrupted(content.toString(), reason),
+        AnswerOutcome.interrupted(answerText(), reason),
         !metaSeen);
     ObjectNode error = json.createObjectNode();
     error.put("event", "error");
@@ -222,6 +290,11 @@ final class RelaySession {
     error.put("requestId", requestId);
     error.put("partial", partial);
     return json.writeValueAsString(error);
+  }
+
+  /** Accumulated text; compare answers store none (db-design §3.7 {@code content} NULL). */
+  private String answerText() {
+    return target.isCompare() ? null : content.toString();
   }
 
   private static void putId(ObjectNode node, String field, Long id) {
@@ -248,6 +321,10 @@ final class RelaySession {
     return node.isNumber()
         ? node.decimalValue().setScale(4, RoundingMode.HALF_UP)
         : BigDecimal.ZERO;
+  }
+
+  private static LocalDate date(JsonNode node, String field) {
+    return node.hasNonNull(field) ? LocalDate.parse(node.get(field).asString()) : null;
   }
 
   private static String text(JsonNode node, String field) {

@@ -22,7 +22,7 @@ class ChatStreamRequestTest {
 
     assertThat(validator.validate(req)).isEmpty();
     assertThat(req.trimmedQuestion()).isEqualTo("Agent 생성 방법");
-    assertThatCode(req::requireSupportedMode).doesNotThrowAnyException();
+    assertThatCode(req::requireModeFields).doesNotThrowAnyException();
   }
 
   @Test
@@ -54,7 +54,7 @@ class ChatStreamRequestTest {
   void newSingleConversationNeedsSourceKey() {
     ChatStreamRequest req = single("q", null);
 
-    assertThatThrownBy(req::requireSupportedMode)
+    assertThatThrownBy(req::requireModeFields)
         .isInstanceOfSatisfying(
             BusinessException.class,
             e -> assertThat(e.getDetails().getFirst().field()).isEqualTo("sourceKey"));
@@ -65,19 +65,50 @@ class ChatStreamRequestTest {
     ChatStreamRequest req =
         new ChatStreamRequest(42L, "q", ConversationMode.SINGLE, null, null, null);
 
-    assertThatCode(req::requireSupportedMode).doesNotThrowAnyException();
+    assertThatCode(req::requireModeFields).doesNotThrowAnyException();
   }
 
   @Test
-  void compareIsNotSupportedYet() {
-    ChatStreamRequest req =
-        new ChatStreamRequest(
-            null, "q", ConversationMode.COMPARE, null, "langchain_v03", "langchain_v1x");
+  void newCompareConversationNeedsTwoDifferentVersions() {
+    assertThatCode(compare(null, null, "langchain_v03", "langchain_v1x")::requireModeFields)
+        .doesNotThrowAnyException();
+    assertInvalidField(compare(null, null, "langchain_v03", null), "sourceKeyB");
+    assertInvalidField(compare(null, null, null, "langchain_v1x"), "sourceKeyA");
+    assertInvalidField(compare(null, null, "langchain_v03", "langchain_v03"), "sourceKeyB");
+  }
 
-    assertThatThrownBy(req::requireSupportedMode)
+  @Test
+  void existingCompareConversationMayOmitVersions() {
+    assertThatCode(compare(42L, null, null, null)::requireModeFields).doesNotThrowAnyException();
+  }
+
+  @Test
+  void versionFieldsOfTheOtherModeAreRejected() {
+    assertInvalidField(
+        compare(null, "langchain_v03", "langchain_v03", "langchain_v1x"), "sourceKey");
+    assertInvalidField(
+        new ChatStreamRequest(
+            null, "q", ConversationMode.SINGLE, "langchain_v03", "langchain_v03", null),
+        "sourceKeyA");
+  }
+
+  @Test
+  void requestedTargetFollowsTheMode() {
+    assertThat(compare(null, null, "langchain_v03", "langchain_v1x").requestedTarget().sourceKeys())
+        .containsExactly("langchain_v03", "langchain_v1x");
+    assertThat(single("q", "langchain_v03").requestedTarget().sourceKeys())
+        .containsExactly("langchain_v03");
+  }
+
+  static ChatStreamRequest compare(Long conversationId, String sourceKey, String a, String b) {
+    return new ChatStreamRequest(conversationId, "q", ConversationMode.COMPARE, sourceKey, a, b);
+  }
+
+  private static void assertInvalidField(ChatStreamRequest req, String field) {
+    assertThatThrownBy(req::requireModeFields)
         .isInstanceOfSatisfying(
             BusinessException.class,
-            e -> assertThat(e.getDetails().getFirst().field()).isEqualTo("mode"));
+            e -> assertThat(e.getDetails().getFirst().field()).isEqualTo(field));
   }
 
   static ChatStreamRequest single(String question, String sourceKey) {

@@ -129,6 +129,24 @@ public class SourceCatalog {
     return source;
   }
 
+  /**
+   * Pre-check of a compare question (api-spec §3.1 비교 모드 규칙, policy §3.2): both sources must be
+   * askable and form a catalog pair in this order (A = older, B = newer).
+   *
+   * @throws BusinessException {@link #requireAskable} errors for either side, then {@code
+   *     INVALID_REQUEST} (field {@code sourceKeyB}) for a pair the catalog does not define
+   */
+  public void requireComparable(String sourceKeyA, String sourceKeyB, boolean followUp) {
+    requireAskable(sourceKeyA, followUp);
+    requireAskable(sourceKeyB, followUp);
+    boolean paired =
+        current().comparePairs().stream()
+            .anyMatch(p -> p.sourceKeyA().equals(sourceKeyA) && p.sourceKeyB().equals(sourceKeyB));
+    if (!paired) {
+      throw BusinessException.invalidField("sourceKeyB", "비교할 수 없는 버전 조합입니다.");
+    }
+  }
+
   /** Drops the cache so the next call refetches (index activation, tests). */
   public void invalidate() {
     snapshot = null;

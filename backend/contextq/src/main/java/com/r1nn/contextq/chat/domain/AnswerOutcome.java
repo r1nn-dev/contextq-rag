@@ -9,6 +9,7 @@ package com.r1nn.contextq.chat.domain;
  * @param model actual model name from the {@code done} event (INV-13)
  * @param promptVersion prompt file name from the {@code done} event (INV-13)
  * @param invalidCitationsJson JSON array of out-of-range citation numbers, null when unknown
+ * @param compareResultJson post-validated {@code compareResult} (compare mode only), else null
  */
 public record AnswerOutcome(
     String content,
@@ -23,7 +24,40 @@ public record AnswerOutcome(
     Integer embedMs,
     Integer retrieveMs,
     Integer ttftMs,
-    Integer totalMs) {
+    Integer totalMs,
+    String compareResultJson) {
+
+  /** Single-mode outcome (no compare result). */
+  public AnswerOutcome(
+      String content,
+      String statusReason,
+      String finishReason,
+      String model,
+      String promptVersion,
+      Integer promptTokens,
+      Integer completionTokens,
+      String invalidCitationsJson,
+      Integer rewriteMs,
+      Integer embedMs,
+      Integer retrieveMs,
+      Integer ttftMs,
+      Integer totalMs) {
+    this(
+        content,
+        statusReason,
+        finishReason,
+        model,
+        promptVersion,
+        promptTokens,
+        completionTokens,
+        invalidCitationsJson,
+        rewriteMs,
+        embedMs,
+        retrieveMs,
+        ttftMs,
+        totalMs,
+        null);
+  }
 
   /** Outcome with only text and reason (client abort, timeout, upstream error). */
   public static AnswerOutcome interrupted(String content, String statusReason) {

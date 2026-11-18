@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.r1nn.contextq.TestcontainersConfiguration;
 import com.r1nn.contextq.chat.domain.AnswerOutcome;
 import com.r1nn.contextq.chat.domain.AnswerSnapshot;
+import com.r1nn.contextq.chat.domain.CompareSnapshot;
 import com.r1nn.contextq.chat.domain.Conversation;
 import com.r1nn.contextq.chat.domain.Message;
 import com.r1nn.contextq.chat.domain.MessageSource;
@@ -43,6 +44,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 @SpringBootTest
 @AutoConfigureMockMvc
 class ConversationControllerTest {
+
+  static final String SHA_B = "89abcdef0123456789abcdef0123456789abcdef";
 
   static final AiServerStub STUB = new AiServerStub();
   static final Instant T0 = Instant.parse("2026-10-01T09:00:00.123456Z");
@@ -238,6 +241,80 @@ class ConversationControllerTest {
         .perform(get("/api/v1/conversations/abc").with(user(String.valueOf(userId))))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+  }
+
+  @Test
+  void compareDetailReturnsTheResultAndBothSnapshots() throws Exception {
+    long conversationId =
+        tx.execute(
+            s -> {
+              Conversation c =
+                  conversations.save(
+                      Conversation.compare(
+                          userId, "생성 방식 차이", "langchain_v03", "langchain_v1x", T0));
+              c.appendMessages(2);
+              messages.save(Message.question(c, userId, "생성 방식 차이", 2));
+              Message answer = messages.save(Message.pendingAnswer(c, userId, "req-compare"));
+              answer.startProcessing();
+              answer.applyCompareMeta(
+                  new CompareSnapshot(
+                      7L,
+                      8L,
+                      SHA,
+                      SHA_B,
+                      LocalDate.of(2026, 10, 5),
+                      LocalDate.of(2026, 10, 6),
+                      new BigDecimal("0.8700"),
+                      new BigDecimal("0.8200"),
+                      null));
+              sources.save(source(answer, "A1", "0.8700"));
+              sources.save(
+                  MessageSource.of(
+                      answer,
+                      "langchain_v1x",
+                      "B1",
+                      "Agents > create_agent",
+                      "https://github.com/langchain-ai/docs/blob/" + SHA_B + "/a.mdx?plain=1#L1-L2",
+                      null,
+                      new BigDecimal("0.8200")));
+              answer.finish(
+                  MessageStatus.COMPLETED,
+                  new AnswerOutcome(
+                      null,
+                      null,
+                      "stop",
+                      "gpt-4o-mini",
+                      "compare_v1",
+                      2100,
+                      540,
+                      "[]",
+                      null,
+                      90,
+                      210,
+                      null,
+                      9800,
+                      "{\"version_a\":{\"summary\":\"v0.3 요약\",\"citations\":[\"A1\"],"
+                          + "\"no_evidence\":false},\"version_b\":{\"summary\":\"v1.x 요약\","
+                          + "\"citations\":[\"B1\"],\"no_evidence\":false},\"changes\":[]}"));
+              c.recordAnswerEnded(MessageStatus.COMPLETED, T0.plusSeconds(10));
+              return c.getId();
+            });
+
+    mockMvc
+        .perform(detail(userId, conversationId))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.mode").value("COMPARE"))
+        .andExpect(jsonPath("$.data.sourceKeyA").value("langchain_v03"))
+        .andExpect(jsonPath("$.data.messages[1].content").value(""))
+        .andExpect(jsonPath("$.data.messages[1].compareResult.version_a.summary").value("v0.3 요약"))
+        .andExpect(jsonPath("$.data.messages[1].compareResult.version_b.citations[0]").value("B1"))
+        .andExpect(jsonPath("$.data.messages[1].snapshot.commitShaA").value(SHA))
+        .andExpect(jsonPath("$.data.messages[1].snapshot.commitShaB").value(SHA_B))
+        .andExpect(jsonPath("$.data.messages[1].snapshot.ingestedAtB").value("2026-10-06"))
+        .andExpect(jsonPath("$.data.messages[1].snapshot.versionLabel").doesNotExist())
+        .andExpect(jsonPath("$.data.messages[1].sources[0].rankLabel").value("A1"))
+        .andExpect(jsonPath("$.data.messages[1].sources[1].rankLabel").value("B1"))
+        .andExpect(jsonPath("$.data.messages[1].sources[1].rank").value(1));
   }
 
   private MockHttpServletRequestBuilder detail(long userId, long conversationId) {

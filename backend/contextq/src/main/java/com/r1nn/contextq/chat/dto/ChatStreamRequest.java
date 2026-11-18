@@ -1,6 +1,7 @@
 package com.r1nn.contextq.chat.dto;
 
 import com.r1nn.contextq.chat.domain.ConversationMode;
+import com.r1nn.contextq.chat.domain.QuestionTarget;
 import com.r1nn.contextq.common.error.BusinessException;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -12,9 +13,10 @@ import java.util.Set;
 /**
  * {@code POST /api/v1/chat/stream} body (api-spec §3.1, policy §5.1).
  *
- * <p>New conversation: {@code sourceKey} is required for SINGLE. Existing conversation: {@code
- * conversationId} alone is enough; version fields, when present, must match the conversation
- * (checked by the service). COMPARE is rejected until the compare issue.
+ * <p>New conversation: {@code sourceKey} is required for SINGLE, {@code sourceKeyA}·{@code
+ * sourceKeyB} (different) for COMPARE. Existing conversation: {@code conversationId} alone is
+ * enough; version fields, when present, must match the conversation (checked by the service). The
+ * version fields of the other mode must be null.
  *
  * @param conversationId null to start a new conversation
  * @param question trimmed before use; 1~1,000 characters
@@ -90,16 +92,43 @@ public record ChatStreamRequest(
   }
 
   /**
-   * Mode rules that Bean Validation cannot express per field.
+   * Mode rules that Bean Validation cannot express per field (api-spec §3.1 비교 모드 규칙).
    *
    * @throws BusinessException {@code INVALID_REQUEST} with the offending field
    */
-  public void requireSupportedMode() {
+  public void requireModeFields() {
     if (mode == ConversationMode.COMPARE) {
-      throw BusinessException.invalidField("mode", "비교 모드는 아직 지원하지 않습니다.");
+      if (sourceKey != null) {
+        throw BusinessException.invalidField("sourceKey", "비교 모드에는 sourceKey를 쓰지 않습니다.");
+      }
+      if (conversationId == null) {
+        requirePresent("sourceKeyA", sourceKeyA, "비교 모드에는 두 버전이 필요합니다.");
+        requirePresent("sourceKeyB", sourceKeyB, "비교 모드에는 두 버전이 필요합니다.");
+      }
+      if (sourceKeyA != null && sourceKeyA.equals(sourceKeyB)) {
+        throw BusinessException.invalidField("sourceKeyB", "비교할 두 버전이 같습니다.");
+      }
+      return;
     }
-    if (conversationId == null && (sourceKey == null || sourceKey.isBlank())) {
-      throw BusinessException.invalidField("sourceKey", "단일 모드에는 소스 키가 필요합니다.");
+    if (sourceKeyA != null || sourceKeyB != null) {
+      throw BusinessException.invalidField(
+          sourceKeyA != null ? "sourceKeyA" : "sourceKeyB", "단일 모드에는 비교 버전을 쓰지 않습니다.");
+    }
+    if (conversationId == null) {
+      requirePresent("sourceKey", sourceKey, "단일 모드에는 소스 키가 필요합니다.");
+    }
+  }
+
+  /** Versions named by the request; keys may be null for a follow-up question. */
+  public QuestionTarget requestedTarget() {
+    return mode == ConversationMode.COMPARE
+        ? QuestionTarget.compare(sourceKeyA, sourceKeyB)
+        : QuestionTarget.single(sourceKey);
+  }
+
+  private static void requirePresent(String field, String value, String message) {
+    if (value == null || value.isBlank()) {
+      throw BusinessException.invalidField(field, message);
     }
   }
 }

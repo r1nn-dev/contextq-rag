@@ -8,6 +8,7 @@ import com.r1nn.contextq.chat.domain.AnswerOutcome;
 import com.r1nn.contextq.chat.domain.AnswerSnapshot;
 import com.r1nn.contextq.chat.domain.Message;
 import com.r1nn.contextq.chat.domain.MessageStatus;
+import com.r1nn.contextq.chat.domain.QuestionTarget;
 import com.r1nn.contextq.chat.domain.RewriteStatus;
 import com.r1nn.contextq.chat.repository.ConversationRepository;
 import com.r1nn.contextq.chat.repository.MessageRepository;
@@ -149,13 +150,17 @@ class ChatMessageServiceTest {
 
     assertCode(
         () ->
-            service.accept(new AcceptCommand(otherUser, mine.conversationId(), "q", null, "req-2")),
+            service.accept(
+                AcceptCommand.single(otherUser, mine.conversationId(), "q", null, "req-2")),
         ErrorCode.CONVERSATION_NOT_FOUND);
     assertCode(
-        () -> service.conversationSource(otherUser, mine.conversationId(), null),
+        () ->
+            service.conversationTarget(
+                otherUser, mine.conversationId(), QuestionTarget.single(null)),
         ErrorCode.CONVERSATION_NOT_FOUND);
     assertCode(
-        () -> service.conversationSource(userId, 999_999L, null), ErrorCode.CONVERSATION_NOT_FOUND);
+        () -> service.conversationTarget(userId, 999_999L, QuestionTarget.single(null)),
+        ErrorCode.CONVERSATION_NOT_FOUND);
   }
 
   @Test
@@ -163,7 +168,9 @@ class ChatMessageServiceTest {
     Accepted first = service.accept(newQuestion("q"));
 
     assertThatThrownBy(
-            () -> service.conversationSource(userId, first.conversationId(), "langchain_v1x"))
+            () ->
+                service.conversationTarget(
+                    userId, first.conversationId(), QuestionTarget.single("langchain_v1x")))
         .isInstanceOfSatisfying(
             BusinessException.class,
             e -> {
@@ -246,15 +253,15 @@ class ChatMessageServiceTest {
   }
 
   private AcceptCommand followUpWith(Long conversationId, String question) {
-    return new AcceptCommand(userId, conversationId, question, null, "req-" + System.nanoTime());
+    return AcceptCommand.single(userId, conversationId, question, null, "req-" + System.nanoTime());
   }
 
   private AcceptCommand newQuestion(String question) {
-    return new AcceptCommand(userId, null, question, "langchain_v03", "req-1");
+    return AcceptCommand.single(userId, null, question, "langchain_v03", "req-1");
   }
 
   private AcceptCommand followUp(Long conversationId, String sourceKey) {
-    return new AcceptCommand(userId, conversationId, "다음 질문", sourceKey, "req-2");
+    return AcceptCommand.single(userId, conversationId, "다음 질문", sourceKey, "req-2");
   }
 
   private static void assertCode(Runnable call, ErrorCode code) {

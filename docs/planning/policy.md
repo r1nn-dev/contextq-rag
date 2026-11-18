@@ -83,7 +83,7 @@
 | OpenAI 생성 첫 토큰 | 10초, 재시도 없음 | chat completion 스트림 시작 | 스트림은 재시도 시 중복·비용 발생. `meta` 15초 이내에 실패 확정 |
 | 질의 재작성 호출 | 3초 | 멀티턴 재작성 LLM 호출 | 초과 시 원 질문으로 폴백(실패 아님) |
 | nginx `proxy_read_timeout` | 150초 | nginx가 backend 응답을 기다리는 한도 | 반드시 스트림 최대 시간(120초)보다 커야 함 |
-| STREAMING·PENDING 고착 판정 | 150초 | 스위퍼가 `FAILED(STALE)`로 전환하는 기준(마지막 갱신 시각 기준) | 스트림 최대 시간 + 30초. 프로세스 비정상 종료 대비. PENDING도 대상: 남으면 그 대화가 INV-11로 영구히 막힘 |
+| STREAMING·PENDING·PROCESSING 고착 판정 | 150초 | 스위퍼가 `FAILED(STALE)`로 전환하는 기준(마지막 갱신 시각 기준) | 스트림 최대 시간 + 30초. 프로세스 비정상 종료 대비. PENDING·PROCESSING도 대상: 남으면 그 대화가 INV-11로 영구히 막힘(비교 모드는 30초 상한이라 정상 처리와 겹치지 않음) |
 | 스위퍼 주기 | 60초 | STREAMING·PENDING 고착 정리 배치 | backend `@Scheduled` |
 | 메타 API 캐시 | 60초 | `GET /api/v1/sources` 응답 캐시 | 인덱스 활성화는 60초 만료로 반영(활성화 CLI는 ai-server만 reload하고 backend에는 알리지 않음). backend 즉시 무효화는 관리자 작업에서 추가 |
 | ai-server 활성 인덱스 포인터 캐시 | 30초 (+ reload 즉시 반영) | ai-server가 활성 run을 재조회하는 주기 | reload 호출 실패 시 안전망 |
@@ -440,7 +440,7 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 - 관리자도 동일 한도를 적용한다. 평가 스크립트는 backend를 거치지 않고 ai-server 내부 API를 직접 호출하므로 사용자 한도의 영향을 받지 않는다.
 - 일일 한도 검사는 같은 트랜잭션에서 사용자 행을 `SELECT … FOR UPDATE`로 잠근 뒤 오늘(KST 00:00 이후) USER 메시지의 `quota_cost` 합계를 세고 질문을 저장한다. 같은 사용자의 동시 요청이 함께 한도를 넘지 않게 하기 위함이다.
 - 분당 한도는 사용자별 토큰 버킷(용량 10, 분당 10개 보충)이다. `Retry-After`는 다음 토큰까지 남은 초(올림)다.
-- 동시 스트림 자리는 스트림이 끝날 때(정상 종결·오류·클라이언트 취소·스트림 전 실패) 반납한다. 게스트가 동시 스트림 한도에 걸리면 이미 차감한 질문을 환불한다.
+- 동시 스트림 자리는 스트림이 끝날 때(정상 종결·오류·클라이언트 취소·스트림 전 실패) 반납한다. 비교 모드는 클라이언트가 나가도 처리를 계속하므로(2.3) 처리가 끝날 때 반납한다. 게스트가 동시 스트림 한도에 걸리면 이미 차감한 질문을 환불한다.
 - **11/18 전시회 당일 한정**: nginx `/api/v1/chat/**` 30 → 60 req/분(burst 20), 게스트 신규 세션 IP당 30 → 60개/시간. `scripts/exhibition-profile.sh apply`로 적용, 11/19 00:00 `reset`으로 원복. W6 리허설에서 수치 부족 시 `apply` 실행 전 파라미터 조정 가능
 
 ### 8.2 비용 상한
@@ -581,7 +581,7 @@ INV-17 prod 프로필에서는 수집·임베딩 경로와 mock LLM이 비활성
 | STREAMING | FAILED | 토큰 0 상태에서 중단, 또는 150초 고착 | 위와 동일 · `STALE` · `PERSIST_ERROR` |
 | PROCESSING | COMPLETED | 검증된 JSON 저장 | — |
 | PROCESSING | NO_CONTEXT | 양쪽 top-1 < τ | `LOW_SIMILARITY` |
-| PROCESSING | FAILED | 30초 초과·파싱 2회 실패·ai-server 오류 | `UPSTREAM_TIMEOUT` · `COMPARE_PARSE_ERROR` · `AI_UNAVAILABLE` |
+| PROCESSING | FAILED | 30초 초과·파싱 2회 실패·ai-server 오류·150초 고착 | `UPSTREAM_TIMEOUT` · `COMPARE_PARSE_ERROR` · `AI_UNAVAILABLE` · ai-server `error` 이벤트 코드(`LLM_ERROR` 등) · `STALE` · `PERSIST_ERROR` |
 
 종결 상태 4개에서 나가는 전이는 없다(INV-12). 게스트 요청은 DB에 저장하지 않지만 동일 상태 모델을 `guest_usage_log.status`에 사용한다.
 

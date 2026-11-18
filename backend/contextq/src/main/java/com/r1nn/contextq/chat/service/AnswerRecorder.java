@@ -2,6 +2,7 @@ package com.r1nn.contextq.chat.service;
 
 import com.r1nn.contextq.chat.domain.AnswerOutcome;
 import com.r1nn.contextq.chat.domain.AnswerSnapshot;
+import com.r1nn.contextq.chat.domain.CompareSnapshot;
 import com.r1nn.contextq.chat.domain.MessageStatus;
 import com.r1nn.contextq.chat.service.ChatMessageService.SourceValue;
 import java.util.List;
@@ -20,6 +21,16 @@ interface AnswerRecorder {
 
   /** {@code meta} received (policy §6.3 step 2). */
   void meta(String sourceKey, AnswerSnapshot snapshot, boolean noContext, List<SourceValue> cited);
+
+  /**
+   * Compare {@code meta} received. Only members ask compare questions (policy §1.3).
+   *
+   * @param cited sources of both sides ({@code A1…} then {@code B1…})
+   */
+  default void compareMeta(
+      String sourceKeyA, String sourceKeyB, CompareSnapshot snapshot, List<SourceValue> cited) {
+    throw new UnsupportedOperationException("compare answers are recorded for members only");
+  }
 
   /**
    * The answer ended (policy §6.3 step 4). Called at most once.

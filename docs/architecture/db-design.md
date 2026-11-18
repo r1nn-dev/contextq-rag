@@ -367,7 +367,7 @@
 | UPSTREAM_IDLE_TIMEOUT | 유휴 30초 초과 |
 | LENGTH | max_tokens 도달 |
 | MAX_DURATION | 스트림 최대 120초 초과 |
-| STALE | 150초 고착 (스위퍼 판정, STREAMING·PENDING) |
+| STALE | 150초 고착 (스위퍼 판정, STREAMING·PENDING·PROCESSING) |
 | PERSIST_ERROR | 종결 후 DB 저장 실패 |
 | AI_UNAVAILABLE | ai-server 연결 실패 (3초 타임아웃) |
 | UPSTREAM_TIMEOUT | 첫 이벤트 15초 / 비교 30초 초과 |
@@ -627,11 +627,11 @@ UPDATE app.messages
       status_reason = 'STALE',
       updated_at  = NOW()
 WHERE role = 'ASSISTANT'
-  AND status IN ('STREAMING', 'PENDING')
+  AND status IN ('STREAMING', 'PENDING', 'PROCESSING')
   AND updated_at < NOW() - INTERVAL '150 seconds';
 ```
 
-STREAMING·PENDING 고착 메시지(150초 초과)를 FAILED(STALE)로 전환. 종결 저장이 2회 실패한 메시지(backend 메모리에 기록)는 `PERSIST_ERROR`로 전환. 구현은 메시지별로 행을 잠근 뒤 종결 갱신(대화 `last_message_status`·`updated_at` 포함)하며, 이미 종결된 행은 건드리지 않는다(INV-12). PENDING도 대상인 이유: 남으면 그 대화가 INV-11로 영구히 막힌다. 비교 모드 PROCESSING 고착은 취소 전파 없이 완료까지 처리하므로 대상 아님 (정책 2.3).
+STREAMING·PENDING·PROCESSING 고착 메시지(150초 초과)를 FAILED(STALE)로 전환. 종결 저장이 2회 실패한 메시지(backend 메모리에 기록)는 `PERSIST_ERROR`로 전환. 구현은 메시지별로 행을 잠근 뒤 종결 갱신(대화 `last_message_status`·`updated_at` 포함)하며, 이미 종결된 행은 건드리지 않는다(INV-12). PENDING·PROCESSING도 대상인 이유: 남으면 그 대화가 INV-11로 영구히 막힌다. 비교 모드는 클라이언트가 나가도 완료까지 처리하지만(정책 2.3) 30초 상한이 있어, 150초가 지난 PROCESSING은 프로세스 비정상 종료로 남은 것이다.
 
 ---
 

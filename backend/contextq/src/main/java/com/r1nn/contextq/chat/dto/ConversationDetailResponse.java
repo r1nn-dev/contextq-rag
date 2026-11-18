@@ -11,6 +11,9 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * {@code GET /api/v1/conversations/{conversationId}} body (api-spec §4.2 응답 규칙).
@@ -29,6 +32,8 @@ public record ConversationDetailResponse(
     Instant createdAt,
     Instant updatedAt,
     List<MessageItem> messages) {
+
+  private static final ObjectMapper JSON = JsonMapper.builder().build();
 
   public static ConversationDetailResponse of(
       Conversation c, ConversationStatus status, List<MessageItem> messages) {
@@ -58,8 +63,12 @@ public record ConversationDetailResponse(
   }
 
   /**
-   * @param content empty until the answer ends (tokens are stored once, policy §6.3)
-   * @param snapshot null when the answer ended before {@code meta}
+   * @param content empty until the answer ends (tokens are stored once, policy §6.3); always empty
+   *     for compare answers, which keep {@code compareResult} instead
+   * @param snapshot {@link Snapshot} (single) or {@link CompareSnapshotItem} (compare); null when
+   *     the answer ended before {@code meta}
+   * @param compareResult post-validated compare JSON (policy §5.6), null unless a completed compare
+   *     answer
    * @param usage null without token counts
    * @param latency null when all five values are missing
    */
@@ -71,10 +80,11 @@ public record ConversationDetailResponse(
       String statusReason,
       String requestId,
       String rewrittenQuery,
-      Snapshot snapshot,
+      SnapshotItem snapshot,
       Usage usage,
       Latency latency,
       List<SourceItem> sources,
+      JsonNode compareResult,
       Instant createdAt,
       Instant updatedAt)
       implements MessageItem {
@@ -92,20 +102,39 @@ public record ConversationDetailResponse(
           m.getStatusReason(),
           m.getRequestId(),
           m.getRewrittenQuery(),
-          m.getCommitSha() != null
-              ? new Snapshot(versionLabel, m.getCommitSha(), m.getIngestedAt())
-              : null,
+          snapshotOf(m, versionLabel),
           Usage.of(m.getPromptTokens(), m.getCompletionTokens()),
           Latency.of(
               m.getRewriteMs(), m.getEmbedMs(), m.getRetrieveMs(), m.getTtftMs(), m.getTotalMs()),
           cited.stream().map(SourceItem::from).toList(),
+          m.getCompareResult() != null ? JSON.readTree(m.getCompareResult()) : null,
           m.getCreatedAt(),
           m.getUpdatedAt());
     }
+
+    /** Compare answers have A·B commits; single answers one commit; neither before meta. */
+    private static SnapshotItem snapshotOf(Message m, String versionLabel) {
+      if (m.getCommitShaA() != null || m.getCommitShaB() != null) {
+        return new CompareSnapshotItem(
+            m.getCommitShaA(), m.getIngestedAtA(), m.getCommitShaB(), m.getIngestedAtB());
+      }
+      return m.getCommitSha() != null
+          ? new Snapshot(versionLabel, m.getCommitSha(), m.getIngestedAt())
+          : null;
+    }
   }
 
-  /** Index snapshot copied at {@code meta} time (INV-13). */
-  public record Snapshot(String versionLabel, String commitSha, LocalDate ingestedAt) {}
+  /** Index snapshot copied at {@code meta} time (INV-13); serialized by its concrete type. */
+  public sealed interface SnapshotItem permits Snapshot, CompareSnapshotItem {}
+
+  /** Single answer snapshot. */
+  public record Snapshot(String versionLabel, String commitSha, LocalDate ingestedAt)
+      implements SnapshotItem {}
+
+  /** Compare answer snapshot of both sides (api-spec §4.2 비교 모드 추가 필드). */
+  public record CompareSnapshotItem(
+      String commitShaA, LocalDate ingestedAtA, String commitShaB, LocalDate ingestedAtB)
+      implements SnapshotItem {}
 
   public record Usage(Integer prompt, Integer completion) {
 

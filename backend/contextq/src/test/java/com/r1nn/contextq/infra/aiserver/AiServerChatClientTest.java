@@ -56,6 +56,27 @@ class AiServerChatClientTest {
   }
 
   @Test
+  void compareCallSendsBothSourcesWithoutSourceKey() {
+    stub.on(
+        "POST",
+        "/internal/v1/chat/stream",
+        r ->
+            StubResponse.sse(
+                Duration.ofMillis(10), frame("{\"event\":\"done\",\"status\":\"COMPLETED\"}")));
+
+    client(stub.baseUrl())
+        .open(ChatCall.compare(REQUEST_ID, "langchain_v03", "langchain_v1x", "차이는?", List.of()))
+        .collectList()
+        .block();
+
+    JsonNode body = JsonMapper.builder().build().readTree(stub.requests().getFirst().body());
+    assertThat(body.get("mode").asString()).isEqualTo("COMPARE");
+    assertThat(body.get("sourceKeyA").asString()).isEqualTo("langchain_v03");
+    assertThat(body.get("sourceKeyB").asString()).isEqualTo("langchain_v1x");
+    assertThat(body.has("sourceKey")).isFalse();
+  }
+
+  @Test
   void preStreamErrorKeepsAiServerCode() {
     stub.on(
         "POST",

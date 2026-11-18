@@ -102,6 +102,6 @@ class DailyQuotaTest {
   }
 
   private static AcceptCommand command(long userId) {
-    return new AcceptCommand(userId, null, "q", "langchain_v03", "req-quota");
+    return AcceptCommand.single(userId, null, "q", "langchain_v03", "req-quota");
   }
 }
